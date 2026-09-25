@@ -197,7 +197,7 @@ function enterAppIfPrepared(): void {
   if (port) initializeBusinessRoot(port);
 }
 const firstStartupStateTimer =
-  windowKind === "update-status"
+  windowKind === "update-status" || marsServerWsUrl
     ? undefined
     : setTimeout(() => {
         if (databaseStartupAdmission.state) return;
