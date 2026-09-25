@@ -171,7 +171,7 @@ function createWindow() {
   if (rendererUrl) {
     void win.loadURL(rendererUrl);
   } else {
-    void win.loadFile(join(here, "../dist/render/index.html");
+    void win.loadFile(join(here, "../dist/renderer/index.html"));
   }
 }
 
