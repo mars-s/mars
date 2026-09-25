@@ -51,7 +51,13 @@ function ProviderSetup({ health, onReady }: { health: HealthState; onReady: () =
     setBusy(true);
     setError(null);
     try {
-      await gateway.configureProvider({ apiKey, modelId, baseUrl });
+      const input = { apiKey, modelId, baseUrl };
+      if (window.marsDesktop?.configureProvider) {
+        await window.marsDesktop.configureProvider(input);
+      } else {
+        await gateway.configureProvider(input);
+      }
+      setApiKey("");
       await onReady();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -99,7 +105,11 @@ function ProviderSetup({ health, onReady }: { health: HealthState; onReady: () =
           {busy ? <Loader2 className="spin" size={17} /> : null}
           Start Mars
         </button>
-        <div className="setup-note">The key currently lives only in the local gateway process and is not sent to the UI after setup.</div>
+        <div className="setup-note">
+          Desktop saves provider metadata under <code>~/.mars/config/v1</code> and persists the API
+          key only when OS-backed secure storage is available. Stored secrets are never read back
+          into the renderer.
+        </div>
       </div>
     </div>
   );
