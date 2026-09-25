@@ -16,7 +16,11 @@ import {
   setReactErrorArmsReporter,
 } from "@zcode/ui";
 import "@zcode/ui/styles.css";
-import { connectViaMessagePort, createMessagePortServiceConnection } from "@zcode/client";
+import {
+  connectViaMessagePort,
+  connectViaWebSocket,
+  createMessagePortServiceConnection,
+} from "@zcode/client";
 import {
   InternalChannels,
   databaseStartupStateSchema,
@@ -128,6 +132,7 @@ function readStringFlag(name: string): string | undefined {
 
 const restoreSession = readBooleanFlag("restoreSession", true);
 const supportsSettings = readBooleanFlag("supportsSettings", true);
+const marsServerWsUrl = readStringFlag("marsServerWsUrl");
 const initialWorkspaceAbsPath = readStringFlag("initialWorkspacePath");
 const initialWorkspacePurpose = readStringFlag("initialWorkspacePurpose");
 const unavailableWorkspacePath = readStringFlag("unavailableWorkspacePath");
@@ -192,7 +197,7 @@ function enterAppIfPrepared(): void {
   if (port) initializeBusinessRoot(port);
 }
 const firstStartupStateTimer =
-  windowKind === "update-status"
+  windowKind === "update-status" || marsServerWsUrl
     ? undefined
     : setTimeout(() => {
         if (databaseStartupAdmission.state) return;
@@ -300,9 +305,8 @@ function handleServicePortMessage(event: MessageEvent): void {
   enterAppIfPrepared();
 }
 
-function initializeBusinessRoot(port: MessagePort): void {
+function initializeBusinessServices(services: IServiceAccessor): void {
   appInitialized = true;
-  const services = connectViaMessagePort(port);
   baseServicesForRemoteSessions = services;
   registerBaseWorkspaceServices(services);
   flushPendingRemoteWorkspaceServicePorts();
@@ -351,10 +355,53 @@ function initializeBusinessRoot(port: MessagePort): void {
   );
 }
 
+function initializeBusinessRoot(port: MessagePort): void {
+  initializeBusinessServices(connectViaMessagePort(port));
+}
+
+function normalizeMarsServerWebSocketUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol === "http:") url.protocol = "ws:";
+  if (url.protocol === "https:") url.protocol = "wss:";
+  if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+    throw new Error(`Unsupported Mars server protocol: ${url.protocol}`);
+  }
+  if (url.pathname === "/" || url.pathname === "") {
+    url.pathname = "/ws";
+  }
+  return url.toString();
+}
+
+async function initializeMarsRemoteRoot(serverUrl: string): Promise<void> {
+  try {
+    const services = await connectViaWebSocket(normalizeMarsServerWebSocketUrl(serverUrl));
+    initializeBusinessServices(services);
+  } catch (error) {
+    console.error("[mars-desktop] failed to connect to headless server", error);
+    appRoot?.render(
+      <div className="flex h-dvh items-center justify-center bg-transparent p-8 text-foreground">
+        <div className="max-w-md rounded-2xl border border-border bg-panel/80 p-5 shadow-2xl backdrop-blur-2xl">
+          <div className="text-ui-lg font-semibold">Mars server unavailable</div>
+          <div className="mt-2 text-ui-sm text-foreground-subtle">
+            Check MARS_SERVER_WS_URL and make sure the Linux server is reachable.
+          </div>
+          <pre className="mt-3 overflow-auto rounded-xl bg-surface p-3 text-ui-xs">
+            {error instanceof Error ? error.message : String(error)}
+          </pre>
+        </div>
+      </div>,
+    );
+  }
+}
+
 window.addEventListener("message", handleServicePortMessage);
 if (windowKind !== "update-status") {
-  renderDatabaseStartup();
-  sendStartupControl({ action: "snapshot" });
+  if (marsServerWsUrl) {
+    void initializeMarsRemoteRoot(marsServerWsUrl);
+  } else {
+    renderDatabaseStartup();
+    sendStartupControl({ action: "snapshot" });
+  }
 }
 
 if (windowKind === "update-status") {
