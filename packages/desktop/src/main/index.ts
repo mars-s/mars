@@ -1838,6 +1838,7 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
       initialWorkspacePath: startupBootstrap.initialWorkspacePath,
       initialWorkspacePurpose: startupBootstrap.initialWorkspacePurpose,
       unavailableWorkspacePath: startupBootstrap.unavailableWorkspacePath,
+      marsServerWsUrl: process.env["MARS_SERVER_WS_URL"]?.trim() || undefined,
     },
     agentWarmupTargets: startupBootstrap.agentWarmupTargets,
     // startupBootstrap 只标记 active workspace 是否不可用，但 local Host 会为所有
