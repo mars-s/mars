@@ -78,6 +78,7 @@ export function createWindow(options: {
       initialWorkspacePath: options.bootstrap?.initialWorkspacePath,
       initialWorkspacePurpose: options.bootstrap?.initialWorkspacePurpose,
       unavailableWorkspacePath: options.bootstrap?.unavailableWorkspacePath,
+      marsServerWsUrl: options.bootstrap?.marsServerWsUrl,
     },
     logger: options.logger,
     deviceMid: options.deviceMid,
@@ -131,6 +132,16 @@ export function createWindow(options: {
     if (process.platform === "win32" && !win.isDestroyed()) {
       win.show();
       win.focus();
+    }
+
+    // Mars remote mode is a thin Electron client. The authoritative runtime lives on the
+    // headless Linux server, so this window must not spawn a local ZCode host process.
+    if (options.bootstrap?.marsServerWsUrl) {
+      options.logger.info(`[createWindow] Mars remote mode, skipping local host spawn (${label})`);
+      options.syncAutoUpdaterStateToWindow(win);
+      options.syncReadyUpdateToWindow(win);
+      options.syncPostUpdateReleaseNotesToWindow(win);
+      return;
     }
 
     const oldChild = options.windowHostProcessMap.get(wcId);
