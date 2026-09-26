@@ -63,8 +63,6 @@ export interface WindowBootstrapOptions {
   unavailableWorkspacePath?: string;
   windowKind?: "main" | "update-status";
   locale?: string;
-  /** Optional headless Mars server WebSocket URL. When set, the desktop renderer connects remotely. */
-  marsServerWsUrl?: string;
 }
 
 export interface HostInitMessage {
@@ -124,7 +122,6 @@ export function loadWindow(
       unavailableWorkspacePath: bootstrap?.unavailableWorkspacePath,
       windowKind: bootstrap?.windowKind,
       locale: bootstrap?.locale,
-      marsServerWsUrl: bootstrap?.marsServerWsUrl,
     }).filter((entry): entry is [string, string] => entry[1] != null),
   );
 

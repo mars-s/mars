@@ -497,7 +497,7 @@ body {
   --color-input-border: var(--color-border);
   --color-input-border-hover: var(--color-border-hover);
   --color-input-border-focused: var(--color-border-hover);
-  --color-terminal-bg: #181818;
+  --color-terminal-bg: var(--color-background);
   --color-terminal-fg: var(--color-foreground);
   --color-terminal-cursor: #0d0d0d;
   --color-terminal-cursor-accent: var(--color-background);
@@ -606,9 +606,9 @@ body {
 .theme-zai-dark {
   --animated-gradient-text-strong: rgba(255, 255, 255, 1);
   --animated-gradient-text-soft: rgba(255, 255, 255, 0.22);
-  --color-background: #212121;
-  --color-background-win-alt: #212121;
-  --color-background-alt: color-mix(in oklab, #212121 78%, transparent);
+  --color-background: #161616;
+  --color-background-win-alt: #2b2b2b;
+  --color-background-alt: color-mix(in oklab, var(--color-background-win-alt) 60%, transparent);
   --color-brand: #ffffff;
   --color-trajectory-user: #60a5fa;
   --color-trajectory-assistant: #2dd4bf;
@@ -621,23 +621,23 @@ body {
   --color-accent: #001d3d;
   --color-find-highlight: #542500;
   --color-find-highlight-active: #ff8a30;
-  --color-border: rgba(255, 255, 255, 0.085);
-  --color-border-hover: rgba(255, 255, 255, 0.16);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.15);
   --color-hover: rgba(255, 255, 255, 0.05);
   --color-selected: rgba(255, 255, 255, 0.1);
-  --color-header: rgba(33, 33, 33, 0.82);
-  --color-panel: rgba(33, 33, 33, 0.9);
-  --color-sidebar: rgba(24, 24, 24, 0.76);
+  --color-header: #202020;
+  --color-panel: #202020;
+  --color-sidebar: #161616;
   --color-surface: rgba(255, 255, 255, 0.05);
   --color-surface-hover: rgba(255, 255, 255, 0.1);
-  --color-card: #2f2f2f;
+  --color-card: #2b2b2b;
   --color-card-selected: var(--color-input);
   --color-card-border: var(--color-border);
-  --color-popover: #2f2f2f;
+  --color-popover: #2b2b2b;
   --color-popover-foreground: var(--color-foreground);
   --color-popover-header: #202020;
   --color-popover-border: var(--color-border);
-  --color-input: #303030;
+  --color-input: #2b2b2b;
   --color-input-focused: var(--color-input);
   --color-input-border: var(--color-border);
   --color-input-border-hover: var(--color-border-hover);
@@ -682,14 +682,14 @@ body {
   --color-usage-heatmap-2: color-mix(in oklab, #4099ff 42%, var(--color-surface));
   --color-usage-heatmap-3: color-mix(in oklab, #4099ff 62%, var(--color-surface));
   --color-usage-heatmap-4: color-mix(in oklab, #80beff 78%, var(--color-surface));
-  --color-tab: rgba(32, 32, 32, 0.76);
-  --color-tab-active: #2a2a2a;
+  --color-tab: #202020;
+  --color-tab-active: #161616;
   --color-tab-border: var(--color-border);
-  --color-menu: #2f2f2f;
+  --color-menu: #2b2b2b;
   --color-menu-hover: #363636;
   --color-primary: #ffffff;
   --color-primary-foreground: #000000;
-  --color-secondary: #3a3a3a;
+  --color-secondary: #363636;
   --color-interaction-ask-surface: #001d3d;
   --color-interaction-ask-foreground: #80beff;
   --color-interaction-ask-fill: rgba(70, 191, 114, 0.24);
@@ -2050,14 +2050,4 @@ body {
 
 .prompt-mention[data-mention-category="plugins"]::before {
   border-radius: var(--radius-sm);
-}
-
-
-/* Mars desktop shell: translucent navigation over Electron's native macOS vibrancy. */
-.platform-mac-desktop .theme-zai-dark [data-workspace-sidebar-panel="true"] {
-  background: transparent;
-}
-
-.platform-mac-desktop .theme-zai-dark [data-workspace-conversation-frame="true"] {
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.015);
 }
