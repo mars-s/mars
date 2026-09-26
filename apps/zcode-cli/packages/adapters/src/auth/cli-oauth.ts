@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import type { ModelProviderFamilyId } from "@zcode/shared";
 import type { HttpClientPort, HttpClientRunOptions, TraceContext } from "@zcode/contracts";
 
-const DEFAULT_ZCODE_OAUTH_BASE_URL = "https://zcode.z.ai/api/v1";
 export type CliOAuthProviderId = ModelProviderFamilyId;
 const POLL_TOKEN_BYTES = 32;
 const JSON_CONTENT_TYPE = "application/json";
@@ -74,7 +73,16 @@ export class CliOAuthError extends Error {
 }
 
 export function createCliOAuthClient(options: CliOAuthClientOptions): CliOAuthClient {
-  const baseUrl = normalizeBaseUrl(options.baseUrl ?? DEFAULT_ZCODE_OAUTH_BASE_URL);
+  // No built-in vendor default: the OAuth base URL is operator supplied (the caller resolves
+  // it from ZCODE_BASE_URL / ZCODE_ENDPOINT_ORIGIN). Without it the CLI login cannot reach a
+  // self-hosted backend, so fail loudly instead of phoning home.
+  const configuredBaseUrl = options.baseUrl?.trim();
+  if (!configuredBaseUrl) {
+    throw new CliOAuthError(
+      "OAuth base URL is not configured. Set ZCODE_BASE_URL (or pass baseUrl) to your self-hosted endpoint.",
+    );
+  }
+  const baseUrl = normalizeBaseUrl(configuredBaseUrl);
   const encoder = new TextEncoder();
 
   return {

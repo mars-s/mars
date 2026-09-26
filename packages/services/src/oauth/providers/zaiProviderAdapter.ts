@@ -243,7 +243,8 @@ export class ZaiProviderAdapter implements OAuthProviderAdapter {
   readonly meta: OAuthProviderMeta;
   readonly redirectUri: string;
   readonly apiClient: ApiClient;
-  private readonly businessTokenResolver: ZaiBusinessTokenResolver;
+  private readonly businessLoginUrl: string;
+  private businessTokenResolver: ZaiBusinessTokenResolver | null = null;
   private lastBackendUserProfile: {
     state: string;
     profile: OAuthUserProfile;
@@ -261,13 +262,30 @@ export class ZaiProviderAdapter implements OAuthProviderAdapter {
     };
     this.redirectUri = config.redirectUri;
     this.apiClient = apiClient;
-    this.businessTokenResolver = new ZaiBusinessTokenResolver({
-      apiClient,
-      // 测试 OAuth app 返回的 ZAI access_token 需要打到测试业务域换业务 token；
-      // 如果继续硬编码生产 api.z.ai，本地测试登录会在 OAuth token 成功后失败。
-      loginUrl: config.businessLoginUrl ?? "https://api.z.ai/api/auth/z/login",
+    // The Z.ai business login endpoint is operator supplied (ZAI_BUSINESS_LOGIN_URL or
+    // ZAI_BUSINESS_BASE_URL). There is deliberately no hardcoded production business origin:
+    // the resolver is created lazily so an unconfigured build fails loudly only when the
+    // business token exchange is actually needed.
+    this.businessLoginUrl = config.businessLoginUrl?.trim() ?? "";
+  }
+
+  private getBusinessTokenResolver(): ZaiBusinessTokenResolver {
+    if (!this.businessLoginUrl) {
+      throw new Error(
+        "Z.ai business login endpoint is not configured. Set ZAI_BUSINESS_LOGIN_URL (or ZAI_BUSINESS_BASE_URL) to your self-hosted endpoint.",
+      );
+    }
+    const existing = this.businessTokenResolver;
+    if (existing) {
+      return existing;
+    }
+    const created = new ZaiBusinessTokenResolver({
+      apiClient: this.apiClient,
+      loginUrl: this.businessLoginUrl,
       timeoutMs: ZAI_BUSINESS_TOKEN_TIMEOUT_MS,
     });
+    this.businessTokenResolver = created;
+    return created;
   }
 
   parseCallbackParams(url: string): OAuthCallbackParams {
@@ -301,7 +319,7 @@ export class ZaiProviderAdapter implements OAuthProviderAdapter {
     // polling 与 deep link 必须在同一 adapter 边界完成转换，避免两种登录方式落盘语义分裂。
     return {
       ...tokenSet,
-      accessToken: await this.businessTokenResolver.resolve(tokenSet.accessToken),
+      accessToken: await this.getBusinessTokenResolver().resolve(tokenSet.accessToken),
     };
   }
 
@@ -367,7 +385,7 @@ export class ZaiProviderAdapter implements OAuthProviderAdapter {
     }
     // Z.AI 业务接口只认 /api/auth/z/login 返回的平台 JWT。
     // 这里在登录阶段完成转换，让 oauth:zai:access_token 持久化的就是业务 token，后续不再做兜底二次交换。
-    const businessAccessToken = await this.businessTokenResolver.resolve(accessToken);
+    const businessAccessToken = await this.getBusinessTokenResolver().resolve(accessToken);
 
     const backendUser = tokenPayload.data?.user ?? undefined;
     if (hasMeaningfulBackendUser(backendUser)) {

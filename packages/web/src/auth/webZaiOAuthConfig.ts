@@ -1,9 +1,5 @@
 import type { WebZaiOAuthProviderConfig } from "./zaiWebOAuthProvider.js";
-import {
-  buildZCodeEndpointUrls,
-  DEFAULT_ZCODE_ENDPOINT_ORIGIN,
-  resolveBigModelApiOrigin,
-} from "@zcode/shared";
+import { buildZCodeEndpointUrls, DEFAULT_ZCODE_ENDPOINT_ORIGIN } from "@zcode/shared";
 
 interface WebImportMetaEnv {
   VITE_DEV_ORIGIN?: string;
@@ -27,19 +23,24 @@ function normalizeZaiOAuthOrigin(value: string): string {
 }
 
 function buildZaiOAuthAuthorizeUrl(origin: string | undefined): string {
-  return `${normalizeZaiOAuthOrigin(origin?.trim() || "https://chat.z.ai")}/api/oauth/authorize`;
+  // No built-in vendor default: the origin is operator supplied through
+  // VITE_ZAI_OAUTH_ORIGIN. When it is missing the authorize URL stays empty instead of
+  // silently pointing the login flow at the vendor.
+  const trimmed = origin?.trim();
+  return trimmed ? `${normalizeZaiOAuthOrigin(trimmed)}/api/oauth/authorize` : "";
 }
 
 /**
- * BigModel 的授权入口。
+ * BigModel authorize entry.
  *
- * 必须跟随环境：测试环境写死 bigmodel.cn 会把测试账号带到生产授权页。构建期由
- * vite.config 用 resolveBigModelApiOrigin 注入 VITE_BIGMODEL_OAUTH_ORIGIN；这里的
- * resolveBigModelApiOrigin({}) 只是最后兜底（等价于生产 origin）。
+ * The origin must follow the environment: hardcoding the vendor host sends the login flow to
+ * a deployment the operator did not choose. vite.config injects VITE_BIGMODEL_OAUTH_ORIGIN via
+ * resolveBigModelApiOrigin at build time; when it is not injected the URL stays empty instead
+ * of falling back to the built-in production origin.
  */
 function buildBigModelAuthorizeUrl(origin: string | undefined): string {
   const trimmed = origin?.trim();
-  return `${trimmed ? new URL(trimmed).origin : resolveBigModelApiOrigin({})}/login`;
+  return trimmed ? `${new URL(trimmed).origin}/login` : "";
 }
 
 function createWebZaiOAuthConfig(env: WebImportMetaEnv = {}): WebZaiOAuthConfig {
