@@ -2554,7 +2554,6 @@ export function createLocalServices(options: {
   return services;
 }
 
-
 export function disposeServiceResources(services: ServiceCollection): void {
   // host process 退出前以前没有统一遍历本地服务做资源回收，
   // terminal/task wrapper 这类会拉起子进程的服务只能等宿主进程自己结束，时序上可能留下短暂残留。

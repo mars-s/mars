@@ -242,7 +242,10 @@ export function ChatContextUsage({
     return null;
   }
 
-  const usagePercent = Math.min(Math.max(renderableTaskUsage.used / renderableTaskUsage.size, 0), 1);
+  const usagePercent = Math.min(
+    Math.max(renderableTaskUsage.used / renderableTaskUsage.size, 0),
+    1,
+  );
   const compactTokenUsageLabel = formatContextUsageSummary({
     locale,
     percent: usagePercent,

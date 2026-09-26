@@ -1811,11 +1811,7 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
           label: intl.formatMessage(
             { id: "chat.modelChange.switched" },
             {
-              from: formatProviderModelLabel(
-                marker.fromProvider,
-                fromProvider,
-                marker.fromModel,
-              ),
+              from: formatProviderModelLabel(marker.fromProvider, fromProvider, marker.fromModel),
               to,
             },
           ),

@@ -2265,11 +2265,7 @@ export function SessionPane({
       const fromProvider = resolveProviderLabel(fromProviderId, modelSelectionView);
       const toProvider = resolveProviderLabel(targetModel.provider, modelSelectionView);
       const fromModel = formatProviderModelLabel(fromProviderId, fromProvider, fromModelId);
-      const toModel = formatProviderModelLabel(
-        targetModel.provider,
-        toProvider,
-        targetModel.model,
-      );
+      const toModel = formatProviderModelLabel(targetModel.provider, toProvider, targetModel.model);
       toast(intl.formatMessage({ id: "chat.modelChangeNotice.changed" }, { fromModel, toModel }));
     },
     [intl, modelSelectionView, sessionId],
@@ -2600,7 +2596,7 @@ export function SessionPane({
             );
             if (consumed === "confirmationRequired") return consumed;
             if (consumed) {
-                  prewarm.promote();
+              prewarm.promote();
               handleDraftSessionCreated(
                 prewarm.sessionId,
                 groupedDraftTaskAtSend,

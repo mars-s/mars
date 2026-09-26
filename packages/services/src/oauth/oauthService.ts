@@ -125,8 +125,7 @@ export class OAuthService implements IOAuthService {
     this.env = dependencies.env ?? process.env;
 
     const adapters =
-      dependencies.adapters ??
-      createOAuthProviderAdapters({ apiClient: dependencies.apiClient });
+      dependencies.adapters ?? createOAuthProviderAdapters({ apiClient: dependencies.apiClient });
 
     for (const adapter of adapters) {
       this.adapters.set(adapter.providerId, adapter);
