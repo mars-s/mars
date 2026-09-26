@@ -191,3 +191,16 @@ Then ran the live pass by hand, and the headline result: with the app running, t
 open, and everything else idle, the whole process tree held **only loopback sockets** — the CDP
 port, my agent-browser session, and the Vite dev server. Zero external connections. That is the
 proof that phoning home actually stopped, and it is now recorded rather than asserted.
+
+## 2026-09-26 — AGENTS.md translated to English (issue #16)
+
+The owner does not read Chinese. All 61 Chinese lines in `AGENTS.md` are now English, which
+closes the language conflict recorded in issue #16: upstream mandated Chinese comments when
+fixing bugs, and that line now says English.
+
+Verified by diff, not by reading. All 61 backticked code spans are byte-identical to the
+previous version, so every command, path and identifier survived the translation. Bullet count
+48 to 48, table rows 12 to 12, headings 7 to 7, and zero Han characters remain.
+
+Also removed from the global `~/AGENTS.md`, at the owner's request: the graphify trigger and
+the `@RTK.md` include. An English-only rule now lives there, so both agents write English.
