@@ -154,9 +154,11 @@ function indexConnections(
       throw new Error(`重复 Account Provider 连接结果: ${connection.providerId}`);
     }
     const configured = configuredProviders.get(connection.providerId);
-    if (!configured) {
-      throw new Error(`Account 连接指向未配置 Provider: ${connection.providerId}`);
-    }
+    // The built-in catalog can drop an account provider while a connection layer
+    // still reports a connection for it. A connection only ever annotates a
+    // configured provider, so an unconfigured id carries no config and no
+    // entitlement: drop it here instead of failing the whole resolution.
+    if (!configured) continue;
     if (!isAccountConstrainedProvider(configured)) {
       throw new Error(`Account 连接指向非 Account Provider: ${connection.providerId}`);
     }
