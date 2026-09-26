@@ -36,7 +36,7 @@ is left is auth and provider-catalog endpoints, not background traffic, and that
 
 | # | Issue | Status |
 | --- | --- | --- |
-| [#7](https://github.com/mars-s/mars/issues/7) | Widen `ModelProviderFamilyId` and `BuiltinModelProviderId` | todo |
+| [#7](https://github.com/mars-s/mars/issues/7) | Widen `ModelProviderFamilyId` and `BuiltinModelProviderId` | done |
 
 Do this before touching any UI. It is an hour of work that converts the least
 predictable part of the project into something estimable.
@@ -66,6 +66,20 @@ The hard one. Depends on [#7](https://github.com/mars-s/mars/issues/7) and
 | --- | --- | --- |
 | [#13](https://github.com/mars-s/mars/issues/13) | Implement the ChatGPT OAuth adapter | todo |
 | [#14](https://github.com/mars-s/mars/issues/14) | OpenCode Go end-to-end verification path | blocked, needs `op signin` |
+
+## Verification capability, established 2026-09-26
+
+Not a stage, but it changes how the rest gets checked.
+
+The app already opens a Chrome DevTools Protocol port on 9229 when unpackaged, and
+`agent-browser` 0.23.0 is installed, so the running app is drivable today. There is
+no test suite and no test runner in this tree, and the vendor's e2e harness is
+absent, so anything beyond a driven UI check has to be built. `maintain-verification-skill`
+still has no target because there is no `.claude/skills/verify/` feature map; run
+`/create-verification-skill` first.
+
+The phone remote connect is the one check wave 1 touched and has **not** been proven.
+It is the first thing to drive once there is a harness.
 
 ## Process
 
