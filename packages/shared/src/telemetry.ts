@@ -19,34 +19,6 @@ export interface RendererTelemetryEventPayload extends TelemetryEventPayload {
   context: TelemetryRendererContext;
 }
 
-export interface ArmsCustomEventPayload {
-  name: string;
-  group: string;
-  value?: number;
-  properties?: Record<string, string | number | boolean | undefined>;
-}
-
-/** desktop main 实际传给 armsRum.sendCustom 的最终参数。 */
-export interface FinalArmsCustomEventPayload {
-  name: string;
-  type: "custom";
-  group: string;
-  value: number;
-  properties: Record<string, string>;
-}
-
-/** 仅 E2E test bridge 可读取的 main-process 内存记录。 */
-export interface FinalArmsCustomEventE2EEntry {
-  sequence: number;
-  recordedAt: number;
-  payload: FinalArmsCustomEventPayload;
-}
-
-export interface ConfigureFinalArmsCustomEventE2ERequest {
-  /** 命中后仍进入 ring，但不调用真实 armsRum.sendCustom。 */
-  suppressedEventNames: string[];
-}
-
 /**
  * URL 配置进入业务埋点前只允许提取 hostname。
  * 无效值和非 HTTP(S) 协议返回空串，避免误把完整 URL、userinfo 或任意文本带入 payload。

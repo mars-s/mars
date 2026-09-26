@@ -71,7 +71,7 @@ function sameScope(
 function acquireSupervisor(
   scope: ConversationTelemetryAttachmentScope,
   services: IServiceAccessor,
-  platform: Pick<IPlatformService, "reportArmsCustomEvent" | "reportTelemetryEvent">,
+  platform: Pick<IPlatformService, "reportTelemetryEvent">,
 ): SupervisorLease {
   const logicalScopeKey = logicalAttachmentScopeKey(scope);
   const key = attachmentScopeKey(scope, services.zcodeAgentService);

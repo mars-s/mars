@@ -1,4 +1,4 @@
-/* oxlint-disable eslint(max-lines) -- 旧 message/ARMS builders 共用同一 prompt 生命周期与时钟；拆散 fact 状态机会增加跨模块同步漂移。 */
+/* oxlint-disable eslint(max-lines) -- message builders 共用同一 prompt 生命周期与时钟；拆散 fact 状态机会增加跨模块同步漂移。 */
 import {
   legacyTelemetryModelValue,
   legacyTelemetryProviderId,
@@ -12,11 +12,7 @@ import type {
 } from "@zcode/shared";
 import type { ConversationTelemetryFact } from "@zcode/shared/zcode-protocol-v4";
 import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
-import {
-  reportChatErrorBannerTelemetry,
-  resolveVisibleChatErrorTelemetryRecoveryAction,
-  type ChatErrorBannerSurface,
-} from "@/lib/chatErrorBannerTelemetry.js";
+import { logger } from "@/logger.js";
 import {
   activatePromptTelemetry,
   activateDetachedAgentStepTelemetry,
@@ -27,8 +23,6 @@ import {
   discardPromptTelemetry,
   discardQueuedPromptTelemetry,
   finalizePromptTelemetry,
-  getActivePromptModelName,
-  getActivePromptMessageId,
   queuePromptTelemetry,
   recordAgentStepTelemetryEvent,
   recordComposerFocus,
@@ -39,24 +33,7 @@ import {
   recordPromptPermissionResponse,
   recordPromptTokenUsageDelta,
 } from "@/lib/messageTelemetry.js";
-import {
-  reportPlanUsageModelRequestStartedToArms,
-  reportPlanUsageTtftToArms,
-} from "@/lib/planUsageArmsTelemetry.js";
-import {
-  reportSendFunnelInputFocus,
-  reportSendFunnelSendClick,
-  reportSendFunnelSendResult,
-  type SendFunnelReasonCode,
-} from "@/lib/sendFunnelArmsTelemetry.js";
-import {
-  clearStreamStallTracking,
-  recordStreamChunkArrival,
-  reportUiFirstToken,
-  reportUiMessageComplete,
-  reportUiToolCallDetail,
-  reportUiTurnBreakdown,
-} from "@/lib/uiPerfArmsTelemetry.js";
+import type { SendFunnelReasonCode } from "@/lib/sendFunnelTypes.js";
 import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
 import { resolveLegacyRuntimeModelValue } from "@/v4/telemetry/conversationPromptTelemetry.js";
 
@@ -64,7 +41,7 @@ const MAX_DEDUPE_KEYS = 2_000;
 const MAX_BUFFERED_FACTS_PER_COMMAND = 128;
 const MAX_BUFFERED_COMMANDS = 200;
 
-type TelemetryPlatform = Pick<IPlatformService, "reportArmsCustomEvent" | "reportTelemetryEvent">;
+type TelemetryPlatform = Pick<IPlatformService, "reportTelemetryEvent">;
 
 export interface ConversationPromptTelemetrySeed {
   localTtft?: import("@zcode/shared").LocalTtftContext;
@@ -513,12 +490,6 @@ function terminalStatus(
   return status === "interrupted" ? "user_interrupt" : "fail";
 }
 
-function finiteNumber(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 function createSendClickId(): string {
   return (
     globalThis.crypto?.randomUUID?.() ?? `send_${Date.now()}_${Math.random().toString(36).slice(2)}`
@@ -585,16 +556,6 @@ export class ConversationTelemetrySupervisor {
   }
 
   /**
-   * 用户真实点击/聚焦输入框。程序性自动聚焦（新建任务、切会话、挂载回焦、上下文块移除后回焦）
-   * 由 composer 侧拦截，不得进入本方法，否则「点击输入框」会被切会话动作污染。
-   * 与 recordComposerFocus 是两条独立链路：后者只写时间戳喂 send_btn，本方法只负责上报。
-   */
-  recordComposerFocusClick(input: { sessionId: string | null }): void {
-    if (this.disposed) return;
-    reportSendFunnelInputFocus({ sessionId: input.sessionId, focusTime: this.now() });
-  }
-
-  /**
    * 用户点击发送键 / Enter 提交并通过发送门禁的瞬间。返回补齐 sendClickId 的 seed，
    * 调用方需把它一路带到落定处，保证 send_click 与 send_result 严格 1:1。
    * 队列二次确认复用既有 seed 时不得再调本方法（否则一次点击报两条）。
@@ -608,14 +569,6 @@ export class ConversationTelemetrySupervisor {
       ...input.seed,
       sendClickId: input.seed.sendClickId ?? createSendClickId(),
     };
-    if (this.disposed) return seed;
-    reportSendFunnelSendClick({
-      sessionId: input.sessionId,
-      sendClickId: seed.sendClickId ?? "",
-      sendTime: input.seed.sendTime,
-      trigger: input.trigger,
-      extraDetail: input.seed.extraDetail,
-    });
     return seed;
   }
 
@@ -639,18 +592,6 @@ export class ConversationTelemetrySupervisor {
     const sendClickId = input.seed.sendClickId;
     // 后台自动任务的 seed 没有点击来源，落定不能伪造成用户发送。
     if (!sendClickId || !this.settledSendClickIds.remember(sendClickId)) return;
-    reportSendFunnelSendResult({
-      sessionId: input.sessionId,
-      commandId: input.commandId,
-      sendClickId,
-      status: input.status,
-      ackStatus: input.ackStatus,
-      reasonCode: input.reasonCode,
-      costMs: input.costMs ?? this.now() - input.seed.sendTime,
-      ackCostMs: input.ackCostMs,
-      queueConfirmed: input.seed.queueConfirmed === true,
-      extraDetail: input.seed.extraDetail,
-    });
   }
 
   /**
@@ -795,10 +736,6 @@ export class ConversationTelemetrySupervisor {
     const receivedAt = this.now();
     const foregroundAtReceipt = this.isForeground(fact.sessionId);
 
-    // plan_request 只依赖真实模型网络事实，可前后台上报，也不要求本地 prompt seed。
-    if (fact.kind === "model.request.status") {
-      reportPlanUsageModelRequestStartedToArms(this.platform, toLegacyNetworkEvent(fact));
-    }
     if (fact.kind === "subagent.lifecycle") {
       this.handleSubagentLifecycle(fact, receivedAt);
       return;
@@ -1313,16 +1250,22 @@ export class ConversationTelemetrySupervisor {
     );
   }
 
+  /**
+   * 可见 chat 错误横幅的观测点。业务遥测已随上报通道一并移除，这里只把曝光
+   * 记进本地日志，调用方的去重与节流逻辑保持原样。
+   */
   reportVisibleChatError(params: {
-    surface?: ChatErrorBannerSurface;
+    surface?: string;
     errorKey?: string | null;
     displayMessage: string;
     error: ZCodeUiError;
   }): void {
     if (this.disposed) return;
-    void reportChatErrorBannerTelemetry(this.platform, {
-      ...params,
-      providerBusinessRecoveryAction: resolveVisibleChatErrorTelemetryRecoveryAction(params.error),
+    logger.warn("[conversation-telemetry] visible chat error", {
+      code: params.error.code,
+      errorKey: params.errorKey,
+      surface: params.surface,
+      taskId: params.error.taskId,
     });
   }
 
@@ -1340,7 +1283,6 @@ export class ConversationTelemetrySupervisor {
     if (this.disposed) return;
     this.disposed = true;
     for (const lifecycle of this.lifecyclesByCommandId.values()) {
-      clearStreamStallTracking(lifecycle.taskKey);
       discardPromptTelemetry(lifecycle.taskKey);
     }
     for (const child of this.backgroundSubagentTelemetryByChildSession.values()) {
@@ -1415,8 +1357,6 @@ export class ConversationTelemetrySupervisor {
       return;
     }
     this.foregroundSessionCounts.delete(sessionId);
-    // 切走期间的墙钟时间不能被下一次回前台误判为 stream stall。
-    clearStreamStallTracking(this.taskKey(sessionId));
   }
 
   private resolveCommandId(fact: ConversationTelemetryFact): string | undefined {
@@ -1551,16 +1491,6 @@ export class ConversationTelemetrySupervisor {
             now: receivedAt,
           }),
         );
-        if (foregroundAtReceipt) {
-          recordStreamChunkArrival(lifecycle.taskKey, {
-            now: receivedAt,
-            talkId: fact.sessionId,
-            waitingTool: false,
-            model: getActivePromptModelName(lifecycle.taskKey),
-            messageId: fact.assistantMessageId,
-            chunkType: fact.channel === "thought" ? "thought" : "message",
-          });
-        }
         return;
       }
 
@@ -1626,7 +1556,6 @@ export class ConversationTelemetrySupervisor {
     if (foregroundAtReceipt && lifecycle.foregroundFirstTokenAt === null) {
       lifecycle.foregroundFirstTokenAt = receivedAt;
     }
-    clearStreamStallTracking(lifecycle.taskKey);
     const child =
       fact.childSessionId !== undefined
         ? this.foregroundSubagentUsageByChildSession.get(fact.childSessionId)
@@ -1694,49 +1623,6 @@ export class ConversationTelemetrySupervisor {
       this.reportFinalizedSteps(lifecycle, finalized, extraDetail);
     }
     if (fact.errorMessage) lifecycle.lastErrorMessage = fact.errorMessage;
-
-    const performance = fact.performance;
-    if (
-      !foregroundAtReceipt ||
-      !isTerminal ||
-      !performance ||
-      Object.keys(performance).length === 0
-    ) {
-      return;
-    }
-    reportUiToolCallDetail({
-      toolName: fact.toolName,
-      status: fact.phase === "completed" ? "completed" : "failed",
-      talkId: fact.sessionId,
-      messageId: getActivePromptMessageId(lifecycle.taskKey),
-      toolCallId: fact.toolCallId,
-      parentToolCallId: fact.parentToolCallId,
-      childSessionId: fact.childSessionId,
-      childToolCallId: fact.childToolCallId,
-      agentId: fact.agentId,
-      agentType: fact.agentType,
-      totalMs: performance.totalMs ?? fact.durationMs,
-      permissionWaitMs: performance.permissionWaitMs,
-      commandRunMs: performance.commandRunMs,
-      firstOutputMs: performance.firstOutputMs,
-      noOutputMs: performance.noOutputMs,
-      exitCode: performance.exitCode,
-      timedOut: performance.timedOut,
-      outputBytes: performance.outputBytes,
-      commandCategory: performance.commandCategory,
-      commandName: performance.commandName,
-      commandCount: performance.commandCount,
-      commandStatus: performance.commandStatus,
-      fsReadMs: performance.fsReadMs,
-      fsWriteMs: performance.fsWriteMs,
-      patchMatchMs: performance.patchMatchMs,
-      fileCount: performance.fileCount,
-      totalBytes: performance.totalBytes,
-      maxFileBytes: performance.maxFileBytes,
-      hunkCount: performance.hunkCount,
-      matchAttempts: performance.matchAttempts,
-      workspaceKind: performance.workspaceKind,
-    });
   }
 
   private handleTerminal(
@@ -1815,20 +1701,7 @@ export class ConversationTelemetrySupervisor {
         talkId: fact.sessionId,
         messageId: lifecycle.sourceCommandId,
       });
-      if (foregroundAtReceipt) {
-        this.reportCompletionArms(
-          fact.sessionId,
-          lifecycle.sourceCommandId,
-          completion.eventExtraDetail,
-          lifecycle.foregroundFirstTokenAt === null
-            ? lifecycle.legacyFirstTokenObserved
-              ? undefined
-              : -1
-            : lifecycle.foregroundFirstTokenAt - lifecycle.sendTime,
-        );
-      }
     }
-    clearStreamStallTracking(lifecycle.taskKey);
     this.deferredTerminalsByCommandId.delete(lifecycle.sourceCommandId);
     // finalize 已清当前 active；同 session 后续 queued seed 仍需等待 promotion，不能整 task 丢弃。
     this.activeCommandBySessionId.delete(fact.sessionId);
@@ -1842,52 +1715,6 @@ export class ConversationTelemetrySupervisor {
       }
     }
     this.drainPromptBlockedByDeferredTerminal(lifecycle.taskKey);
-  }
-
-  private reportCompletionArms(
-    sessionId: string,
-    sourceCommandId: string,
-    detail: Record<string, string>,
-    foregroundTtftMs: number | undefined,
-  ): void {
-    if (foregroundTtftMs !== undefined) {
-      reportUiFirstToken({
-        ttftMs: foregroundTtftMs,
-        model: detail.model_name || undefined,
-        talkId: sessionId,
-        messageId: sourceCommandId,
-      });
-      reportPlanUsageTtftToArms(this.platform, {
-        providerId: detail.model_provider,
-        modelName: detail.model_name,
-        askMode: detail.ask_mode,
-        ttftMs: foregroundTtftMs,
-      });
-    }
-    const durationMs = finiteNumber(detail.duration_ms);
-    if (durationMs === undefined) return;
-    reportUiMessageComplete({
-      durationMs,
-      result: detail.status ?? "",
-      model: detail.model_name || undefined,
-      talkId: sessionId,
-      messageId: sourceCommandId,
-    });
-    reportUiTurnBreakdown({
-      durationMs,
-      result: detail.status ?? "",
-      model: detail.model_name || undefined,
-      talkId: sessionId,
-      messageId: sourceCommandId,
-      ttftMs: foregroundTtftMs,
-      waitingMs: finiteNumber(detail.waiting_ms),
-      toolCallTotal: finiteNumber(detail.tool_call_total),
-      toolCallFailed: finiteNumber(detail.tool_call_failed),
-      agentStepCount: finiteNumber(detail.agent_step_cnt),
-      retryCount: finiteNumber(detail.retry_cnt),
-      fileChangeCount: finiteNumber(detail.file_change_cnt),
-      generatedCodeLines: finiteNumber(detail.generated_code_lines),
-    });
   }
 
   private reportFinalizedSteps(

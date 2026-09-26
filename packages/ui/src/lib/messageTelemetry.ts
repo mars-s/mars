@@ -1321,7 +1321,7 @@ export function recordAgentStepTelemetryEvent(input: {
   }
 }
 
-// 当前激活 prompt 的模型名,供 ARMS 镜像事件(stream_stall 等)补齐 model 维度;
+// 当前激活 prompt 的模型名,供镜像事件(stream_stall 等)补齐 model 维度;
 // 无激活 prompt 或未带 model_name 时返回 undefined,由调用方留空。
 export function getActivePromptModelName(taskId: string): string | undefined {
   const active = activePromptTelemetryByTask.get(taskId);

@@ -1480,15 +1480,9 @@ function ConversationComposerImpl({
 
   const handleEditorFocus = useCallback(() => {
     conversationTelemetry?.recordComposerFocus();
-    // 程序性聚焦不算「点击输入框」；标记一次性消费，之后的手动 focus 照常上报。
-    if (programmaticFocusRef.current) {
-      programmaticFocusRef.current = false;
-      return;
-    }
-    conversationTelemetry?.recordComposerFocusClick({
-      sessionId: sessionId ?? null,
-    });
-  }, [conversationTelemetry, sessionId]);
+    // 程序性聚焦只喂 send_btn 计时戳，标记一次性消费。
+    programmaticFocusRef.current = false;
+  }, [conversationTelemetry]);
 
   // 编辑器提交（Enter / 发送键 form submit 同路径）。返回 false：编辑器不自行 reset，
   // 由 submit 成功后经 inputApiRef.clear() 清空——失败时草稿留在输入框。

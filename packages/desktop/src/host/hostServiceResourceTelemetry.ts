@@ -12,7 +12,7 @@ interface RegisterHostServiceResourceTelemetryOptions {
   runtimeSurface: ProcessResourceRuntimeSurface;
   /** 独立 Server 必须显式声明支持；本地及配套部署的远端默认支持。 */
   telemetrySupported?: boolean;
-  /** Host 已哈希的运行环境身份，仅透传给 main 的资源分组，不进入 ARMS。 */
+  /** Host 已哈希的运行环境身份，仅透传给 main 的资源分组，不对外上报。 */
   environmentKey?: string;
   onError?(error: unknown): void;
 }

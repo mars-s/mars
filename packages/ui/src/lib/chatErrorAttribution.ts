@@ -178,7 +178,7 @@ export function resolveTelemetryAttribution(params: {
   error: ZCodeUiError;
   displayMessage: string;
 }): TelemetryErrorAttribution {
-  // 修复原因：adapter 的 unknown 可能是保守的产品运行时分类，不能代表 ARMS 缺少上游证据；
+  // 修复原因：adapter 的 unknown 可能是保守的产品运行时分类，不能代表上游缺少证据；
   // 这里仅在 telemetry 边界按 provider code/status/可见文案补全低基数归因，不改变重试或 UI 行为。
   const explicitSource = params.error.attribution?.source;
   const providerId = params.error.attribution?.providerId?.trim();

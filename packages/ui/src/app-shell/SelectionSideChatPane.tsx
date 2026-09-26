@@ -37,7 +37,6 @@ export const SelectionSideChatPane = memo(function SelectionSideChatPane({
       <SessionPane
         paneId={tab.id}
         sessionId={tab.childSessionId}
-        openTrigger="selection"
         selectionSideChat
         focused={focused}
         telemetryVisible={focused}

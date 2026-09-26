@@ -67,7 +67,7 @@ export function startMemoryDiagnosticsLogger(
     try {
       const heap = readHeap();
       const heapUsedKb = heap ? Math.round(heap.usedJSHeapSize! / 1024) : undefined;
-      // 读到就先交给资源遥测：ARMS 要的是完整的 60 秒序列，而本地日志只在有变化时才写，
+      // 读到就先交给资源遥测：它要的是完整的 60 秒序列，而本地日志只在有变化时才写，
       // 两个出口不能共用同一个门控结论；计数器采集与格式化也不该拖走这条 heap 样本。
       if (heapUsedKb !== undefined) {
         try {

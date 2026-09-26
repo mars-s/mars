@@ -65,7 +65,6 @@ import { buildChatSessionScrollMemoryKey } from "@/lib/chatSessionScrollMemory.j
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
-import type { SessionOpenTrigger } from "@/lib/sessionOpenArmsTelemetry.js";
 import { useDynamicWorkflowAvailability } from "@/hooks/useDynamicWorkflowAvailability.js";
 import { resolveWorkflowResumeHandler } from "@/v4/workflowResumeGate.js";
 import {
@@ -219,7 +218,6 @@ import {
 import type { ConversationPromptTelemetrySeed } from "@/v4/telemetry/conversationTelemetrySupervisor.js";
 import { resolveSendAckSettlement } from "@/v4/telemetry/conversationTelemetrySupervisor.js";
 import { useSessionSubscriptionErrorTelemetry } from "@/v4/telemetry/useSessionSubscriptionErrorTelemetry.js";
-import { useSessionOpenArmsTelemetry } from "@/v4/telemetry/useSessionOpenArmsTelemetry.js";
 import {
   parseV4VisibleSlashCommand,
   parseSelectionSideSlashCommand,
@@ -285,8 +283,6 @@ import {
 export interface SessionPaneProps {
   paneId: string;
   sessionId: string | null;
-  /** 低基数打开入口，由 pane 宿主提供；缺省仅用于兼容旧调用。 */
-  openTrigger?: SessionOpenTrigger;
   rootSessionId?: string;
   /** subagent 右侧详情等观察视图：不显示 composer/input，也不发送行内编辑类命令。 */
   readOnly?: boolean;
@@ -488,7 +484,6 @@ function shouldRestoreQueuedComposerFromAck(status: CommandAck["status"]): boole
 export function SessionPane({
   paneId,
   sessionId,
-  openTrigger,
   rootSessionId,
   readOnly = false,
   allowWorkspaceFileRewind = false,
@@ -593,7 +588,6 @@ export function SessionPane({
   const [lease, setLease] = useState<SessionLease | null>(null);
   const state = useConversationProjection(lease);
   const snapshot = state.snapshot;
-  const newlyCreatedSessionIdRef = useRef<string | null>(null);
   const shareDraft = useConversationShareSelectionStore((storeState) =>
     sessionId ? storeState.drafts[sessionId] : undefined,
   );
@@ -971,29 +965,6 @@ export function SessionPane({
     workspaceIdentity,
     workspacePath,
   ]);
-  const sessionLeaseReady = lease?.sessionId === sessionId;
-  const shouldMeasureExistingSessionOpen =
-    sessionLeaseReady && newlyCreatedSessionIdRef.current !== sessionId;
-  useSessionOpenArmsTelemetry({
-    sessionId,
-    snapshot,
-    openTiming: sessionLeaseReady ? state.openTiming : undefined,
-    rendererTiming: sessionLeaseReady ? state.rendererTiming : undefined,
-    openKind: sessionLeaseReady ? lease?.openKind : undefined,
-    openTrigger,
-    startedAt: sessionLeaseReady ? lease?.startedAt : undefined,
-    status: state.status,
-    lastError: state.lastError,
-    enabled: shouldMeasureExistingSessionOpen,
-    readOnly,
-    reporter: platform,
-  });
-  useEffect(() => {
-    const newlyCreatedSessionId = newlyCreatedSessionIdRef.current;
-    if (newlyCreatedSessionId !== null && newlyCreatedSessionId !== sessionId) {
-      newlyCreatedSessionIdRef.current = null;
-    }
-  }, [sessionId]);
   const mobilePlanInteractionReconcileTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
@@ -1324,11 +1295,6 @@ export function SessionPane({
           messageId,
         );
       }
-      // Bug 根因：Session 打开埋点只衡量已有 Session，但草稿首发过去会把新建/预热提升的
-      // sessionId 直接交给同一 hook。预热 lease 还保留草稿期的 startedAt 与空 snapshot timing，
-      // 因而把数小时闲置时间误记为 total/react。创建边界先标记本 pane 的首次绑定；离开后
-      // 再次显式打开同一 Session 时标记会清除，恢复正常的已有 Session 打开测量。
-      newlyCreatedSessionIdRef.current = createdSessionId;
       promoteComposerDraft(createdSessionId);
       // 只有 draft create/promote 的 accepted 边界能继承 grouped placement。
       // fork 和普通任务导航仍复用 onSessionCreated，但不会污染已有 task 的分组排序。
@@ -3675,6 +3641,7 @@ export function SessionPane({
   // subscribe ACK 会先把 store 置 live，initial snapshot 稍后才到；只看
   // status 会在无投影窗口提前启用编辑器。正式 session 必须等首个 snapshot 才可输入。
   const connecting = sessionId !== null && (state.status === "connecting" || snapshot === null);
+  const sessionLeaseReady = lease?.sessionId === sessionId;
   const queueEditActiveForCurrentComposer =
     queueEditOperation?.sessionId === sessionId && queueEditOperation.workspaceKey === workspaceKey;
   const errored = sessionId !== null && state.status === "error";
