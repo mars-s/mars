@@ -8,11 +8,7 @@ import {
   type ZCodeOffPeakTask,
   type ModelSelection,
 } from "@zcode/shared";
-import type {
-  ICodingPlanSubscriptionService,
-  IOffPeakTaskService,
-  OffPeakClientConfig,
-} from "@zcode/services";
+import type { IOffPeakTaskService } from "@zcode/services";
 import { logger } from "@/logger.js";
 
 // 闲时任务管理 store（与 automationManagementStore 独立）：走 IOffPeakTaskService RPC。
@@ -53,8 +49,6 @@ interface OffPeakTaskState {
   loading: boolean;
   error: string | null;
   operationId: string | null;
-  /** 灰度配置：null=未加载。未命中/关闭时入口整体不渲染。 */
-  grayConfig: OffPeakClientConfig | null;
   /** 当前 selected provider/connection 的脱敏凭证支持快照；不含 JWT/API Key。 */
   codingPlanSupport: OffPeakCodingPlanSupport | null;
   /** 服务端取号额度即时快照；null=尚无成功响应。 */
@@ -65,10 +59,7 @@ interface OffPeakTaskState {
   newTaskBannerDismissed: boolean;
   /** 模板卡→创建表单的预填草稿（跨视图导航一次性携带）。 */
   pendingCreateDraft: OffPeakCreateDraft | null;
-  initialize(deps: {
-    offPeakTaskService: IOffPeakTaskService;
-    codingPlanSubscriptionService: ICodingPlanSubscriptionService;
-  }): Promise<void>;
+  initialize(deps: { offPeakTaskService: IOffPeakTaskService }): Promise<void>;
   refresh(service: IOffPeakTaskService): Promise<void>;
   refreshCodingPlanSupport(service: IOffPeakTaskService, freshnessKey?: string): Promise<void>;
   refreshTakeNumberAvailability(service: IOffPeakTaskService): Promise<void>;
@@ -157,34 +148,28 @@ export const useOffPeakTaskStore = create<OffPeakTaskState>((set, get) => ({
   loading: false,
   error: null,
   operationId: null,
-  grayConfig: null,
   codingPlanSupport: null,
   takeNumberAvailability: null,
   takeNumberAvailabilityStatus: "idle",
   newTaskBannerDismissed: false,
   pendingCreateDraft: null,
 
-  async initialize({ offPeakTaskService, codingPlanSubscriptionService }) {
+  async initialize({ offPeakTaskService }) {
     // Bug 原因：New Task 与 Automations 在页面切换时可能短暂重叠挂载，两个 initialize
     // 会并发请求同一个 Team Plan availability，后到的全局 429 可能覆盖先到的成功结果。
     // Store 级 single-flight 保证所有入口共用一次完整准入检查。
     if (initializeInFlight) return initializeInFlight;
     set({ loading: true, error: null });
-    // 初始化和后续通知共用资格检查；灰度先就绪，资格与额度不能由两条异步链分别写入。
-    initializationReady = Promise.all([
-      codingPlanSubscriptionService
-        .getOffPeakClientConfig({ forceRefresh: true })
-        .catch((error) => {
-          logger.warn("[off-peak] gray config load failed", toErrorMessage(error));
-          return null;
-        }),
-      offPeakTaskService.list().catch((error) => {
+    // 初始化和后续通知共用资格检查；列表先就绪，资格与额度不能由两条异步链分别写入。
+    initializationReady = offPeakTaskService
+      .list()
+      .catch((error) => {
         logger.warn("[off-peak] list failed", toErrorMessage(error));
         return [] as ZCodeOffPeakTask[];
-      }),
-    ]).then(([grayConfig, tasks]) => {
-      set({ grayConfig, tasks });
-    });
+      })
+      .then((tasks) => {
+        set({ tasks });
+      });
     const run = get().refreshCodingPlanSupport(offPeakTaskService);
     initializeInFlight = run;
     try {
@@ -237,10 +222,8 @@ export const useOffPeakTaskStore = create<OffPeakTaskState>((set, get) => ({
           try {
             const codingPlanSupport = await currentService.getCodingPlanSupport();
             if (generation !== eligibilityGeneration) continue;
-            const grayConfig = get().grayConfig;
-            const shouldReadAvailability =
-              grayConfig?.enabled &&
-              (grayConfig.codingPlanActive === true || codingPlanSupport.supported === true);
+            // 灰度门禁随 Z.ai 订阅面一起下线；准入只认 Host 侧的连接支持事实。
+            const shouldReadAvailability = codingPlanSupport.supported === true;
             const takeNumberAvailability = shouldReadAvailability
               ? await currentService.getTakeNumberAvailability()
               : null;
