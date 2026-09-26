@@ -3,7 +3,7 @@ import { localTtftFactsSchema } from "../localTtft.js";
 // 传输外壳：连接握手 / 订阅 / 帧信封。
 // 阶段为类型占位（后半接通道层时启用），数据形状已按规范定稿。
 import { z } from "zod";
-import { APP_USAGE_RANGES, appUsageSnapshotSchema } from "../usage-stats.js";
+import { APP_USAGE_RANGES, appUsageSnapshotSchema } from "../app-usage-stats.js";
 import { zcodeWorkspaceRefSchema } from "../zcode-protocol-legacy-types.js";
 import {
   PROTOCOL_V4_LIMITS,
@@ -769,7 +769,7 @@ export type V4ConversationFileRewindPreviewResult = z.infer<
 
 // ── usage query──
 // app 级用量聚合：range/timeZone 入参与旧 usage/stats 同形（消费者语义不变），
-// 结果 = AppUsageSnapshot（形状归属中性模块 usage-stats.ts，不与旧词表文件耦合）。
+// 结果 = AppUsageSnapshot（形状归属中性模块 app-usage-stats.ts，不与旧词表文件耦合）。
 export const v4UsageStatsParamsSchema = z
   .object({
     range: z.enum(APP_USAGE_RANGES),
