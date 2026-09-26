@@ -64,8 +64,54 @@ The hard one. Depends on [#7](https://github.com/mars-s/mars/issues/7) and
 
 | # | Issue | Status |
 | --- | --- | --- |
-| [#13](https://github.com/mars-s/mars/issues/13) | Implement the ChatGPT OAuth adapter | todo |
+| [#13](https://github.com/mars-s/mars/issues/13) | Implement the ChatGPT OAuth adapter | code done, live flow unverified |
 | [#14](https://github.com/mars-s/mars/issues/14) | OpenCode Go end-to-end verification path | blocked, needs `op signin` |
+
+### #13 evidence
+
+Landed as three commits: the adapter, the request-path wiring, then the
+adversarial-review fixes. The catalog is at `revision 33` with 17 templates: the
+original 16 untouched and `chatgpt-subscription` appended.
+
+**Device code is the default and the only wired flow.** Loopback PKCE on port 1455
+is implemented and tested but nothing routes to it, because the port is fixed by
+OpenAI's client registration and a GUI holding it collides with a Codex CLI login.
+The fallback would be device code anyway.
+
+**The credential never enters the agent process's config.** The agent asks the host
+over `interaction/requestProviderRuntimeHeaders` and the host answers per request.
+Identity comes from the host's own registry, after the personal overlay: the
+request's `providerId` is a lookup key, never the identity. Four facts must hold
+(`templateId`, `access.type`, `api.type`, normalized `baseUrl`), and the host
+returns the `baseUrl` it approved so the agent can prove its own frozen base URL
+matches before attaching anything. A refusal is indistinguishable on the wire from
+"not signed in".
+
+**Refresh rotation is single-path and cross-process locked.** `ChatGptGrantStore.rotate`
+holds the lock across read, POST and write-back, and adopts a peer's already-rotated
+pair rather than replaying a spent token. The grant store interface has no `exchange`
+seam, so nothing on the credential path can be pointed at another authorization server.
+
+**Electron `safeStorage` is not used anywhere.** The fork never called it; the grant
+store uses the app's existing pure-Node AES-256-GCM cipher instead, so a locked or
+missing macOS keychain cannot raise a blocking dialog on launch.
+
+**`store: false` is injected by a fetch wrapper**, not a provider option, because the
+AI SDK's `openaiOptions.store` is `nullish` and gets stripped before serialization.
+The configured base URL is the parent `https://chatgpt.com/backend-api/codex`; the SDK
+appends `/responses` itself.
+
+**Adversarial review found no exfiltration path** (23 URL bypasses probed, all fail;
+rotation cannot loop; the moved API-key validation is equivalent for every non-oauth
+shape and stricter for oauth). It did find three real defects, all now fixed: a TOCTOU
+between the host's live registry and the agent's frozen snapshot, an unbounded growth
+of `pendingProviderRuntimeHeaders`, and a load-bearing ordering that was true only by
+accident of the current call graph.
+
+**The live flow is UNVERIFIED.** Every test runs against fakes. A real model call has
+never been made, and that needs a human with a ChatGPT Pro subscription. The manual
+steps are in the #13 report. This is the one clause of the ticket's done-when that is
+not met, so the ticket stays open.
 
 ## Verification capability, established 2026-09-26
 

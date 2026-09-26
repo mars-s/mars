@@ -405,3 +405,66 @@ Pre-existing, not regressions, but on a path the owner wants kept:
 
 Report the real result. If a command was not run, say it was not run. If the
 environment blocked it, say that instead of writing it up as a pass.
+
+## The ChatGPT subscription credential, and how it is kept from leaking
+
+Added for #13. The access token is a live subscription secret, so its routing is
+governed by rules worth writing down, because the next person to add a provider
+will otherwise re-invent them.
+
+**The agent process never holds it.** The agent asks the host, per request, over
+`interaction/requestProviderRuntimeHeaders`, and the host answers. A provider
+secret therefore cannot land in a session file, a CLI log, or a request body.
+
+**The identity is the host's registry, not the caller.** There is no host
+allowlist in the provider schema: `baseUrl` is only `z.string().url()`, and a
+personal provider may point anywhere under any name and may name any template.
+So `providerId` from the request is used **only as a lookup key** into the host's
+own registry projection, taken after the personal overlay. Four registry facts must
+hold before a byte of the grant is read: `templateId`, `access.type` is `oauth`,
+`api.type` is `openai-responses`, and the normalized `baseUrl` is exactly
+`https://chatgpt.com/backend-api/codex`. A spoofed provider name with a redirected
+host fails on the base URL.
+
+**The approved destination is returned and re-checked.** The host returns the
+`baseUrl` it approved, and the agent refuses to attach the credential unless its
+own frozen base URL normalizes equal to it. Without this the host verified a live
+registry view while the agent sent to a snapshot frozen at bind time, and a config
+edit between the two could aim the live token at another host. One shared
+normalizer in `packages/shared/src/provider-endpoint-identity.ts` serves both
+sides so they cannot drift.
+
+**Verification precedes the store.** The identity check is hoisted above the grant
+store resolution, not merely above the read, so the ordering holds by the shape of
+the function rather than by the current call graph.
+
+**Refusals are indistinguishable on the wire.** "Not ChatGPT" and "not signed in"
+return the same payload. The specific reason goes to the host log, and only header
+names plus an `apiKeyPresent` boolean, never values.
+
+**Rotation is single-path.** Refresh tokens are single-use, so a double submit
+revokes the user's whole token family. Every rotation goes through
+`ChatGptGrantStore.rotate`, which holds a cross-process file lock across read, POST
+and write-back, and adopts a peer's already-rotated pair instead of replaying. The
+grant store interface deliberately has no `exchange` seam, which pins the token
+endpoint inside the adapter and makes the credential path unrepointable at another
+authorization server.
+
+**No keychain on the hot path.** Electron `safeStorage` is never called, on macOS
+or anywhere else: a missing or locked keychain makes any call, including
+`isEncryptionAvailable()`, raise a blocking dialog on every launch. The grant uses
+the app's existing pure-Node AES-256-GCM cipher, written `0600` and atomically.
+
+### How to check this yourself
+
+```bash
+# The identity check, the ordering, and the approved-destination comparison.
+rg -n 'isRegistryVerifiedChatGptProvider|approvedBaseUrl' packages/ apps/
+# The rotation lock, and that the credential path cannot exchange on its own.
+rg -n 'withFileLock|rotate\(' packages/services/src/oauth/providers/chatgpt/
+rg -n 'exchange' packages/services/src/oauth/providers/providerAdapter.ts   # expect no hit
+# The token and account id must not reach a log or a persisted file.
+rg -n 'chatgpt-account-id' apps/zcode-cli/packages/adapters/src/model/runner-network-headers.ts
+```
+
+The live flow is unverified; see the #13 section of the roadmap for the manual steps.
