@@ -1,8 +1,13 @@
 import { randomBytes } from "node:crypto";
-import type { ModelProviderFamilyId } from "@zcode/shared";
 import type { HttpClientPort, HttpClientRunOptions, TraceContext } from "@zcode/contracts";
 
-export type CliOAuthProviderId = ModelProviderFamilyId;
+/**
+ * The provider namespace the operator's ZCode backend mints the access token
+ * under. Deliberately an opaque string, not a family union: the backend owns the
+ * namespace, so a self-hosted deployment can name it whatever it wants and the
+ * poll response is read back under the same id.
+ */
+export type CliOAuthProviderId = string;
 const POLL_TOKEN_BYTES = 32;
 const JSON_CONTENT_TYPE = "application/json";
 
@@ -83,6 +88,7 @@ export function createCliOAuthClient(options: CliOAuthClientOptions): CliOAuthCl
     );
   }
   const baseUrl = normalizeBaseUrl(configuredBaseUrl);
+  const providerId = normalizeProviderId(options.providerId);
   const encoder = new TextEncoder();
 
   return {
@@ -93,7 +99,7 @@ export function createCliOAuthClient(options: CliOAuthClientOptions): CliOAuthCl
       const envelope = await requestJsonEnvelope(
         options.httpClient,
         {
-          body: encoder.encode(JSON.stringify({ provider: options.providerId })),
+          body: encoder.encode(JSON.stringify({ provider: providerId })),
           headers: {
             Authorization: `Bearer ${input.pollToken}`,
             "Content-Type": JSON_CONTENT_TYPE,
@@ -124,7 +130,7 @@ export function createCliOAuthClient(options: CliOAuthClientOptions): CliOAuthCl
         },
         runOptions,
       );
-      return parsePollData(envelope.data, options.providerId);
+      return parsePollData(envelope.data, providerId);
     },
   };
 }
@@ -135,6 +141,16 @@ export function createCliOAuthPollToken(): string {
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/u, "");
+}
+
+// The id travels in a JSON body and comes back as a response object key, so
+// reject anything that could not round-trip as either.
+function normalizeProviderId(providerId: string): string {
+  const trimmed = providerId.trim();
+  if (!trimmed || /[\s"'\\]/u.test(trimmed)) {
+    throw new CliOAuthError(`Invalid OAuth provider id: ${providerId}`);
+  }
+  return trimmed;
 }
 
 async function requestJsonEnvelope(

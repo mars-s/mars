@@ -1,9 +1,14 @@
 import { formatJson } from "@zcode/core";
-import type { ModelProviderFamilyId } from "@zcode/shared";
+import { MODEL_PROVIDER_FAMILY_SPECS } from "@zcode/shared";
 import type { GlobalOptions, RunContext } from "@zcode/shared-types";
 import { loadBootstrapModule } from "./bootstrap-loader.js";
 import { loadCliDotenv } from "./env.js";
 import type { RunDependencies } from "./cli-types.js";
+
+/** The provider namespaces the operator's ZCode backend can sign a user into. */
+function loginProviderIds(): readonly string[] {
+  return MODEL_PROVIDER_FAMILY_SPECS.map((spec) => spec.id);
+}
 
 export async function runLoginCommand(
   ctx: RunContext,
@@ -13,9 +18,10 @@ export async function runLoginCommand(
   args: readonly string[] = [],
 ): Promise<number> {
   try {
-    const providerId = args[0] ?? "zai";
-    if (args.length > 1 || (providerId !== "zai" && providerId !== "bigmodel")) {
-      throw new Error("Usage: zcode login [zai|bigmodel] [--no-browser]");
+    const providerIds = loginProviderIds();
+    const providerId = args[0];
+    if (args.length > 1 || !providerId || !providerIds.includes(providerId)) {
+      throw new Error(`Usage: zcode login <${providerIds.join("|") || "provider"}> [--no-browser]`);
     }
     const env = deps.env ?? process.env;
     const workingDirectory = (deps.cwd ?? process.cwd)();
@@ -56,9 +62,7 @@ export async function runLoginCommand(
             ...(result.user.name ? { name: result.user.name } : {}),
             ...(result.user.avatar ? { avatar: result.user.avatar } : {}),
           },
-          model: result.model,
           credentialsPath: result.credentialsPath,
-          configPath: result.configPath,
           browserOpened: result.browser?.opened ?? false,
         }),
       );
@@ -68,9 +72,7 @@ export async function runLoginCommand(
     ctx.stdout.write(
       [
         `Login successful${formatUserLabel(result.user)}.`,
-        `Model: ${result.model}`,
         `Credentials: ${result.credentialsPath}`,
-        `Model selection: ${result.configPath}`,
       ].join("\n") + "\n",
     );
     return 0;
@@ -110,16 +112,13 @@ export async function runLogoutCommand(
       ctx.stdout.write(
         formatJson({
           status: "logged_out",
-          provider: "zai",
           credentialsPath: result.credentialsPath,
         }),
       );
       return 0;
     }
 
-    ctx.stdout.write(
-      `Logged out from Coding Plan accounts. Credentials: ${result.credentialsPath}\n`,
-    );
+    ctx.stdout.write(`Logged out. Credentials: ${result.credentialsPath}\n`);
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -136,7 +135,7 @@ function writeAuthorizeUrl(
   options: GlobalOptions,
   authorizeUrl: string,
   noBrowser: boolean,
-  providerId: ModelProviderFamilyId,
+  providerId: string,
 ): void {
   const target = options.json ? ctx.stderr : ctx.stdout;
   if (noBrowser) {
@@ -145,7 +144,7 @@ function writeAuthorizeUrl(
   }
 
   target.write(
-    `Opening browser for ${providerId === "bigmodel" ? "BigModel" : "Z.AI"} authorization.\nFallback URL:\n${authorizeUrl}\n`,
+    `Opening browser for ${providerId} authorization.\nFallback URL:\n${authorizeUrl}\n`,
   );
 }
 

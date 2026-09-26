@@ -87,7 +87,7 @@ function throwOffPeakCreateFailure(
       case "quota_3103":
         return "The idle-time task quota is used up for now. Tell the user the free quota is exhausted and they can retry later or review tasks in Automations.";
       case "eligibility_3101":
-        return "The current account has no eligible Coding Plan connection for idle-time tasks. Tell the user to select a ZAI/BigModel Coding Plan connection first.";
+        return "The current account has no eligible subscription connection for idle-time tasks. Tell the user to select an eligible connection first.";
       case "client_validation":
         if (outcome.errorCode === "model_not_allowed") {
           return "The requested model is not in the idle-time allowed model list. Omit the model field to use the default allowed model.";

@@ -135,10 +135,8 @@ export type CommandCenterLoginResult = {
     opened: boolean;
     reason?: string;
   };
-  configPath: string;
   credentialsPath: string;
-  model: string;
-  providerId?: "bigmodel" | "zai";
+  providerId?: string;
   user: {
     email?: string;
     name?: string;
@@ -156,28 +154,6 @@ export type CommandCenterLoginAuthorizeData = {
 export type CommandCenterLoginOptions = {
   abortSignal?: AbortSignal;
   onAuthorizeUrl?: (data: CommandCenterLoginAuthorizeData) => Promise<void> | void;
-};
-export type CommandCenterBigmodelLoginOptions = CommandCenterLoginOptions;
-
-export type CommandCenterBigmodelLoginResult = {
-  browser?: {
-    opened: boolean;
-    reason?: string;
-  };
-  configPath: string;
-  model: string;
-  providerId: "bigmodel";
-};
-
-export type CommandCenterApiKeyOptions = {
-  apiKey: string;
-  providerId: "bigmodel" | "zai";
-};
-
-export type CommandCenterApiKeyResult = {
-  configPath: string;
-  model: string;
-  providerId: "bigmodel" | "zai";
 };
 
 export type CommandCenterLogoutResult = {
@@ -304,11 +280,10 @@ export type CommandCenterDeps = {
   listSessions?: () => Promise<CommandCenterSession[]>;
   listCustomCommands?: () => Promise<CommandCenterCustomCommandListOutcome>;
   listSkills?: () => Promise<CommandCenterSkillListOutcome>;
-  login?: (options?: CommandCenterLoginOptions) => Promise<CommandCenterLoginResult>;
-  loginBigmodel?: (
-    options?: CommandCenterBigmodelLoginOptions,
-  ) => Promise<CommandCenterBigmodelLoginResult>;
-  configureApiKey?: (options: CommandCenterApiKeyOptions) => Promise<CommandCenterApiKeyResult>;
+  login?: (
+    providerId: string,
+    options?: CommandCenterLoginOptions,
+  ) => Promise<CommandCenterLoginResult>;
   loadCustomCommand?: (name: string) => Promise<CommandCenterCustomCommandContent>;
   newApp?: () => Promise<CommandCenterApp>;
   recordInputHistory?: (

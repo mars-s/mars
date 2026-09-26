@@ -9,8 +9,6 @@ import type {
   createModelAdapter,
   createZCodeApp,
   CreateModelAdapterOptions,
-  configureCodingPlanApiKey,
-  ConfigureCodingPlanApiKeyOptions,
   inspectZCodeSkill,
   inspectWorkspaceHookTrust,
   grantWorkspaceHookTrust,
@@ -19,8 +17,6 @@ import type {
   InspectZCodeCustomCommandOptions,
   InspectZCodeSkillOptions,
   loginZCodeCli,
-  loginBigmodelCodingPlan,
-  LoginBigmodelCodingPlanOptions,
   LoginZCodeCliOptions,
   listZCodeCustomCommands,
   ListZCodeCustomCommandsOptions,
@@ -72,13 +68,7 @@ export interface RunDependencies extends PluginsCommandOverrides {
   inspectCustomCommand?: (
     options: InspectZCodeCustomCommandOptions,
   ) => ReturnType<typeof inspectZCodeCustomCommand>;
-  loginZCodeCli?: (options?: LoginZCodeCliOptions) => ReturnType<typeof loginZCodeCli>;
-  loginBigmodelCodingPlan?: (
-    options?: LoginBigmodelCodingPlanOptions,
-  ) => ReturnType<typeof loginBigmodelCodingPlan>;
-  configureCodingPlanApiKey?: (
-    options: ConfigureCodingPlanApiKeyOptions,
-  ) => ReturnType<typeof configureCodingPlanApiKey>;
+  loginZCodeCli?: (options: LoginZCodeCliOptions) => ReturnType<typeof loginZCodeCli>;
   loadDotenv?: (options?: LoadCliDotenvOptions) => DotenvLoadResult;
   projectConfigPath?: string;
   listSessions?: (options: ListZCodeSessionsOptions) => ReturnType<typeof listZCodeSessions>;
