@@ -54,12 +54,23 @@ function readCredentialErrorMessage(error: unknown): string {
  */
 export type OAuthProviderId = string & { readonly __oauthProviderBrand?: never };
 
+/**
+ * What proves a session on startup restore.
+ *
+ * `backend-jwt` (the default) is backed by the shared ZCode backend JWT, so a
+ * JWT expiry ends the session. A `provider-token` provider authenticates against
+ * its own issuer and is never issued that JWT, so the only evidence left to
+ * check is the provider access token itself.
+ */
+export type OAuthSessionKind = "backend-jwt" | "provider-token";
+
 /** Provider 展示元信息 */
 export interface OAuthProviderMeta {
   id: OAuthProviderId;
   displayName: string;
   enabled: boolean;
   order: number;
+  sessionKind?: OAuthSessionKind;
 }
 
 /** 发起 OAuth 请求 */
@@ -67,11 +78,21 @@ export interface OAuthStartRequest {
   provider: OAuthProviderId;
 }
 
+/** The one-time code the user types into the browser (device-code flow only). */
+export interface OAuthDeviceCodeChallenge {
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete?: string;
+  expiresAt: number;
+}
+
 /** 发起 OAuth 返回 */
 export interface OAuthStartResponse {
   provider: OAuthProviderId;
   authorizeUrl: string;
   state: string;
+  /** Filled in by device-code flow only: the code the browser needs typed. */
+  deviceCode?: OAuthDeviceCodeChallenge;
 }
 
 /** 应用登录回调结果 */

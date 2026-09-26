@@ -779,6 +779,7 @@ const zhCN: Record<string, string> = {
   "login.oauth.regionTag.zai": "全球",
   "login.oauth.regionTag.bigmodel": "中国",
   "login.oauth.waiting": "等待 {provider} 完成认证...",
+  "login.oauth.deviceCode.hint": "请在刚打开的浏览器页面中输入此授权码：",
   "login.oauth.loginFailure": "登录失败，请重试",
   "login.oauth.cancel": "取消",
   "login.oauth.retry": "重新登录",

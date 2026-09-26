@@ -31,6 +31,8 @@ export const TID_OAUTH_LOGIN_BUTTON = "oauth-login-button";
 export const TID_OAUTH_CANCEL = "oauth-cancel";
 /** OAuth 错误提示文本 */
 export const TID_OAUTH_ERROR = "oauth-error";
+/** The one-time device-code login code shown for the user to type in */
+export const TID_OAUTH_DEVICE_CODE = "oauth-device-code";
 
 // App
 /** 顶部导航栏 */

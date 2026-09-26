@@ -10,6 +10,7 @@ import {
   type OAuthProviderMeta,
   TID_LOGIN_USE_API_KEY_BUTTON,
   TID_OAUTH_CANCEL,
+  TID_OAUTH_DEVICE_CODE,
   TID_OAUTH_ERROR,
   TID_OAUTH_LOGIN_BUTTON,
   testId,
@@ -77,6 +78,7 @@ function LoginPanel({ active, onComplete }: LoginPanelProps) {
     providers,
     loadingProviders,
     pendingProvider,
+    deviceCodeChallenge,
     refreshProviders,
   } = useOAuth();
   const user = useZCodeStore((s) => s.user);
@@ -370,6 +372,26 @@ function LoginPanel({ active, onComplete }: LoginPanelProps) {
                 { provider: pendingProviderName ?? "OAuth" },
               )}
             </div>
+            {/* Device-code login has no browser redirect, so the user has to type
+                the code themselves. Without this block the panel would just say
+                "waiting" while nothing visible was being asked of them. */}
+            {deviceCodeChallenge ? (
+              <div className="space-y-2 rounded-lg border border-border bg-surface p-4 text-center">
+                <p className="text-ui-base text-foreground-subtle">
+                  {intl.formatMessage({ id: "login.oauth.deviceCode.hint" })}
+                </p>
+                <p
+                  className="font-mono text-ui-lg tracking-widest text-foreground"
+                  data-testid={TID_OAUTH_DEVICE_CODE}
+                >
+                  {deviceCodeChallenge.userCode}
+                </p>
+                <p className="break-all text-ui-small text-foreground-subtle">
+                  {deviceCodeChallenge.verificationUriComplete ??
+                    deviceCodeChallenge.verificationUri}
+                </p>
+              </div>
+            ) : null}
             <Button
               variant="outline"
               className="h-10 w-full text-ui-base"
