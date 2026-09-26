@@ -1,19 +1,16 @@
-/* eslint-disable max-lines -- OAuth 凭据仓储集中维护 ZAI/BigModel 登录镜像 key 边界，拆分会让鉴权事实源更难追踪。 */
-import { Buffer } from "node:buffer";
 import type {
   OAuthLoginAttribution,
   OAuthProviderId,
   OAuthTokenSet,
   OAuthUserProfile,
 } from "@zcode/shared";
-import { BIGMODEL_PROVIDER_ID, isCredentialDecryptError, ZAI_PROVIDER_ID } from "@zcode/shared";
+import { isCredentialDecryptError } from "@zcode/shared";
 import type { ICredentialService } from "../../credential/credential.js";
 import { createServiceLogger } from "../../logger/serviceLogger.js";
 
 const ACTIVE_PROVIDER_KEY = "oauth:active_provider";
 const LOGIN_ATTRIBUTION_KEY = "oauth:login_attribution";
 const ZCODE_JWT_TOKEN_KEY = "zcodejwttoken";
-const KNOWN_OAUTH_PROVIDER_IDS = [BIGMODEL_PROVIDER_ID, ZAI_PROVIDER_ID] as const;
 const log = createServiceLogger("oauthCredentialRepo");
 
 interface OAuthCredentialRepoOptions {
@@ -36,100 +33,7 @@ function userInfoKey(provider: OAuthProviderId): string {
 function collectKnownOAuthProviderIds(
   providerIds: readonly OAuthProviderId[] = [],
 ): OAuthProviderId[] {
-  const uniqueProviderIds = new Set<OAuthProviderId>(KNOWN_OAUTH_PROVIDER_IDS);
-  for (const providerId of providerIds) {
-    uniqueProviderIds.add(providerId);
-  }
-  return [...uniqueProviderIds];
-}
-
-function inferBase64ImageMimeType(decoded: Buffer): string {
-  if (
-    decoded.length >= 8 &&
-    decoded[0] === 0x89 &&
-    decoded[1] === 0x50 &&
-    decoded[2] === 0x4e &&
-    decoded[3] === 0x47
-  ) {
-    return "image/png";
-  }
-
-  if (decoded.length >= 3 && decoded[0] === 0xff && decoded[1] === 0xd8 && decoded[2] === 0xff) {
-    return "image/jpeg";
-  }
-
-  if (decoded.length >= 6 && decoded.toString("ascii", 0, 3) === "GIF") {
-    return "image/gif";
-  }
-
-  if (
-    decoded.length >= 12 &&
-    decoded.toString("ascii", 0, 4) === "RIFF" &&
-    decoded.toString("ascii", 8, 12) === "WEBP"
-  ) {
-    return "image/webp";
-  }
-
-  return "image/png";
-}
-
-function toBase64ImageDataUrl(raw: string): string | null {
-  const normalized = raw.replace(/\s/g, "");
-  if (normalized.length < 16 || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
-    return null;
-  }
-
-  const decoded = Buffer.from(normalized, "base64");
-  if (decoded.length === 0) {
-    return null;
-  }
-
-  const encoded = decoded.toString("base64").replace(/=+$/, "");
-  if (encoded !== normalized.replace(/=+$/, "")) {
-    return null;
-  }
-
-  return `data:${inferBase64ImageMimeType(decoded)};base64,${normalized}`;
-}
-
-function normalizeStoredZaiAvatarUrl(avatar: string | undefined): string | undefined {
-  const trimmed = avatar?.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  if (/^data:image\/[^;]+;base64,/i.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  const dataUrl = toBase64ImageDataUrl(trimmed);
-  if (dataUrl) {
-    return dataUrl;
-  }
-
-  return trimmed;
-}
-
-function toOAuthUserProfileFromRawZaiUser(raw: Record<string, unknown>): OAuthUserProfile | null {
-  const id = typeof raw.user_id === "string" ? raw.user_id : "unknown";
-  const name = typeof raw.name === "string" ? raw.name.trim() : "";
-  const email = typeof raw.email === "string" ? raw.email : "";
-  const username = name || email || id;
-  const avatarUrl = normalizeStoredZaiAvatarUrl(
-    typeof raw.avatar === "string" ? raw.avatar : undefined,
-  );
-
-  if (!name && !email && id === "unknown") {
-    return null;
-  }
-
-  return {
-    id,
-    username,
-    displayName: username,
-    ...(avatarUrl ? { avatarUrl } : {}),
-    rawProfile: raw,
-  };
+  return [...new Set(providerIds)];
 }
 
 /** OAuth 凭据仓储：统一 provider 命名空间 */
@@ -298,10 +202,8 @@ export class OAuthCredentialRepo {
 
       const refreshToken = await this.credentialService.load(refreshTokenKey(provider));
 
-      const zcodeJwtToken =
-        provider === ZAI_PROVIDER_ID || provider === BIGMODEL_PROVIDER_ID
-          ? await this.credentialService.load(ZCODE_JWT_TOKEN_KEY)
-          : null;
+      // zcode JWT 由后端 flow 统一签发，所有 provider 共用同一个 key。
+      const zcodeJwtToken = await this.credentialService.load(ZCODE_JWT_TOKEN_KEY);
 
       return {
         accessToken,
@@ -327,26 +229,20 @@ export class OAuthCredentialRepo {
       await this.credentialService.delete(refreshTokenKey(provider));
     }
 
-    if (provider === ZAI_PROVIDER_ID || provider === BIGMODEL_PROVIDER_ID) {
-      if (tokenSet.zcodeJwtToken) {
-        // BigModel Start Plan 与 Z.ai Start Plan 一样消费 zcode JWT。
-        // JWT 必须在 OAuth callback 阶段随 tokenSet 落盘，后续 balance/runtime 只读取它，
-        // 不能再拿 BigModel access token 拼另一个 /oauth/token body 临时兑换。
-        await this.credentialService.save(ZCODE_JWT_TOKEN_KEY, tokenSet.zcodeJwtToken);
-      } else {
-        await this.credentialService.delete(ZCODE_JWT_TOKEN_KEY);
-      }
+    if (tokenSet.zcodeJwtToken) {
+      // JWT 必须在 OAuth callback 阶段随 tokenSet 落盘，后续 balance/runtime 只读取它，
+      // 不能再拿 provider access token 拼另一个 /oauth/token body 临时兑换。
+      await this.credentialService.save(ZCODE_JWT_TOKEN_KEY, tokenSet.zcodeJwtToken);
+    } else {
+      await this.credentialService.delete(ZCODE_JWT_TOKEN_KEY);
     }
   }
 
   async loadUserProfile(provider: OAuthProviderId): Promise<OAuthUserProfile | null> {
-    return this.loadUserProfileFromKey(userInfoKey(provider), provider);
+    return this.loadUserProfileFromKey(userInfoKey(provider));
   }
 
-  private async loadUserProfileFromKey(
-    key: string,
-    provider?: OAuthProviderId,
-  ): Promise<OAuthUserProfile | null> {
+  private async loadUserProfileFromKey(key: string): Promise<OAuthUserProfile | null> {
     let raw: string | null;
     try {
       raw = await this.credentialService.load(key);
@@ -383,15 +279,6 @@ export class OAuthCredentialRepo {
           ...(rawProfile ? { rawProfile } : {}),
         };
       }
-
-      if (provider === ZAI_PROVIDER_ID && typeof parsed === "object" && parsed !== null) {
-        // ZAI user_info 现在按后端 data.user 原样持久化，
-        // 启动恢复时需要从 user_id/name/avatar 重新映射展示字段。
-        const zaiProfile = toOAuthUserProfileFromRawZaiUser(parsed as Record<string, unknown>);
-        if (zaiProfile) {
-          return zaiProfile;
-        }
-      }
     } catch {
       // ignore parse error and fallback to null
     }
@@ -400,12 +287,7 @@ export class OAuthCredentialRepo {
   }
 
   async saveUserProfile(provider: OAuthProviderId, profile: OAuthUserProfile): Promise<void> {
-    // ZAI 后端返回的 data.user 是后续账号态排查与恢复的源数据，
-    // 之前只保存归一化展示字段会丢失 email/name/avatar 原始结构。
-    const persistProfile =
-      provider === ZAI_PROVIDER_ID && profile.rawProfile ? profile.rawProfile : profile;
-
-    await this.credentialService.save(userInfoKey(provider), JSON.stringify(persistProfile));
+    await this.credentialService.save(userInfoKey(provider), JSON.stringify(profile));
   }
 
   async clearUserProfile(provider: OAuthProviderId): Promise<void> {
@@ -416,9 +298,8 @@ export class OAuthCredentialRepo {
     await this.credentialService.delete(accessTokenKey(provider));
     await this.credentialService.delete(refreshTokenKey(provider));
     await this.credentialService.delete(userInfoKey(provider));
-    if (shouldClearZcodeJwtOnLogout(provider)) {
-      await this.credentialService.delete(ZCODE_JWT_TOKEN_KEY);
-    }
+    // zcode JWT 是所有 provider 共享的后端会话凭据，任一 provider 退出都必须一起清理。
+    await this.credentialService.delete(ZCODE_JWT_TOKEN_KEY);
   }
 
   async clearAll(providers: OAuthProviderId[]): Promise<void> {
@@ -445,8 +326,4 @@ export class OAuthCredentialRepo {
       log.warn(undefined, "clear derived provider keys after corrupt OAuth session failed", error);
     }
   }
-}
-
-function shouldClearZcodeJwtOnLogout(provider: OAuthProviderId): boolean {
-  return provider === ZAI_PROVIDER_ID || provider === BIGMODEL_PROVIDER_ID;
 }

@@ -1,10 +1,4 @@
-import {
-  BIGMODEL_PROVIDER_ID,
-  BUILTIN_MODEL_PROVIDER_IDS,
-  ZAI_PROVIDER_ID,
-  type OAuthProviderId,
-} from "@zcode/shared";
-import { accountProviderCredentialKey } from "../model-provider/accountProviderCredentialKey.js";
+import type { OAuthProviderId } from "@zcode/shared";
 import type { AccountProviderCredentialStore } from "../model-provider/accountProviderCredentialStore.js";
 
 interface OAuthProviderLogoutDependencies {
@@ -12,38 +6,16 @@ interface OAuthProviderLogoutDependencies {
   readonly refreshAccountProviders?: (reason: string) => Promise<unknown>;
 }
 
+/**
+ * OAuth 登出后同步刷新派生 provider 配置。
+ *
+ * 内置的 Z.ai 与 BigModel 映射已下线，本 hook 不再清理任何内置派生凭据；
+ * 新的 provider 如果也持有派生 API key，在这里补上对应的删除分支。
+ */
 export function createOAuthProviderLogoutHandler(
   dependencies: OAuthProviderLogoutDependencies,
 ): (provider: OAuthProviderId, accountIdentity?: string | null) => Promise<void> {
-  return async (provider, accountIdentity) => {
-    const providerIds = resolveProviderIds(provider);
-    if (!providerIds) return;
-
-    if (accountIdentity?.trim()) {
-      await dependencies.accountProviderCredentialStore.deleteApiKey(
-        accountProviderCredentialKey({
-          providerId: providerIds.codingPlan,
-          planKind: "individual-coding-plan",
-          accountIdentity,
-        }),
-      );
-    }
+  return async (provider) => {
     await dependencies.refreshAccountProviders?.(`oauth-logout:${provider}`);
   };
-}
-
-function resolveProviderIds(provider: OAuthProviderId): {
-  readonly codingPlan: string;
-} | null {
-  if (provider === ZAI_PROVIDER_ID) {
-    return {
-      codingPlan: BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan,
-    };
-  }
-  if (provider === BIGMODEL_PROVIDER_ID) {
-    return {
-      codingPlan: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-    };
-  }
-  return null;
 }
