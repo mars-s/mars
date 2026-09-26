@@ -15,9 +15,14 @@ const BIGMODEL_OAUTH_PROVIDER_CONFIG: Omit<OAuthProviderRuntimeConfig, "appSecre
   displayName: "BigModel",
   enabled: true,
   order: 0,
-  authorizeUrl: "https://bigmodel.cn/login",
-  tokenUrl: "https://zcode.z.ai/api/v1/oauth/token",
-  userinfoUrl: buildBigModelApiUrl({ ZCODE_ENV: "production" }, BIGMODEL_USERINFO_PATH),
+  // No vendor host is baked in here: every URL field must be supplied by env or by the
+  // @zcode/shared resolvers inside createBigModelProviderRuntimeConfig, and stays empty when
+  // unconfigured. Note the userinfo URL is intentionally not resolved with a forced
+  // ZCODE_ENV=production, so an unconfigured build cannot silently pin the production
+  // BigModel deployment.
+  authorizeUrl: "",
+  tokenUrl: "",
+  userinfoUrl: "",
   appId: "zcode",
   redirectUri: "zcode://oauth/callback",
 };
