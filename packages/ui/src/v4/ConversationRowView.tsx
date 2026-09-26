@@ -1797,7 +1797,7 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
         // 这里保留 provider ID fallback，并让现有 marker 随目录更新。
         const fromProvider = resolveProviderLabel(marker.fromProvider, modelSelectionView);
         const toProvider = resolveProviderLabel(marker.toProvider, modelSelectionView);
-        const to = formatProviderModelLabel(marker.toProvider, toProvider, marker.toModel);
+        const to = formatProviderModelLabel(toProvider, marker.toModel);
         if (marker.fromProvider === undefined || marker.fromModel === undefined) {
           return {
             // source-less 表示首次使用的模型事实，不是模型切换，因此不显示切换箭头。
@@ -1811,7 +1811,7 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
           label: intl.formatMessage(
             { id: "chat.modelChange.switched" },
             {
-              from: formatProviderModelLabel(marker.fromProvider, fromProvider, marker.fromModel),
+              from: formatProviderModelLabel(fromProvider, marker.fromModel),
               to,
             },
           ),

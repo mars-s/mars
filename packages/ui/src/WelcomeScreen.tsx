@@ -8,12 +8,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Loader2Icon, LoaderIcon, TriangleAlertIcon } from "lucide-react";
 import {
   type OAuthProviderMeta,
-  BIGMODEL_PROVIDER_ID,
   TID_LOGIN_USE_API_KEY_BUTTON,
   TID_OAUTH_CANCEL,
   TID_OAUTH_ERROR,
   TID_OAUTH_LOGIN_BUTTON,
-  ZAI_PROVIDER_ID,
   testId,
 } from "@zcode/shared";
 import { Alert, AlertDescription } from "./components/ui/alert.js";
@@ -321,21 +319,16 @@ function LoginPanel({ active, onComplete }: LoginPanelProps) {
                     variant="default"
                     className="h-10 w-full text-ui-base"
                     size="lg"
-                    data-testid={
-                      provider.id === BIGMODEL_PROVIDER_ID
-                        ? TID_OAUTH_LOGIN_BUTTON
-                        : testId(TID_OAUTH_LOGIN_BUTTON, provider.id)
-                    }
+                    data-testid={testId(TID_OAUTH_LOGIN_BUTTON, provider.id)}
                     onClick={() => void startTrackedLogin(provider.id)}
                   >
                     {renderOAuthProviderIcon(provider.id, "size-4")}
                     <span className="min-w-0 truncate">
                       {intl.formatMessage(
-                        { id: getLoginOAuthButtonMessageId(provider.id) },
+                        { id: "login.oauth.button" },
                         { provider: provider.displayName },
                       )}
                     </span>
-                    <LoginOAuthRegionTag providerId={provider.id} />
                   </Button>
                 ))}
                 <Button
@@ -421,7 +414,7 @@ function LoginPanel({ active, onComplete }: LoginPanelProps) {
                   return;
                 }
                 // OAuth 回调失败会触发 reset()，它会清空 pendingProvider。
-                // 重新登录必须沿用刚才失败的渠道，不能因为 providers[0] 的原始顺序退回 BigModel。
+                // 重新登录必须沿用刚才失败的渠道，不能因为 providers[0] 的原始顺序退回别的渠道。
                 // store 残留错误由 startTrackedLogin 发起前统一清理。
                 void startTrackedLogin(retryProvider);
               }}
@@ -485,63 +478,10 @@ function LoginPanelLogo() {
   );
 }
 
-function getLoginOAuthButtonMessageId(providerId: string): string {
-  switch (providerId) {
-    case ZAI_PROVIDER_ID:
-      return "login.oauth.button.zai";
-    case BIGMODEL_PROVIDER_ID:
-      return "login.oauth.button.bigmodel";
-    default:
-      return "login.oauth.button";
-  }
-}
-
-function getLoginOAuthRegionTagMessageId(providerId: string): string | null {
-  switch (providerId) {
-    case ZAI_PROVIDER_ID:
-      return "login.oauth.regionTag.zai";
-    case BIGMODEL_PROVIDER_ID:
-      return "login.oauth.regionTag.bigmodel";
-    default:
-      return null;
-  }
-}
-
-function LoginOAuthRegionTag({ providerId }: { providerId: string }) {
-  const { intl } = useZCodeIntl();
-  const messageId = getLoginOAuthRegionTagMessageId(providerId);
-
-  if (!messageId) {
-    return null;
-  }
-
-  return (
-    <span className="ml-1 inline-flex h-5 shrink-0 items-center rounded-full border border-primary-foreground/30 px-2 text-ui-xs font-medium leading-none text-primary-foreground/60">
-      {intl.formatMessage({ id: messageId })}
-    </span>
-  );
-}
-
-function getProviderPriority(provider: OAuthProviderMeta): number {
-  switch (provider.id) {
-    // Windows 登录入口里 z.ai 入口需要固定排在最上面，
-    // 之前把 BigModel 设成更高优先级后，用户首屏会先看到次要入口。
-    // 这里直接调整排序权重，只改展示顺序，不影响 OAuth provider 的真实配置来源。
-    case ZAI_PROVIDER_ID:
-      return 0;
-    case BIGMODEL_PROVIDER_ID:
-      return 1;
-    default:
-      return 10 + provider.order;
-  }
-}
-
 function resolveVisibleLoginProviders(providers: OAuthProviderMeta[]): OAuthProviderMeta[] {
-  // ZAI / BigModel 现在共享 App 登录事实源，未登录时登录入口必须同时展示两个入口。
-  // 不能临时隐藏 BigModel，否则用户无法主动选择 BigModel 作为 active provider。
-  return [...providers].sort((left, right) => {
-    return getProviderPriority(left) - getProviderPriority(right);
-  });
+  // The per-vendor pin order went away with the Z.ai / BigModel entries; the catalog
+  // `order` field is the only display order source now. Every registered provider is shown.
+  return [...providers].sort((left, right) => left.order - right.order);
 }
 
 function resolveLoginRetryProvider({

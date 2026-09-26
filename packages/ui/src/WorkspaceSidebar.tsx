@@ -47,7 +47,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { Locale, RemoteTarget, UserInfo, ZCodeTaskMeta } from "@zcode/shared";
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
 import {
   TID_CONVERSATION_NEW_TASK,
   TID_CONVERSATION_SECTION,

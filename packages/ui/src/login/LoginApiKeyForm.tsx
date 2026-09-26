@@ -28,7 +28,6 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import {
   buildLoginApiKeyDefaultModelPreferenceFromSelection,
-  buildLoginApiKeySkipSettings,
   resolveLoginApiKeyProviderOptions,
   shouldShowLoginApiKeyLink,
   type ApiKeyProviderChoice,
@@ -48,7 +47,7 @@ interface LoginApiKeyFormProps {
 export function LoginApiKeyForm({ onCancel, onSaved, onSkipped }: LoginApiKeyFormProps) {
   const { intl, locale } = useZCodeIntl();
   const platform = usePlatform();
-  const { modelSelectionService, providerSettingsService, settingService } = useServices();
+  const { modelSelectionService, providerSettingsService } = useServices();
   const markApiKeyLoginSuccess = useZCodeStore((state) => state.markApiKeyLoginSuccess);
   const [providerChoice, setProviderChoice] = useState<ApiKeyProviderChoice | null>(null);
   const [apiKeyValue, setApiKeyValue] = useState("");
@@ -145,8 +144,8 @@ export function LoginApiKeyForm({ onCancel, onSaved, onSkipped }: LoginApiKeyFor
     try {
       // Skip only means the user confirmed they have no key to paste right now. It must
       // not write an empty API key or fire the API key login success event, otherwise
-      // later model selection would believe usable credentials already exist.
-      await settingService.update(buildLoginApiKeySkipSettings(Date.now()));
+      // later model selection would believe usable credentials already exist. It also
+      // writes no settings: the setting it used to stamp is gone with the provider family.
       await onSkipped();
     } catch (skipError) {
       logger.error("[LoginEntry] 跳过 API Key 登录失败", {

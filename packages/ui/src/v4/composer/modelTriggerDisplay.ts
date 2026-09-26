@@ -1,4 +1,3 @@
-import { resolveModelProviderFamilyIdByProviderId } from "@zcode/shared";
 import type { ModelSelectGroup } from "@/ModelConfigSelect.js";
 
 interface V4ModelTriggerDisplay {
@@ -8,16 +7,9 @@ interface V4ModelTriggerDisplay {
 }
 
 export function formatProviderModelLabel(
-  providerId: string | undefined,
   providerName: string | undefined,
   modelName: string,
 ): string {
-  // Z.ai / BigModel 的内置连接名属于产品固定入口，拼进模型文案会重复展示
-  // “Coding Plan”等连接信息。
-  if (providerId && resolveModelProviderFamilyIdByProviderId(providerId)) {
-    return modelName;
-  }
-
   const normalizedProviderName = providerName?.trim();
   return normalizedProviderName ? `${normalizedProviderName}/${modelName}` : modelName;
 }
@@ -26,13 +18,11 @@ export function resolveV4ModelTriggerLabel({
   modelGroups,
   normalizedValue,
   fallbackLabel,
-  providerId,
   providerName,
 }: {
   modelGroups: readonly ModelSelectGroup[];
   normalizedValue: string;
   fallbackLabel: string;
-  providerId: string | undefined;
   providerName?: string;
 }): string {
   const selectedGroup = modelGroups.find((group) =>
@@ -43,12 +33,7 @@ export function resolveV4ModelTriggerLabel({
     return fallbackLabel;
   }
 
-  // 仅当前菜单中存在的连接按 ID 兜底；历史记录的通用格式化保留原有语义。
-  return formatProviderModelLabel(
-    providerId,
-    providerName?.trim() || providerId,
-    selectedItem.name,
-  );
+  return formatProviderModelLabel(providerName?.trim(), selectedItem.name);
 }
 
 export function resolveV4ModelTriggerDisplay({
@@ -66,12 +51,12 @@ export function resolveV4ModelTriggerDisplay({
 }): V4ModelTriggerDisplay {
   // 把 provider/model 预先拼成单一字符串后，响应式布局只能整段隐藏或依赖
   // 平台 JS 分支裁剪；这里保留结构化前缀，让 composer 容器断点统一决定可见密度。
+  const resolvedProviderName = providerName?.trim() || providerId;
   const fullLabel = resolveV4ModelTriggerLabel({
     modelGroups,
     normalizedValue,
     fallbackLabel,
-    providerId,
-    providerName,
+    providerName: resolvedProviderName,
   });
   const selectedGroup = modelGroups.find((group) =>
     group.items.some((item) => item.value === normalizedValue),
@@ -82,17 +67,13 @@ export function resolveV4ModelTriggerDisplay({
   }
 
   const modelLabel = selectedItem.name;
-  const normalizedProviderName = providerName?.trim() || providerId;
-  if (
-    !normalizedProviderName ||
-    (providerId && resolveModelProviderFamilyIdByProviderId(providerId))
-  ) {
+  if (!resolvedProviderName) {
     return { fullLabel, modelLabel };
   }
 
   return {
     fullLabel,
-    providerPrefix: `${normalizedProviderName}/`,
+    providerPrefix: `${resolvedProviderName}/`,
     modelLabel,
   };
 }

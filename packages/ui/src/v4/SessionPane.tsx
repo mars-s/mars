@@ -2264,8 +2264,8 @@ export function SessionPane({
 
       const fromProvider = resolveProviderLabel(fromProviderId, modelSelectionView);
       const toProvider = resolveProviderLabel(targetModel.provider, modelSelectionView);
-      const fromModel = formatProviderModelLabel(fromProviderId, fromProvider, fromModelId);
-      const toModel = formatProviderModelLabel(targetModel.provider, toProvider, targetModel.model);
+      const fromModel = formatProviderModelLabel(fromProvider, fromModelId);
+      const toModel = formatProviderModelLabel(toProvider, targetModel.model);
       toast(intl.formatMessage({ id: "chat.modelChangeNotice.changed" }, { fromModel, toModel }));
     },
     [intl, modelSelectionView, sessionId],

@@ -65,14 +65,6 @@ export function ModelProviderSectionDetail({
     return <ModelProviderLoadingCard loadingLabel={loadingLabel} />;
   }
 
-  if (selectedNavItem.type === "codingPlanLoading") {
-    return null;
-  }
-
-  if (!selectedNavItem.provider) {
-    return <ModelProviderLoadingCard loadingLabel={loadingLabel} />;
-  }
-
   const customProvider = selectedNavItem.provider;
   const customApiKeyUrl = customProvider.templateId
     ? getProviderFormApiKeyManagementUrl(customProvider)

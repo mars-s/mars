@@ -6,97 +6,47 @@ import type {
   OAuthSessionCallbackResult,
   UserInfo,
 } from "@zcode/shared";
-import {
-  DesktopCommandIds,
-  resolveProviderFamilyDomainFromOAuthProvider,
-  ZCODE_JWT_INVALID_BROADCAST_CHANNEL,
-} from "@zcode/shared";
+import { DesktopCommandIds, ZCODE_JWT_INVALID_BROADCAST_CHANNEL } from "@zcode/shared";
 import type { IServiceAccessor } from "@zcode/services";
 import { useAlertDialog } from "@/hooks/useAlertDialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { reportAppTelemetryEvent, resolveProviderTelemetryLabel } from "@/lib/appTelemetry.js";
+import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
 import { logger } from "@/logger.js";
-import { setProviderFamilyDomain } from "@/lib/providerFamilyDomainSettings.js";
-import type { ModelProviderFamilyConnectionSelection } from "@/lib/modelProviderFamilyConnectionSelection.js";
-import {
-  refreshLatestModelProviderFamilySelectionAfterLogin,
-  refreshRestoredOAuthProviderFamilyAfterStartup,
-} from "@/root/oauthProviderFamilySelectionRefresh.js";
 import { applyCachedOAuthSessionRestoreResult } from "@/root/oauthCachedSessionRestore.js";
 import { markZcodeJwtInvalidRestart } from "@/root/zcodeJwtInvalidRestartMarker.js";
 import { shouldApplyOAuthPollingFailure } from "@/root/oauthLoginAttemptGuard.js";
-import { useAccountConnectionLossNotification } from "@/root/useAccountConnectionLossNotification.js";
-
-export { refreshRestoredOAuthProviderFamilyAfterStartup } from "@/root/oauthProviderFamilySelectionRefresh.js";
 
 async function handleOAuthCallbackSuccess(params: {
   result: OAuthSessionCallbackResult;
   platform: Pick<IPlatformService, "reportTelemetryEvent">;
-  refreshLatestModelProviderFamilySelection?: (
-    provider: OAuthProviderId,
-  ) => Promise<ModelProviderFamilyConnectionSelection | null>;
-  refreshAppSettings?: () => Promise<void>;
   refreshProviderState: () => Promise<void>;
-  setProviderFamilyDomain: (provider: OAuthProviderId) => Promise<void>;
   setUser: (user: UserInfo | null) => void;
   setOAuthError: (error: string | null) => void;
 }) {
-  const loginProvider = resolveProviderTelemetryLabel(params.result.provider);
   params.setUser(params.result.userInfo);
   params.setOAuthError(null);
-  await params.setProviderFamilyDomain(params.result.provider);
-  if (params.refreshLatestModelProviderFamilySelection) {
-    let selection: ModelProviderFamilyConnectionSelection | null = null;
-    try {
-      selection = await params.refreshLatestModelProviderFamilySelection(params.result.provider);
-    } catch (error) {
-      // selectedKey 后台校正失败只影响默认连接方式展示，不能回滚已经成功的 OAuth 登录态。
-      logger.warn("[Root] OAuth 登录后刷新 provider family selectedKey 失败", {
-        provider: params.result.provider,
-        error,
-      });
-    }
-    const selectedConnection = selection ? JSON.stringify(selection) : "";
-    if (selection && params.refreshAppSettings) {
-      try {
-        // selectedKey 由 settingService 直接落盘，输入框和 context hover
-        // 读取的是 renderer settings 快照。登录后必须先刷新快照，再按最终套餐刷新
-        // 模型可用态和剩余额度，否则 UI 会一直拿旧 selectedKey，直到打开设置页或重启。
-        await params.refreshAppSettings();
-      } catch (error) {
-        logger.warn("[Root] OAuth 登录后刷新 App settings 快照失败", {
-          provider: params.result.provider,
-          selectedConnection,
-          error,
-        });
-      }
-    }
-  }
-  // selectedKey 与账号状态收敛后统一刷新 Account Source 与 Registry。
+  // The provider family selection refresh is gone with the family layer; the login state and
+  // the provider registry are still refreshed so the model picker reflects the new session.
   await params.refreshProviderState();
-  if (loginProvider) {
-    void reportAppTelemetryEvent(
-      params.platform,
-      {
-        elementName: "app_login_success",
-        eventRegion: "app_profile",
-        eventType: "view",
-        eventExtraDetail: {
-          login_provider: loginProvider,
-        },
+  void reportAppTelemetryEvent(
+    params.platform,
+    {
+      elementName: "app_login_success",
+      eventRegion: "app_profile",
+      eventType: "view",
+      eventExtraDetail: {
+        login_provider: params.result.provider,
       },
-      "Root",
-    );
-  }
+    },
+    "Root",
+  );
   logger.info("[Root] OAuth 登录成功:", params.result.userInfo.username);
 }
 
 export function useRootOAuthEffects({
-  accountIntentKey,
   platform,
   services,
   refreshProviderState,
-  refreshAppSettings,
   setUser,
   setIsRestoringOAuthSession,
   setOAuthError,
@@ -105,11 +55,9 @@ export function useRootOAuthEffects({
   markOAuthSuccess,
   onReauthenticationRequired,
 }: {
-  accountIntentKey: string;
   platform: IPlatformService;
   services: IServiceAccessor;
   refreshProviderState: () => Promise<void>;
-  refreshAppSettings?: () => Promise<void>;
   setUser: (user: UserInfo | null) => void;
   setIsRestoringOAuthSession: (restoring: boolean) => void;
   setOAuthError: (error: string | null) => void;
@@ -118,7 +66,6 @@ export function useRootOAuthEffects({
   markOAuthSuccess: (provider?: OAuthProviderId) => void;
   onReauthenticationRequired: () => void;
 }) {
-  useAccountConnectionLossNotification(services, accountIntentKey, refreshAppSettings);
   const requestAlert = useAlertDialog();
   const { intl } = useZCodeIntl();
   const oauthLoginSucceededRef = useRef(false);
@@ -129,9 +76,8 @@ export function useRootOAuthEffects({
     let disposed = false;
     async function restoreOAuthSessionInBackground() {
       logger.info("[Root] 后台启动 OAuth 本地会话恢复");
-      let hasRestoredUser = false;
       try {
-        // zai / bigmodel 的 OAuth token 生命周期较短，启动时如果仍走远端校验，
+        // OAuth token 生命周期较短，启动时如果仍走远端校验，
         // 用户会在 token 过期后被立刻打回“未登录”，和“已完成登录但未主动退出”的产品语义冲突。
         // 这里改为只读取登录成功时缓存的 user_info，展示态由“是否主动退出”决定，而不是由短 token 决定。
         const result = await services.oauthService.restoreCachedSessionState();
@@ -140,7 +86,7 @@ export function useRootOAuthEffects({
           return;
         }
 
-        hasRestoredUser = await applyCachedOAuthSessionRestoreResult({
+        await applyCachedOAuthSessionRestoreResult({
           result,
           setUser,
           requestAlert,
@@ -165,16 +111,6 @@ export function useRootOAuthEffects({
       setIsRestoringOAuthSession(false);
 
       try {
-        if (hasRestoredUser) {
-          const activeProvider = await services.oauthService.getActiveProvider();
-          if (disposed) return;
-          await refreshRestoredOAuthProviderFamilyAfterStartup({
-            activeProvider,
-            services,
-            refreshAppSettings,
-          });
-        }
-
         // OAuth 会话恢复与 Provider Runtime 刷新保持后台执行，避免首屏等待网络链路。
         await refreshProviderState();
       } catch (error) {
@@ -192,7 +128,6 @@ export function useRootOAuthEffects({
   }, [
     intl,
     onReauthenticationRequired,
-    refreshAppSettings,
     refreshProviderState,
     requestAlert,
     services,
@@ -258,16 +193,7 @@ export function useRootOAuthEffects({
           await handleOAuthCallbackSuccess({
             result,
             platform,
-            refreshLatestModelProviderFamilySelection: (provider) =>
-              refreshLatestModelProviderFamilySelectionAfterLogin({ provider, services }),
-            refreshAppSettings,
             refreshProviderState,
-            setProviderFamilyDomain: async (provider) => {
-              const domain = resolveProviderFamilyDomainFromOAuthProvider(provider);
-              if (domain) {
-                await setProviderFamilyDomain(services.settingService, domain);
-              }
-            },
             setUser,
             setOAuthError,
           });
@@ -311,7 +237,6 @@ export function useRootOAuthEffects({
     markOAuthSuccess,
     oauthPollingActive,
     platform,
-    refreshAppSettings,
     refreshProviderState,
     services,
     setOAuthError,
@@ -342,20 +267,7 @@ export function useRootOAuthEffects({
         await handleOAuthCallbackSuccess({
           result,
           platform,
-          refreshLatestModelProviderFamilySelection: (provider) =>
-            refreshLatestModelProviderFamilySelectionAfterLogin({
-              provider,
-              services,
-            }),
-          refreshAppSettings,
           refreshProviderState,
-          setProviderFamilyDomain: async (provider) => {
-            const domain = resolveProviderFamilyDomainFromOAuthProvider(provider);
-            if (!domain) {
-              return;
-            }
-            await setProviderFamilyDomain(services.settingService, domain);
-          },
           setUser,
           setOAuthError,
         });
@@ -398,7 +310,6 @@ export function useRootOAuthEffects({
   }, [
     intl,
     platform,
-    refreshAppSettings,
     refreshProviderState,
     services,
     markOAuthSuccess,

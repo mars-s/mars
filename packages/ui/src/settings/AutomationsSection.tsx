@@ -58,7 +58,6 @@ import {
   type AutomationRunNowResult,
 } from "@/store/automationManagementStore.js";
 import {
-  isCurrentOffPeakCodingPlanSupported,
   resolveOffPeakCreateErrorMessageId,
   useOffPeakTaskStore,
   type OffPeakCreateDraft,
@@ -539,7 +538,7 @@ export function AutomationsSection({
   const providerSettingsView =
     providerSettingsRead.state.status === "ready" ? providerSettingsRead.state.view : null;
   const { settings: sharedSettings, update: updateSharedSettings } = useSettings();
-  useOffPeakEligibility(sharedSettings, providerSettingsView?.revision);
+  useOffPeakEligibility(providerSettingsView?.revision);
 
   const automations = useAutomationManagementStore((state) => state.automations);
   const automationCreateLimitReached = automations.length >= AUTOMATION_CREATE_LIMIT;
@@ -560,7 +559,6 @@ export function AutomationsSection({
   const automationTemplates = useAutomationTemplates(clientScenesService);
   const offPeakTasks = useOffPeakTaskStore((state) => state.tasks);
   const offPeakStoreLoading = useOffPeakTaskStore((state) => state.loading);
-  const offPeakCodingPlanSupport = useOffPeakTaskStore((state) => state.codingPlanSupport);
   const offPeakTakeNumberAvailability = useOffPeakTaskStore(
     (state) => state.takeNumberAvailability,
   );
@@ -628,11 +626,11 @@ export function AutomationsSection({
   // The gray gate goes down with the Z.ai subscription surface: creation and the Idle tab now
   // follow the workspace constraint alone. Eligibility still comes from the Host-side fact.
   const offPeakCreationEnabled = !currentWorkspaceIsRemote;
-  // Scanning every provider would treat an unselected Coding Plan as the current credential.
-  // Only a redacted resolver snapshot matching the current family/selected connection counts.
-  const offPeakNoPlan =
-    !offPeakStoreLoading &&
-    !isCurrentOffPeakCodingPlanSupported(offPeakCodingPlanSupport, sharedSettings);
+  // The old check compared a redacted resolver snapshot against the selected family and
+  // connection. That setting is gone, so the only remaining input is the loading fact. This
+  // preserves today's value exactly (the family was never set, so the old call was always false)
+  // and keeps the create gate fail-closed while eligibility is still loading.
+  const offPeakNoPlan = !offPeakStoreLoading;
   const offPeakVisible = !currentWorkspaceIsRemote;
   const hasAnyTasks = automations.length > 0 || offPeakTasks.length > 0;
   const visibleTabs = resolveVisibleAutomationTabs({

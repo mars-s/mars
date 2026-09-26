@@ -72,7 +72,6 @@ import { useCodeCommentPreviewStore } from "@/store/codeCommentPreviewStore.js";
 import { RootStartupLoading } from "@/root/RootStartupLoading.js";
 import { resolveProviderAvailabilityState } from "@/lib/modelProviderAvailability.js";
 import { useProviderAvailabilityLoginEntryGuard } from "@/root/useProviderAvailabilityLoginEntryGuard.js";
-import { ensureProviderFamilyDomainMigration } from "@/lib/providerFamilyDomainMigration.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { CLOSE_ACTIVE_CONTEXT_REQUEST_EVENT } from "@/lib/closeActiveContext.js";
 import { AssistantCodeCommentFeatureProvider } from "@/AssistantCodeCommentFeatureProvider.js";
@@ -216,8 +215,7 @@ function RootInner({
     useState<WelcomeScreenOpenReason | null>(() =>
       consumeZcodeJwtInvalidRestartMarker() ? "session-expired" : null,
     );
-  const [providerFamilyDomainMigrationComplete, setProviderFamilyDomainMigrationComplete] =
-    useState(false);
+  const [providerStartupRefreshComplete, setProviderStartupRefreshComplete] = useState(false);
   const loginEntryRequest = useZCodeStore((state) => state.loginEntryRequest);
   const rootModelSelectionRead = useModelSelectionServiceView(services.modelSelectionService);
   const rootModelSelectionView =
@@ -400,24 +398,18 @@ function RootInner({
   useEffect(() => {
     let disposed = false;
 
+    // The provider family domain migration is gone. The startup gate still waits for this
+    // one-shot settings and provider refresh so the first render sees a settled provider view.
     void (async () => {
-      try {
-        await ensureProviderFamilyDomainMigration(services);
-      } catch (error) {
-        logger.warn("[Root] provider family domain 迁移失败，继续启动", {
-          error,
-        });
-      } finally {
-        if (!disposed) {
-          setProviderFamilyDomainMigrationComplete(true);
-          try {
-            await refreshAppSettings();
-            await refreshProviderState();
-          } catch (refreshError) {
-            logger.warn("[Root] provider family domain 迁移后刷新状态失败", {
-              error: refreshError,
-            });
-          }
+      if (!disposed) {
+        setProviderStartupRefreshComplete(true);
+        try {
+          await refreshAppSettings();
+          await refreshProviderState();
+        } catch (refreshError) {
+          logger.warn("[Root] 启动刷新 provider 状态失败", {
+            error: refreshError,
+          });
         }
       }
     })();
@@ -434,7 +426,7 @@ function RootInner({
     modelSelectionView: rootModelSelectionView,
   });
   const providerStartupSyncPending = isProviderStartupSyncPending({
-    providerFamilyDomainMigrationComplete,
+    providerStartupRefreshComplete,
     modelSelectionViewHydrated:
       rootProviderAvailability.hydrated || rootModelSelectionRead.state.status === "error",
   });
@@ -445,7 +437,6 @@ function RootInner({
       enabled: providerAvailabilityLoginEntryGuardEnabled,
       user,
       isRestoringOAuthSession: isResolvingStartupAuthState || providerStartupSyncPending,
-      providerFamilyDomain: appSettings?.providerFamilyDomain,
       modelSelectionView: rootModelSelectionView,
       modelSelectionError:
         rootModelSelectionRead.state.status === "error"
@@ -524,10 +515,9 @@ function RootInner({
     preferDirectoryBrowser: shouldPreferDirectoryBrowser,
     openDirectoryBrowser: handleOpenDirectoryBrowser,
     refreshProviderState,
-    updateAppSettings,
     setOAuthError,
     setUser,
-    onProviderFamilyDomainClearedAfterLogout: () => {
+    onLoggedOut: () => {
       setWelcomeScreenOpenReason("logout-provider-required");
     },
     userId: user?.id,
@@ -680,15 +670,9 @@ function RootInner({
   }, [platform]);
 
   useRootOAuthEffects({
-    accountIntentKey: JSON.stringify([
-      user?.id,
-      appSettings?.providerFamilyDomain,
-      appSettings?.providerFamilyConnectionSelections,
-    ]),
     platform,
     services,
     refreshProviderState,
-    refreshAppSettings,
     setUser,
     setIsRestoringOAuthSession,
     setOAuthError,

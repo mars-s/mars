@@ -14,7 +14,6 @@ export function useProviderAvailabilityLoginEntryGuard({
   enabled = true,
   user,
   isRestoringOAuthSession,
-  providerFamilyDomain,
   modelSelectionView,
   modelSelectionError,
   refreshProviderState,
@@ -24,7 +23,6 @@ export function useProviderAvailabilityLoginEntryGuard({
   enabled?: boolean;
   user: UserInfo | null;
   isRestoringOAuthSession: boolean;
-  providerFamilyDomain: string | null | undefined;
   modelSelectionView: ModelSelectionView | null;
   modelSelectionError?: Error;
   refreshProviderState: () => Promise<void>;
@@ -54,7 +52,10 @@ export function useProviderAvailabilityLoginEntryGuard({
         : modelSelectionView;
       const availability = resolveProviderAvailabilityState({ modelSelectionView: refreshedView });
       const { hasUsableProvider, providerCount } = availability;
-      const shouldOpenLoginEntry = !providerFamilyDomain || (!user && !hasUsableProvider);
+      // The former vendor-family trigger is gone with the family setting, so the login entry
+      // is now driven purely by the vendor-neutral fact: nobody is signed in and there is no
+      // usable model configuration yet.
+      const shouldOpenLoginEntry = !user && !hasUsableProvider;
 
       // 未登录且没有可用模型配置时必须引导用户连接账号或填写 API Key。
       // 启动检查、API Key 设置回流等入口统一走这里，避免各处复制判断后语义分叉。
@@ -64,7 +65,6 @@ export function useProviderAvailabilityLoginEntryGuard({
         providerCount,
         hasUsableProvider,
         hasUser: Boolean(user),
-        hasProviderFamilyDomain: Boolean(providerFamilyDomain),
         shouldOpenLoginEntry,
       });
       setLoginEntryOpen(shouldOpenLoginEntry);
@@ -77,7 +77,6 @@ export function useProviderAvailabilityLoginEntryGuard({
     [
       enabled,
       modelSelectionView,
-      providerFamilyDomain,
       refreshProviderState,
       readModelSelectionView,
       setLoginEntryOpen,
