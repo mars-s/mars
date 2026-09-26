@@ -1,5 +1,10 @@
 /**
- * Coding Plan 额度相关的纯类型定义。
+ * Pure type definitions for usage-quota snapshots reported by a quota service.
+ *
+ * The shapes are vendor-neutral: nothing here names a plan product, and the only
+ * external reference is the provider family id used to scope a snapshot. Keep it
+ * that way, so a new quota source is a new interface here rather than a vendor
+ * branch inside an existing one.
  *
  * 这里只依赖自身，不构成循环依赖；对外由 index.ts 直接 re-export。
  */
@@ -12,7 +17,7 @@ export interface UsageQuotaSnapshot {
 
 export interface UsageQuotaLimit {
   type: string;
-  /** Start Plan 服务端额度桶及周期身份；周期时间为毫秒，供提醒去重。 */
+  /** Server-side bucket identity and its period window; times are epoch ms, so a consumer can de-duplicate reminders by them. */
   bucketId?: string;
   userPlanId?: string;
   periodStart?: number;
@@ -21,7 +26,7 @@ export interface UsageQuotaLimit {
   period?: string;
   meter?: string;
   unitType?: string;
-  /** Start Plan bucket 所属套餐身份，仅用于设置页按 plan 分组展示。 */
+  /** Entitlement the bucket belongs to. Grouping key only: never a lookup key for a selectable model. */
   planId?: string;
   unit?: number;
   number?: number;
@@ -43,11 +48,11 @@ export interface UsageQuotaUsageDetail {
  * `aggregate.type` 的合成值。
  *
  * 不复用 TOKENS_LIMIT / TIME_LIMIT：`isSameLimitCategory` 会把 TIME_LIMIT 判为工具额度同类，
- * 让 MCP 汇总额度被现有的 findCodingPlanQuotaLimit 查询误命中。
+ * 让 MCP 汇总额度被现有按 type 查额度项的查询误命中。
  */
 export const MCP_USAGE_QUOTA_LIMIT_TYPE = "MCP_USAGE_LIMIT" as const;
 
-/** MCP 额度所属的 Coding Plan 连接，供 UI 判断能否显示在当前 provider tab 下。 */
+/** Which connection an MCP quota snapshot was read from, so a consumer can tell whether it belongs under the current provider tab. */
 export type UsageMcpQuotaScope =
   | {
       providerFamily: ModelProviderFamilyId;
