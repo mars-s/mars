@@ -37,7 +37,7 @@ export interface IOAuthService {
    */
   startOAuth(provider: OAuthProviderId): Promise<OAuthStartResponse>;
 
-  /** 使用后端短期 flow 发起 OAuth；当前仅 Z.AI 支持，其他 provider 保持原流程。 */
+  /** 使用后端短期 flow 发起 OAuth；provider 未实现时退回标准 authorize code 流程。 */
   startOAuthWithPolling(provider: OAuthProviderId): Promise<OAuthStartResponse>;
 
   /** 查询当前后端 OAuth flow；未到查询时间、仍 pending 或没有 flow 时返回 null。 */

@@ -5,10 +5,14 @@
  * 只允许放在 services 的 provider 模块中，不能放 shared 层。
  */
 
-/** 内置 BigModel provider id */
+/**
+ * 已下线 provider 的 id 常量。
+ *
+ * 仅供仍在读取历史凭据的调用方做向后兼容判断，不再参与 OAuthProviderId 的类型定义。
+ */
 export const BIGMODEL_PROVIDER_ID = "bigmodel" as const;
 
-/** 内置 ZAI provider id */
+/** @see BIGMODEL_PROVIDER_ID */
 export const ZAI_PROVIDER_ID = "zai" as const;
 
 /** 凭据解密失败错误前缀 */
@@ -52,11 +56,13 @@ function readCredentialErrorMessage(error: unknown): string {
   return "";
 }
 
-/** OAuth provider 标识 */
-export type OAuthProviderId =
-  | typeof BIGMODEL_PROVIDER_ID
-  | typeof ZAI_PROVIDER_ID
-  | (string & { readonly __oauthProviderBrand?: never });
+/**
+ * OAuth provider 标识。
+ *
+ * 开放字符串类型：内置 provider 已全部下线，provider id 由实现方在运行时登记，
+ * 这里不能再用字面量联合把新 provider 关在类型之外。
+ */
+export type OAuthProviderId = string & { readonly __oauthProviderBrand?: never };
 
 /** Provider 展示元信息 */
 export interface OAuthProviderMeta {
