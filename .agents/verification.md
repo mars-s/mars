@@ -156,12 +156,95 @@ node -e "const c=require('./config/provider/zcode-builtin.json');
   console.log('opencode:', t.filter(x=>/opencode/.test(x)));"
 ```
 
-## Manual checks that need eyes
+## Driving the app: agent-browser over CDP, not computer use
+
+**The app already exposes CDP in dev. Nothing needs to be built.**
+
+`packages/desktop/src/main/index.ts:201` appends
+`--remote-debugging-port=9229` whenever the app is not packaged. So:
+
+```bash
+pnpm dev:desktop &          # wait for the window
+curl -s http://127.0.0.1:9229/json/version
+agent-browser connect 9229
+agent-browser snapshot -i        # the real accessibility tree, with element refs
+agent-browser click @e10
+agent-browser screenshot /tmp/x.png
+```
+
+`ZCODE_DISABLE_FIXED_REMOTE_DEBUGGING_PORT=1` turns it off. Do **not** add a
+`--remote-debugging-port` argument to the spawn in `packages/desktop/scripts/dev.mjs`:
+the main process overrides it with its own switch, so the argument is silently
+ignored and a log line claiming port 9222 is actively misleading. That was tried
+and reverted.
+
+Prefer this over computer use. `agent-browser` returns a structured accessibility
+tree with stable element refs, so a check is a text assertion that can be diffed
+between runs. Computer use is pixel-and-screenshot driven, which is the right tool
+for "does this look right" and the wrong tool for "did this regress".
+
+## What was verified live on 2026-09-26
+
+Run against `main` at `9c5b937` with the dev app up and CDP connected.
+
+| Check | Result |
+| --- | --- |
+| App launches, CDP answers on 9229 | Yes, `Chrome/146.0.7680.80`, `Electron/41.0.3` |
+| Accessibility tree is readable | Yes, full sidebar, composer, tabs, 5 window targets |
+| Plugin Marketplace opens | Yes, `heading "Plugin Marketplace"`, Refresh, sources, Public/Personal |
+| Built-in plugins still listed after the CDN removal | Yes, Public segment shows Browser Use with its real description |
+| Installed strip intact | Yes, Browser Use, Node Repl Host, Session Provenance |
+| No "refresh failed" banner with no origin configured | Correct, as designed |
+| Model in use | `OpenCode Go (Responses)/gpt-5.6-luna` |
+
+### Phoning home, proven rather than argued
+
+`verification.md` previously listed the socket check as "not yet run". It has now
+been run. The entire process tree of the running app held exactly three sockets:
+
+```text
+127.0.0.1:9229  LISTEN                       the CDP port
+127.0.0.1:9229 -> 127.0.0.1:51675  ESTABLISHED  the agent-browser session
+[::1]:51516 -> [::1]:5174          ESTABLISHED  the Vite dev server
+```
+
+Zero non-loopback connections. No `z.ai`, no `bigmodel.cn`, no `cdn-zcode.z.ai`,
+with the plugin marketplace open and the app otherwise idle. This is the check
+that actually proves the stage, and it passes.
+
+Reproduce it:
+
+```bash
+pnpm dev:desktop &
+sleep 30
+lsof -nP -a -p $(pgrep -d, -f 'ZCode Dev|desktop-dev') -i \
+  | awk 'NR==1 || /ESTABLISHED|LISTEN/'
+```
+
+Any line whose address is not `127.0.0.1`, `[::1]` or `localhost` is a finding.
+
+### The marketplace migration, proven by running it
+
+Not reviewed, executed. The real `ensureDefaultPluginMarketplaces` was run against
+seeded storage roots:
+
+| Case | Result |
+| --- | --- |
+| Stale `zcode-plugins-official` record on the retired host is dropped | Pass, and the file is rewritten |
+| Personal `github`, `directory` and self-hosted `url` sources all survive | Pass, 3 of 3 kept |
+| Second call on clean state writes nothing | Pass, idempotent |
+| Fresh install with no file creates none | Pass |
+| A `git` source on the retired host is dropped, not just `url` | Pass |
+| With `ZCODE_OFFICIAL_MARKETPLACE_SOURCE` set, the official record is re-added pointing at the self-hosted origin, no stale url left in the output | Pass |
+
+## Manual checks that still need eyes
+
+These need a real provider and cannot be automated here yet.
 
 - Welcome screen shows ChatGPT OAuth and OpenCode Go. No Z.ai, no BigModel.
-- Settings has no pricing, usage, or coding plan section.
-- The plugin marketplace still loads local and git sources.
-- The phone remote connect still connects.
+- Settings has no pricing, usage, or coding plan section. **Blocked on #9 and #15.**
+- The phone remote connect still connects. **Not yet run.** Wave 1 changed the
+  asset origin resolution, so this one matters and has not been proven.
 
 ## Reporting rules
 

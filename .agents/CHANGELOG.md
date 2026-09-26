@@ -119,3 +119,75 @@ configures via `OTEL_EXPORTER_OTLP_*`. It contains no hardcoded vendor host and 
 for issue #3. It is a second telemetry channel and should be a deliberate decision, not an
 accident. Same for the CLI MCP telemetry tracker, which reports over local IPC to the app and
 never to the network; its desktop consumer is gone, so its output now has nowhere to land.
+
+## 2026-09-26 — provider family union is data-driven (issue #7)
+
+The cascade risk was never the named `ModelProviderFamilyId` type, which only 7 files
+reference. It was the literal `"zai" | "bigmodel"` hand-inlined in 13 other files across
+shared, services, ui, desktop and the CLI. Removing Z.ai would have meant editing 13
+unrelated signatures.
+
+`ModelProviderFamilyId` is now derived from `MODEL_PROVIDER_FAMILY_SPECS`. Adding or removing
+a family is one array entry. The spec shape is string-typed, the family lookup map is keyed by
+string rather than `BuiltinModelProviderId`, and `normalizeProviderFamilyDomain` validates
+through the same set instead of two hardcoded comparisons. Added `isModelProviderFamilyId`.
+
+Verified: no inlined union remains, root typecheck exit 0, lint exit 0, `apps/zcode-cli` 25/25,
+and the four desktop projects root typecheck skips are unchanged at 82/3/123/1 pre-existing
+errors against a stashed baseline.
+
+## 2026-09-26 — the desktop typecheck gap, found by running it
+
+Root `pnpm typecheck` builds ten projects. It misses `apps/zcode-cli` entirely and, inside
+`packages/desktop`, it builds only `tsconfig.host.json` — not `main`, `preload`, `renderer` or
+`scheduler`. Those four carry **209 pre-existing type errors** between them.
+
+Nothing about this changes the stage, but it changes what a green typecheck means. A wave can
+merge with a clean root typecheck and still have broken the desktop renderer. The per-project
+baseline table is now in `verification.md`.
+
+One trap worth repeating: `tsc -b` writes `.d.ts` and `.js` artifacts into
+`packages/desktop/src/scheduler/`, which then collide with `git stash pop`. Delete those four
+generated files before popping. I verified the stash held nothing extra before dropping it.
+
+## 2026-09-26 — marketplace records migration
+
+Removing the CDN default only fixed fresh installs. An upgrading install still had a
+`zcode-plugins-official` record in `known_marketplaces.json` with a url source on
+`cdn-zcode.z.ai`, and `updateMarketplace` calls `ensureDefaultPluginMarketplaces` before
+refreshing, so the store's refresh button kept hitting the retired host.
+
+`ensureDefaultPluginMarketplaces` now drops records whose url or git source is on a retired
+host, then re-adds any configured default. Filtering has to come before the add-missing step,
+otherwise a stale record blocks the re-add of a freshly configured
+`ZCODE_OFFICIAL_MARKETPLACE_SOURCE` for the same id. Subdomains count as the same operator.
+
+Proven by executing the real function against seeded storage roots — six cases, all pass —
+rather than by reading the diff. See the table in `verification.md`.
+
+## 2026-09-26 — verification: the app was already drivable
+
+`maintain-verification-skill` cannot be used yet. It requires an existing project-local verify
+skill with a feature map under `.claude/skills/verify/`, and this repo has none. Per its own
+step 0, the correct next move is `/create-verification-skill`, not running the maintain pass
+against an invented target.
+
+What the repo *does* have is `.agents/skills/electron` and `.agents/skills/dogfood`, both
+driving the app through `agent-browser` over CDP, and `agent-browser` 0.23.0 is installed.
+`packages/desktop/src/main/index.ts:201` already appends `--remote-debugging-port=9229` when the
+app is unpackaged. So the whole live-verification capability the maintain skill assumes was
+already available and unclaimed.
+
+I tried adding a `ZCODE_CDP_PORT` argument to the dev spawn and **reverted it**. The main
+process overrides the argument with its own switch, so the port stayed 9229 while my code
+logged 9222. A log line that confidently reports the wrong port is worse than no log line.
+
+Also found: the vendor's e2e harness is not in this tree. `ZCODE_E2E_KEEP_BUILD_CACHE`,
+`.e2e-cache`, `.e2e-artifacts` and `.e2e-home-*` appear in scripts as leftovers, and there is no
+`.github/workflows/` directory and no test runner. `verify:pre-push` is lint plus an
+architecture check. There is no test suite to extend; a mass e2e harness has to be built.
+
+Then ran the live pass by hand, and the headline result: with the app running, the marketplace
+open, and everything else idle, the whole process tree held **only loopback sockets** — the CDP
+port, my agent-browser session, and the Vite dev server. Zero external connections. That is the
+proof that phoning home actually stopped, and it is now recorded rather than asserted.
