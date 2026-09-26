@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": 33,
+  "revision": 34,
   "config": {
     "providerConfigRules": {
       "templateRules": [
@@ -564,6 +564,33 @@
               "baseUrl": "https://chatgpt.com/backend-api/codex"
             },
             "builtinModelIds": ["gpt-5.6-luna"],
+            "logo": {
+              "type": "builtin",
+              "key": "openai"
+            }
+          }
+        },
+        {
+          "templateId": "cliproxy-local",
+          "templateNameMap": {
+            "zh-CN": "本地代理 (CLIProxyAPI)",
+            "en-US": "Local Proxy (CLIProxyAPI)"
+          },
+          "config": {
+            "access": {
+              "type": "api-key",
+              "apiKeyManagementUrl": "http://127.0.0.1:8317/"
+            },
+            "api": {
+              "type": "openai-responses",
+              "baseUrl": "http://127.0.0.1:8317/v1"
+            },
+            "builtinModelIds": [
+              "gpt-6-luna",
+              "gpt-5.6-luna",
+              "gpt-5.6-sol",
+              "gpt-5.6-terra"
+            ],
             "logo": {
               "type": "builtin",
               "key": "openai"

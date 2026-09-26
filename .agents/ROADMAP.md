@@ -66,6 +66,36 @@ The hard one. Depends on [#7](https://github.com/mars-s/mars/issues/7) and
 | --- | --- | --- |
 | [#13](https://github.com/mars-s/mars/issues/13) | Implement the ChatGPT OAuth adapter | code done, live flow unverified |
 | [#14](https://github.com/mars-s/mars/issues/14) | OpenCode Go end-to-end verification path | blocked, needs `op signin` |
+| [#16](https://github.com/mars-s/mars/issues/16) | Local CLIProxyAPI provider route | code done, live model call proven |
+
+### #16 evidence: the local proxy route
+
+`cliproxy-local` is a shipped catalog template pointing at
+`http://127.0.0.1:8317/v1` with `api-key` access and `openai-responses` apiType.
+The catalog is at `revision 34` with 18 templates.
+
+**A real ChatGPT-backed model call is proven.** Against the running local proxy,
+`gpt-6-luna` returned `PROXY_OK` in 2.5s on `/v1/chat/completions`, and
+`/v1/responses` returned a completed response with `store: false` honoured. The
+proxy holds a ChatGPT/Codex account of its own and owns that account's refresh
+rotation, so nothing on our side holds a single-use refresh token.
+
+**This does NOT close #13.** #13's done-when is about our own ChatGPT OAuth
+adapter completing a real device-code login and a real call through it. That
+still needs a human with a ChatGPT subscription. What the proxy proves is that
+the *model* is reachable and that the fork can be pointed at it; it exercises
+none of the grant store, the runtime-headers handshake or the rotation lock. Both
+routes ship. The direct one is the feature, the proxy is the fast local path.
+
+**The proxy cannot borrow the ChatGPT grant.** `cliproxy-local` shares the
+`openai-responses` apiType and the OpenAI logo with `chatgpt-subscription`, so
+`cliproxyLocalProviderCatalog.test.ts` pins that
+`isRegistryVerifiedChatGptProvider` rejects it, and pins the real ChatGPT
+identity as a positive control so the negatives cannot pass vacuously.
+
+**The key never enters the repo.** It lives in the homebrew CLIProxyAPI config
+and is entered in the provider's API key field. Only the template id, the
+base URL and the model ids are committed.
 
 ### #13 evidence
 

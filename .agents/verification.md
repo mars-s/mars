@@ -516,3 +516,43 @@ The gate now has a ninth check, `artifact: no vendor leak in build output`, whic
 `packages/desktop/out` (sourcemaps included, since they ship too) for the vendor hosts and
 the client id, and skips cleanly when nothing has been built. It is verified to fail on an
 injected leak rather than passing vacuously.
+
+## The local CLIProxyAPI route
+
+The fork can talk to a local CLIProxyAPI instance instead of holding a ChatGPT grant
+itself. It is shipped as the `cliproxy-local` catalog template, so a user creates a
+provider from the template and pastes the proxy's client key into the API key field.
+
+**The key is never committed.** It lives in the homebrew CLIProxyAPI config
+(`/opt/homebrew/etc/cliproxyapi.conf`, under `api-keys:`). Only the template id, the
+base URL and the model ids are in this repo. When checking the proxy by hand, extract the
+key into a shell variable and never echo it, and remember that a redaction filter
+matching only `sk-` prefixed secrets will miss a key with some other prefix entirely.
+
+**To check the route by hand:**
+
+```bash
+# 142 models, and the client key is required: /v1/models returns 401 without it.
+curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/v1/models
+
+# A real ChatGPT-backed call. gpt-6-luna answered PROXY_OK in 2.5s.
+curl -s -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"gpt-6-luna","messages":[{"role":"user","content":"Reply with exactly: PROXY_OK"}],"max_tokens":32}' \
+  http://127.0.0.1:8317/v1/chat/completions
+```
+
+Note that a malformed key returns a plain-text `400`, not a `401`. The `401` means the
+header was missing entirely, so a `400` is not an auth failure, it is a bad key.
+
+**The proxy does not verify the ChatGPT OAuth flow.** It proves the model is reachable
+and that the fork can be pointed at it. Ticket #13 is about our own adapter completing a
+real device-code login, which the proxy never touches: the grant store, the
+runtime-headers handshake and the rotation lock are all still unexercised against a live
+server. The proxy owns its own account's refresh rotation, which is precisely why it is a
+useful fast path and not a substitute for that verification.
+
+**`revision` must be bumped when the catalog changes.** The runtime only rebuilds the
+provider registry when the `revision: \`zcode-builtin:${revision}:${sourceKey}\`` snapshot
+string changes. A new template added without a bump loads but silently does not appear
+until the app restarts, and a stale Active cache with a higher revision wins outright and
+ignores the edit entirely.

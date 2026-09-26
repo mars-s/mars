@@ -88,20 +88,25 @@ async function startRuntime(personalProviderRules: unknown[] = []) {
   };
 }
 
-test("the catalog still parses and holds 17 templates with no id collision", async () => {
+const CLIPROXY_TEMPLATE_ID = "cliproxy-local";
+const CLIPROXY_BASE_URL = "http://127.0.0.1:8317/v1";
+
+test("the catalog still parses and holds 18 templates with no id collision", async () => {
   const fixture = await startRuntime();
   try {
     const config = await fixture.runtime.configService.read();
     const templateIds = config.zcodeBuiltinProviderTemplates.keys();
-    assert.equal(templateIds.length, 17);
-    assert.equal(new Set(templateIds).size, 17, "a templateId collision aborts the whole parse");
+    assert.equal(templateIds.length, 18);
+    assert.equal(new Set(templateIds).size, 18, "a templateId collision aborts the whole parse");
     for (const id of ORIGINAL_TEMPLATE_IDS) {
       assert.ok(templateIds.includes(id as never), `original template ${id} must survive`);
     }
     assert.ok(templateIds.includes(CHATGPT_TEMPLATE_ID as never));
-    // The originals keep their order, with the new template appended last.
+    assert.ok(templateIds.includes(CLIPROXY_TEMPLATE_ID as never));
+    // The originals keep their order, with the newer templates appended last.
     assert.deepEqual(templateIds.slice(0, 16), [...ORIGINAL_TEMPLATE_IDS]);
     assert.equal(templateIds[16], CHATGPT_TEMPLATE_ID);
+    assert.equal(templateIds[17], CLIPROXY_TEMPLATE_ID);
   } finally {
     await fixture.dispose();
   }
