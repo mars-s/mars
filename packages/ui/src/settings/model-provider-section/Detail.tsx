@@ -1,8 +1,4 @@
-import type {
-  ModelConnectivityResult,
-  ProviderFamilyConnectionSelectionSettings,
-} from "@zcode/shared";
-import { resolveModelProviderFamilySpecByProviderId } from "@zcode/shared";
+import type { ModelConnectivityResult } from "@zcode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
   getProviderFormApiKeyManagementUrl,
@@ -13,23 +9,10 @@ import type { ProviderSettingsView } from "@zcode/services";
 import type { SavePersonalModelDraftInput } from "@zcode/provider";
 import type { ModelProviderNavItem } from "./constants.js";
 import { InlineEditableProviderCard } from "./InlineEditableProviderCard.js";
-import {
-  ProviderFamilyDetailShell,
-  ProviderFamilyHeader,
-  ProviderFamilyPlanModeSwitch,
-} from "./ProviderFamilyModeHeader.js";
-import {
-  ModelProviderLoadingCard,
-  PresetProviderPlaceholderCard,
-} from "./ProviderStatusPlaceholderCards.js";
+import { ModelProviderLoadingCard } from "./ProviderStatusPlaceholderCards.js";
 
 export function ModelProviderSectionDetail({
   selectedNavItem,
-  navigationItems = selectedNavItem ? [selectedNavItem] : [],
-  connectionSettingsFailed = false,
-  connectionSelections,
-  startPlanSubscriptionCount = 0,
-  presetLoading,
   onSave,
   onAddPersonalModel,
   onSavePersonalModelDraft,
@@ -39,15 +22,9 @@ export function ModelProviderSectionDetail({
   onReorderProviderModels,
   onTestModel,
   onOpenApiKeyUrl,
-  onSelectNavItem,
   providerSettingsView: providerSettingsViewOverride,
 }: {
   selectedNavItem: ModelProviderNavItem | null;
-  navigationItems?: ModelProviderNavItem[];
-  connectionSettingsFailed?: boolean;
-  connectionSelections?: ProviderFamilyConnectionSelectionSettings;
-  startPlanSubscriptionCount?: number;
-  presetLoading: boolean;
   onSave: (config: ProviderSettingsFormProvider) => void | Promise<void>;
   onAddPersonalModel?: (
     providerId: string,
@@ -66,7 +43,6 @@ export function ModelProviderSectionDetail({
   onReorderProviderModels?: (providerId: string, modelIds: string[]) => Promise<void>;
   onTestModel: (providerId: string, modelId: string) => Promise<ModelConnectivityResult>;
   onOpenApiKeyUrl: (url: string) => void;
-  onSelectNavItem?: (item: ModelProviderNavItem) => void;
   providerSettingsView?: ProviderSettingsView | null;
 }) {
   const { intl } = useZCodeIntl();
@@ -84,64 +60,9 @@ export function ModelProviderSectionDetail({
     onDeletePersonalModel,
     settingsRevision: providerSettingsView?.revision,
   };
-  const planModeSwitch = (
-    <ProviderFamilyPlanModeSwitch
-      selectedNavItem={selectedNavItem}
-      navigationItems={navigationItems}
-      connectionSettingsFailed={connectionSettingsFailed}
-      connectionSelections={connectionSelections}
-      startPlanSubscriptionCount={startPlanSubscriptionCount}
-      onSelectNavItem={onSelectNavItem}
-    />
-  );
 
   if (!selectedNavItem) {
     return <ModelProviderLoadingCard loadingLabel={loadingLabel} />;
-  }
-
-  if (selectedNavItem.type === "preset") {
-    if (!selectedNavItem.provider) {
-      // On a slow first paint the preset provider config has not returned yet. Showing
-      // "not synced, sign in with OAuth" here made users read a download as a signed
-      // out account, so the first refresh renders an explicit loading state and only
-      // falls back to the placeholder once the request settles.
-      if (presetLoading) {
-        return <ModelProviderLoadingCard loadingLabel={loadingLabel} />;
-      }
-
-      return <PresetProviderPlaceholderCard displayName={selectedNavItem.displayName} />;
-    }
-
-    const presetProvider = selectedNavItem.provider;
-
-    const familySpec = resolveModelProviderFamilySpecByProviderId(selectedNavItem.presetId);
-    const presetFamilyHeader = (
-      <ProviderFamilyHeader
-        selectedNavItem={selectedNavItem}
-        trailingAction={familySpec ? planModeSwitch : undefined}
-      />
-    );
-    return (
-      <ProviderFamilyDetailShell header={presetFamilyHeader}>
-        <InlineEditableProviderCard
-          provider={presetProvider}
-          onSave={onSave}
-          {...modelEditingProps}
-          onReorderModelIds={
-            onReorderProviderModels
-              ? (modelIds) => onReorderProviderModels(presetProvider.providerId, modelIds)
-              : undefined
-          }
-          onTestModel={onTestModel}
-          readOnlyEndpoints
-          // A preset provider name carries the fixed API key entry semantics, so renaming it
-          // would make the sidebar and the model picker disagree. Only custom providers rename.
-          nameEditable={false}
-          headerVisible={!familySpec}
-          headerActionsVisible={familySpec ? false : undefined}
-        />
-      </ProviderFamilyDetailShell>
-    );
   }
 
   if (selectedNavItem.type === "codingPlanLoading") {
