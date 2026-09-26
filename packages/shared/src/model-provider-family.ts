@@ -20,6 +20,34 @@ interface ModelProviderFamilySpecShape {
   teamCodingPlanManageUrl: string;
 }
 
+/**
+ * This table is evaluated while the module loads, so an unconfigured or malformed
+ * operator endpoint must degrade to an empty link rather than throw during import.
+ * A family with an empty manage URL simply has no purchase link to show.
+ */
+function resolveFamilyManageUrl(build: () => string): string {
+  try {
+    return build();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * No built-in vendor manage page host, and no operator config exists for one, so
+ * the family ships without a purchase link rather than pointing at a vendor page.
+ * Adding a manage URL env var is a configuration surface decision, not a data edit.
+ */
+const NO_FAMILY_MANAGE_URL: string = "";
+
+/**
+ * `rootDomain` is a classification key, not an endpoint: it only decides which
+ * family a caller supplied base URL belongs to (see
+ * resolveModelProviderFamilyIdByBaseURL). It never becomes a request target, so
+ * it stays. Emptying it would also be wrong rather than merely inert, because the
+ * matcher tests `hostname.endsWith("." + rootDomain)` and a trailing dot FQDN
+ * such as "example.com." would then match the empty family.
+ */
 export const MODEL_PROVIDER_FAMILY_SPECS = [
   {
     id: "zai",
@@ -29,7 +57,7 @@ export const MODEL_PROVIDER_FAMILY_SPECS = [
     startPlanProviderId: BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan,
     individualCodingPlanProviderId: BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan,
     teamCodingPlanProviderId: BUILTIN_MODEL_PROVIDER_IDS.zaiTeamCodingPlan,
-    teamCodingPlanManageUrl: "https://z.ai/manage-apikey/subscription",
+    teamCodingPlanManageUrl: NO_FAMILY_MANAGE_URL,
   },
   {
     id: "bigmodel",
@@ -39,7 +67,9 @@ export const MODEL_PROVIDER_FAMILY_SPECS = [
     startPlanProviderId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan,
     individualCodingPlanProviderId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
     teamCodingPlanProviderId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan,
-    teamCodingPlanManageUrl: buildBigModelCodingPlanTeamManageUrl({ ZCODE_ENV }),
+    teamCodingPlanManageUrl: resolveFamilyManageUrl(() =>
+      buildBigModelCodingPlanTeamManageUrl({ ZCODE_ENV }),
+    ),
   },
 ] as const satisfies readonly ModelProviderFamilySpecShape[];
 

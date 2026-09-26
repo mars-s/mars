@@ -1,10 +1,30 @@
 import type { ZCodeEnv } from "./env.js";
 
-export const DEFAULT_ZCODE_ENDPOINT_ORIGIN = "https://zcode.z.ai";
-export const DEFAULT_BIGMODEL_API_ORIGIN = "https://bigmodel.cn";
-export const DEFAULT_ZAI_OAUTH_ORIGIN = "https://chat.z.ai";
-export const DEFAULT_ZAI_BUSINESS_BASE_URL = "https://api.z.ai";
-export const DEFAULT_ZAI_OAUTH_CLIENT_ID = "client_P8X5CMWmlaRO9gyO-KSqtg";
+/**
+ * There is no built-in vendor endpoint. These stay exported (many packages import
+ * them) but every value is the empty string, which means "not configured": the
+ * resolve* and build* functions below then return an empty string and the caller
+ * fails at the point of use. Nothing throws for an absent origin, because callers
+ * evaluate these at module scope and a throw there is a dead app rather than a
+ * readable error. Never restore a vendor host here.
+ *
+ * The deployment contract is: set ZCODE_BASE_URL (or ZCODE_ENDPOINT_ORIGIN),
+ * BIGMODEL_API_BASE_URL, ZAI_OAUTH_ORIGIN and ZAI_BUSINESS_BASE_URL in the
+ * operator environment. An unconfigured build is expected to fail remote
+ * features, which is the intended state, not a regression.
+ */
+export const DEFAULT_ZCODE_ENDPOINT_ORIGIN = "";
+export const DEFAULT_BIGMODEL_API_ORIGIN = "";
+export const DEFAULT_ZAI_OAUTH_ORIGIN = "";
+export const DEFAULT_ZAI_BUSINESS_BASE_URL = "";
+/**
+ * The vendor OAuth client id is not a secret, but it is vendor-issued identity
+ * rather than configuration, so it is not shipped as a default either. A self
+ * hosted deployment supplies its own client id via ZAI_OAUTH_CLIENT_ID or
+ * ZAI_OAUTH_APP_ID. The vendor issued value paired with a vendor OAuth host, and
+ * the host is gone, so keeping the id would authenticate as somebody else's app.
+ */
+export const DEFAULT_ZAI_OAUTH_CLIENT_ID = "";
 
 // 构建仅注入公开链接；Node 调用方仍可显式传 env，避免读取另一进程的配置。
 declare const __ZCODE_ENDPOINT_ENV__: Record<string, string | undefined> | undefined;
@@ -84,6 +104,18 @@ function readRuntimeEnvValue(
   return value ? value : undefined;
 }
 
+/**
+ * Normalizes a value that is allowed to be absent. An empty value means "not
+ * configured" and stays empty; a value that is present but malformed still throws
+ * from normalizeZCodeEndpointOrigin. Nothing here throws for an absent origin:
+ * several packages evaluate the build* helpers at module scope, so throwing would
+ * break the import and with it the whole app, instead of failing the one feature
+ * that needs the endpoint.
+ */
+function normalizeOptionalOrigin(value: string): string {
+  return value.trim() ? normalizeZCodeEndpointOrigin(value) : "";
+}
+
 export function normalizeZCodeEndpointOrigin(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -110,8 +142,13 @@ export function isTrustedCodingPlanWebviewOrigin(
   if (!value) return false;
   try {
     const origin = normalizeZCodeEndpointOrigin(value);
+    // Fails closed: with no built-in default there is nothing to match, and an
+    // unconfigured runtime origin is "" which can never equal a parsed origin.
+    // The only remaining paths are an explicitly configured runtime origin and
+    // the opt-in loopback case for the e2e store bridge.
+    const builtInOrigin = DEFAULT_ZCODE_ENDPOINT_ORIGIN.trim();
     if (
-      origin === DEFAULT_ZCODE_ENDPOINT_ORIGIN ||
+      (builtInOrigin !== "" && origin === builtInOrigin) ||
       origin === resolveRuntimeZCodeEndpointOrigin()
     ) {
       return true;
@@ -129,7 +166,9 @@ export function resolveZCodeEndpointOrigin(options?: {
   overrideOrigin?: string | null;
 }): string {
   const origin = options?.overrideOrigin?.trim() || options?.envBaseOrigin?.trim();
-  return origin ? normalizeZCodeEndpointOrigin(origin) : DEFAULT_ZCODE_ENDPOINT_ORIGIN;
+  // Unconfigured resolves to the empty string rather than a vendor host. Callers
+  // that need a real URL go through buildZCodeEndpointUrls, which fails loudly.
+  return origin ? normalizeZCodeEndpointOrigin(origin) : "";
 }
 
 export function resolveRuntimeZCodeEnv(
@@ -162,15 +201,19 @@ export function buildRuntimeZCodeApiUrl(
   path: string,
 ): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${resolveRuntimeZCodeEndpointOrigin(env)}${normalizedPath}`;
+  // Absent configuration yields an empty string, not a path with no origin: a
+  // relative string could be resolved against whatever origin happens to be
+  // current. It fails at the point of use instead, which is where the operator
+  // can act on it.
+  const origin = resolveRuntimeZCodeEndpointOrigin(env);
+  return origin ? `${origin}${normalizedPath}` : "";
 }
 
 export function resolveBigModelApiOrigin(
   env: RuntimeBigModelApiEnv = readProductEndpointEnv(),
 ): string {
-  return normalizeZCodeEndpointOrigin(
-    readRuntimeEnvValue(env, "BIGMODEL_API_BASE_URL") ?? DEFAULT_BIGMODEL_API_ORIGIN,
-  );
+  const configured = readRuntimeEnvValue(env, "BIGMODEL_API_BASE_URL");
+  return configured ? normalizeZCodeEndpointOrigin(configured) : "";
 }
 
 export function buildBigModelApiUrl(
@@ -178,7 +221,8 @@ export function buildBigModelApiUrl(
   path: string,
 ): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${resolveBigModelApiOrigin(env)}${normalizedPath}`;
+  const origin = resolveBigModelApiOrigin(env);
+  return origin ? `${origin}${normalizedPath}` : "";
 }
 
 export function buildBigModelCodingPlanPersonalManageUrl(
@@ -197,17 +241,15 @@ export function buildBigModelCodingPlanTeamManageUrl(
 export function resolveZaiOAuthOrigin(
   env: RuntimeZaiEndpointEnv = readProductEndpointEnv(),
 ): string {
-  return normalizeZCodeEndpointOrigin(
-    readRuntimeEnvValue(env, "ZAI_OAUTH_ORIGIN") ?? DEFAULT_ZAI_OAUTH_ORIGIN,
-  );
+  const configured = readRuntimeEnvValue(env, "ZAI_OAUTH_ORIGIN");
+  return configured ? normalizeZCodeEndpointOrigin(configured) : "";
 }
 
 export function resolveZaiBusinessBaseUrl(
   env: RuntimeZaiEndpointEnv = readProductEndpointEnv(),
 ): string {
-  return normalizeZCodeEndpointOrigin(
-    readRuntimeEnvValue(env, "ZAI_BUSINESS_BASE_URL") ?? DEFAULT_ZAI_BUSINESS_BASE_URL,
-  );
+  const configured = readRuntimeEnvValue(env, "ZAI_BUSINESS_BASE_URL");
+  return configured ? normalizeZCodeEndpointOrigin(configured) : "";
 }
 
 export function resolveZaiOAuthClientId(
@@ -222,7 +264,8 @@ export function resolveZaiOAuthClientId(
 
 export function buildZaiOAuthUrl(origin: string, path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${normalizeZCodeEndpointOrigin(origin)}${normalizedPath}`;
+  const normalizedOrigin = normalizeOptionalOrigin(origin);
+  return normalizedOrigin ? `${normalizedOrigin}${normalizedPath}` : "";
 }
 
 export function buildRuntimeZaiOAuthUrl(
@@ -237,7 +280,8 @@ export function buildRuntimeZaiBusinessUrl(
   path: string,
 ): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${resolveZaiBusinessBaseUrl(env)}${normalizedPath}`;
+  const origin = resolveZaiBusinessBaseUrl(env);
+  return origin ? `${origin}${normalizedPath}` : "";
 }
 
 export function resolveRuntimeProductEndpointConfig(
@@ -258,15 +302,19 @@ export function resolveRuntimeProductEndpointConfig(
 }
 
 export function buildZCodeEndpointUrls(origin: string): ZCodeEndpointUrls {
-  const normalizedOrigin = normalizeZCodeEndpointOrigin(origin);
+  const normalizedOrigin = normalizeOptionalOrigin(origin);
+  // An unconfigured origin yields an empty string for every field rather than a
+  // relative path, so nothing here can be resolved against a current origin and
+  // this never throws at module scope. Consumers fail at the point of use.
+  const at = (path: string): string => (normalizedOrigin ? `${normalizedOrigin}${path}` : "");
   return {
     origin: normalizedOrigin,
-    apiBaseUrl: `${normalizedOrigin}/api/v1`,
-    webShareCallbackUrl: `${normalizedOrigin}/cn/share/callback`,
-    zcodePlanOpenAiBaseUrl: `${normalizedOrigin}/api/v1/zcode-plan`,
-    zcodePlanAnthropicBaseUrl: `${normalizedOrigin}/api/v1/zcode-plan/anthropic`,
-    zcodePlanBillingCurrentUrl: `${normalizedOrigin}/api/v1/zcode-plan/billing/current`,
-    zcodePlanBillingBalanceUrl: `${normalizedOrigin}/api/v1/zcode-plan/billing/balance`,
+    apiBaseUrl: at("/api/v1"),
+    webShareCallbackUrl: at("/cn/share/callback"),
+    zcodePlanOpenAiBaseUrl: at("/api/v1/zcode-plan"),
+    zcodePlanAnthropicBaseUrl: at("/api/v1/zcode-plan/anthropic"),
+    zcodePlanBillingCurrentUrl: at("/api/v1/zcode-plan/billing/current"),
+    zcodePlanBillingBalanceUrl: at("/api/v1/zcode-plan/billing/balance"),
   };
 }
 
@@ -278,8 +326,12 @@ export function rewriteZCodeEndpointUrl(input: string | URL, endpointOrigin: str
   } catch {
     return input;
   }
-  const sourceOrigin = DEFAULT_ZCODE_ENDPOINT_ORIGIN;
-  if (parsed.origin !== sourceOrigin) {
+  // The built-in vendor origin is gone, so there is normally no source origin to
+  // rewrite away from and a legacy vendor URL is returned untouched instead of
+  // being silently redirected. The signature stays for callers and for a
+  // deployment that does configure a source origin.
+  const sourceOrigin = DEFAULT_ZCODE_ENDPOINT_ORIGIN.trim();
+  if (!sourceOrigin || parsed.origin !== sourceOrigin) {
     return input;
   }
 
