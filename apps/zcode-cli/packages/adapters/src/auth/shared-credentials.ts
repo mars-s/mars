@@ -6,22 +6,54 @@ import { atomicWritePrivateTextFile, backupCorruptFile, withFileLock } from "@zc
 import { createZCodeCredentialCipher, type ZCodeCredentialCipher } from "./credential-cipher.js";
 
 const ZCODE_DATA_BASE_DIR_ENV_KEY = "ZCODE_DATA_BASE_DIR";
-const ZAI_PROVIDER_ID = "zai";
-const credentialChangeListeners = new Map<
-  string,
-  Set<() => void | Promise<void>>
->();
+const credentialChangeListeners = new Map<string, Set<() => void | Promise<void>>>();
 
+/**
+ * Keys the operator's own ZCode backend issues, shared by every provider family.
+ * The per-provider namespace below is derived from a provider id at write time
+ * rather than enumerated, so adding a family is not a credential-schema edit.
+ */
 export const SHARED_ZCODE_CREDENTIAL_KEYS = {
   activeProvider: "oauth:active_provider",
-  bigmodelAccessToken: "oauth:bigmodel:access_token",
-  bigmodelRefreshToken: "oauth:bigmodel:refresh_token",
-  bigmodelUserInfo: "oauth:bigmodel:user_info",
-  zaiAccessToken: "oauth:zai:access_token",
-  zaiRefreshToken: "oauth:zai:refresh_token",
-  zaiUserInfo: "oauth:zai:user_info",
   zcodeJwtToken: "zcodejwttoken",
 } as const;
+
+/**
+ * Per-provider OAuth namespace, the same key scheme the desktop OAuth repo
+ * reads. A provider id that has no such namespace yet simply has nothing to
+ * load, so an unknown id is not a corrupt-credential condition.
+ */
+export function sharedZCodeProviderCredentialKeys(providerId: string): {
+  accessToken: string;
+  refreshToken: string;
+  userInfo: string;
+} {
+  const normalized = providerId.trim();
+  if (!normalized) {
+    throw new Error("Credential provider id must not be empty");
+  }
+  return {
+    accessToken: `oauth:${normalized}:access_token`,
+    refreshToken: `oauth:${normalized}:refresh_token`,
+    userInfo: `oauth:${normalized}:user_info`,
+  };
+}
+
+/**
+ * Credential keys written by builds that shipped the per-vendor coding-plan
+ * login. They are no longer written or read, but a logout must still erase
+ * them: leaving a decrypted vendor token in the credentials file after the user
+ * asked to sign out is a regression in how long a credential stays resident.
+ * One-way list: add on removal, never remove on addition.
+ */
+export const LEGACY_VENDOR_CREDENTIAL_KEYS = [
+  "oauth:bigmodel:access_token",
+  "oauth:bigmodel:refresh_token",
+  "oauth:bigmodel:user_info",
+  "oauth:zai:access_token",
+  "oauth:zai:refresh_token",
+  "oauth:zai:user_info",
+] as const;
 
 export interface SharedZCodeCredentialStoreOptions {
   baseDir?: string;
@@ -30,22 +62,8 @@ export interface SharedZCodeCredentialStoreOptions {
   filePath?: string;
 }
 
-export interface ZaiLoginCredentialUser {
-  avatar?: string;
-  email?: string;
-  name?: string;
-  user_id: string;
-}
-
-export interface ZaiLoginCredentialPayload {
-  accessToken: string;
-  jwtToken: string;
-  user: ZaiLoginCredentialUser;
-}
-
 export interface SharedZCodeCredentialStore {
   readonly filePath: string;
-  clearZaiLoginCredentials(): Promise<void>;
   delete(key: string): Promise<void>;
   deleteIfValue(key: string, expectedValue: string): Promise<boolean>;
   deleteIfValues(
@@ -62,7 +80,6 @@ export interface SharedZCodeCredentialStore {
   save(key: string, value: string): Promise<void>;
   saveMany(entries: Readonly<Record<string, string>>): Promise<void>;
   saveReplacing(key: string, value: string, replacedKeys: readonly string[]): Promise<void>;
-  saveZaiLoginCredentials(payload: ZaiLoginCredentialPayload): Promise<void>;
 }
 
 export function createSharedZCodeCredentialStore(
@@ -74,20 +91,6 @@ export function createSharedZCodeCredentialStore(
 
   return {
     filePath,
-
-    async clearZaiLoginCredentials(): Promise<void> {
-      await mutateRawCredentialRecord(filePath, async (rawCredentials) => {
-        const activeProviderRaw = rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.activeProvider];
-        const activeProvider = activeProviderRaw ? cipher.decrypt(activeProviderRaw) : null;
-        delete rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.zaiAccessToken];
-        delete rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.zaiRefreshToken];
-        delete rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.zaiUserInfo];
-        delete rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.zcodeJwtToken];
-        if (activeProvider === ZAI_PROVIDER_ID) {
-          delete rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.activeProvider];
-        }
-      });
-    },
 
     async delete(key: string): Promise<void> {
       const validatedKey = validateCredentialKey(key);
@@ -230,23 +233,6 @@ export function createSharedZCodeCredentialStore(
         for (const replacedKey of validatedReplacedKeys) {
           if (replacedKey !== validatedKey) delete rawCredentials[replacedKey];
         }
-      });
-    },
-
-    async saveZaiLoginCredentials(payload: ZaiLoginCredentialPayload): Promise<void> {
-      const encryptedCredentials = {
-        activeProvider: cipher.encrypt(ZAI_PROVIDER_ID),
-        accessToken: cipher.encrypt(validateCredentialValue(payload.accessToken)),
-        jwtToken: cipher.encrypt(validateCredentialValue(payload.jwtToken)),
-        userInfo: cipher.encrypt(JSON.stringify(payload.user)),
-      };
-      await mutateRawCredentialRecord(filePath, (rawCredentials) => {
-        rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.activeProvider] =
-          encryptedCredentials.activeProvider;
-        rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.zaiAccessToken] =
-          encryptedCredentials.accessToken;
-        rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.zcodeJwtToken] = encryptedCredentials.jwtToken;
-        rawCredentials[SHARED_ZCODE_CREDENTIAL_KEYS.zaiUserInfo] = encryptedCredentials.userInfo;
       });
     },
   };

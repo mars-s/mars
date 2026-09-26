@@ -292,6 +292,9 @@ function createLocalUserMessage(content: string): Message & { id: string } {
 
 function redactSensitivePromptForTranscript(text: string): string {
   const trimmed = text.trim();
+  // The manual API key login command no longer exists, but a replayed or
+  // recalled draft can still carry one typed under an older build. Redact it
+  // before it reaches a persisted transcript.
   const match =
     /^\/login\s+(zai-coding-plan-api-key|bigmodel-coding-plan-api-key)(?:\s+([\s\S]+))?$/u.exec(
       trimmed,

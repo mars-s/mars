@@ -1,7 +1,22 @@
 import type { TuiSelection, TuiSubmitPrompt } from "@zcode/tui";
 import { getZCodeCopy } from "@zcode/i18n";
+import { getModelProviderFamilySpec, MODEL_PROVIDER_FAMILY_SPECS } from "@zcode/shared";
 import type { CommandCenterApp, CommandCenterLoginResult } from "./types.js";
 import { randomUUID } from "node:crypto";
+
+/**
+ * The provider namespaces the operator's ZCode backend can sign a user into.
+ * Read from the shared family table rather than a hardcoded list so this
+ * screen never names a vendor the fork does not ship.
+ */
+export function loginProviderIds(): readonly string[] {
+  return MODEL_PROVIDER_FAMILY_SPECS.map((spec) => spec.id);
+}
+
+export function loginProviderLabel(providerId: string): string {
+  const spec = MODEL_PROVIDER_FAMILY_SPECS.find((candidate) => candidate.id === providerId);
+  return spec ? getModelProviderFamilySpec(spec.id).label : providerId;
+}
 
 export function buildLoginSelection(locale?: string): TuiSelection {
   const copy = getZCodeCopy(locale).tui.loginSetup;
@@ -9,81 +24,32 @@ export function buildLoginSelection(locale?: string): TuiSelection {
     emptyMessage: copy.emptyMessage,
     filterable: false,
     help: copy.help,
-    items: [
-      {
-        command: "/login zai-coding-plan",
-        id: "zai-coding-plan",
-        keywords: ["zai", "oauth", "coding", "plan"],
-        pending: {
-          cancelStatus: copy.pending.cancelStatus,
-          help: copy.pending.help,
-          primary: copy.options.zaiOauth.pendingPrimary,
-          secondary: copy.options.zaiOauth.pendingSecondary,
-          status: copy.pending.status,
-        },
-        primary: copy.options.zaiOauth.primary,
-        secondary: copy.options.zaiOauth.secondary,
+    items: loginProviderIds().map((providerId) => ({
+      command: `/login ${providerId}`,
+      id: `browser-${providerId}`,
+      keywords: [providerId, "oauth", "browser", "login"],
+      pending: {
+        cancelStatus: copy.pending.cancelStatus,
+        help: copy.pending.help,
+        primary: copy.options.browser.pendingPrimary,
+        secondary: copy.options.browser.pendingSecondary,
+        status: copy.pending.status,
       },
-      {
-        command: "/login bigmodel-coding-plan",
-        id: "bigmodel-coding-plan",
-        keywords: ["bigmodel", "oauth", "coding", "plan"],
-        pending: {
-          cancelStatus: copy.pending.cancelStatus,
-          help: copy.pending.help,
-          primary: copy.options.bigmodelOauth.pendingPrimary,
-          secondary: copy.options.bigmodelOauth.pendingSecondary,
-          status: copy.pending.status,
-        },
-        primary: copy.options.bigmodelOauth.primary,
-        secondary: copy.options.bigmodelOauth.secondary,
-      },
-      {
-        command: "/login zai-coding-plan-api-key",
-        id: "zai-coding-plan-api-key",
-        input: {
-          cancelStatus: copy.input.cancelStatus,
-          clearStatus: copy.input.clearStatus,
-          emptyStatus: copy.input.emptyStatus,
-          help: copy.input.help,
-          mask: true,
-          placeholder: copy.input.placeholder,
-          primary: copy.options.zaiApiKey.inputPrimary,
-          secondary: copy.options.zaiApiKey.inputSecondary,
-          status: copy.input.status,
-          submitStatus: copy.input.submitStatus,
-        },
-        keywords: ["zai", "api", "key", "manual"],
-        primary: copy.options.zaiApiKey.primary,
-        secondary: copy.options.zaiApiKey.secondary,
-      },
-      {
-        command: "/login bigmodel-coding-plan-api-key",
-        id: "bigmodel-coding-plan-api-key",
-        input: {
-          cancelStatus: copy.input.cancelStatus,
-          clearStatus: copy.input.clearStatus,
-          emptyStatus: copy.input.emptyStatus,
-          help: copy.input.help,
-          mask: true,
-          placeholder: copy.input.placeholder,
-          primary: copy.options.bigmodelApiKey.inputPrimary,
-          secondary: copy.options.bigmodelApiKey.inputSecondary,
-          status: copy.input.status,
-          submitStatus: copy.input.submitStatus,
-        },
-        keywords: ["bigmodel", "api", "key", "manual"],
-        primary: copy.options.bigmodelApiKey.primary,
-        secondary: copy.options.bigmodelApiKey.secondary,
-      },
-    ],
+      primary: `${loginProviderLabel(providerId)} ${copy.options.browser.primary}`,
+      secondary: copy.options.browser.secondary,
+    })),
     prompt: copy.prompt,
     title: copy.title,
   };
 }
 
 export function loginSetupResponse(locale?: string): string {
-  return getZCodeCopy(locale).tui.loginSetup.response;
+  const copy = getZCodeCopy(locale).tui.loginSetup;
+  const providerIds = loginProviderIds();
+  if (providerIds.length === 0) {
+    return `${copy.response}\n${copy.emptyMessage}`;
+  }
+  return `${copy.response} ${providerIds.map(loginProviderLabel).join(", ")}`;
 }
 
 export function formatLoginResult(result: CommandCenterLoginResult): string {
@@ -94,23 +60,8 @@ export function formatLoginResult(result: CommandCenterLoginResult): string {
       : "";
 
   return [
-    `Configured Z.AI Coding Plan as ${label}.`,
-    `Model: ${result.model}`,
-    `Credentials: ${result.credentialsPath}`,
-    `Model selection: ${result.configPath}${browserNote}`,
-  ].join("\n");
-}
-
-export function formatProviderSetupResult(result: {
-  configPath: string;
-  model: string;
-  providerId: "bigmodel" | "zai";
-}): string {
-  const provider = result.providerId === "bigmodel" ? "BigModel" : "Z.AI";
-  return [
-    `Configured ${provider} Coding Plan.`,
-    `Model: ${result.model}`,
-    `Model selection: ${result.configPath}`,
+    `Signed in to ${loginProviderLabel(result.providerId ?? "")} as ${label}.`,
+    `Credentials: ${result.credentialsPath}${browserNote}`,
   ].join("\n");
 }
 
@@ -140,20 +91,4 @@ export async function emitLoginAuthorizeMessage(
     traceId: session.traceId as never,
     type: "assistant_message" as never,
   });
-}
-
-export function parseApiKeyLoginArgs(args: string): {
-  apiKey: string;
-  kind: "bigmodel-coding-plan-api-key" | "zai-coding-plan-api-key";
-  providerId: "bigmodel" | "zai";
-} | null {
-  const [kind, ...rest] = args.split(/\s+/u);
-  if (kind !== "zai-coding-plan-api-key" && kind !== "bigmodel-coding-plan-api-key") {
-    return null;
-  }
-  return {
-    apiKey: rest.join(" ").trim(),
-    kind,
-    providerId: kind.startsWith("bigmodel") ? "bigmodel" : "zai",
-  };
 }
