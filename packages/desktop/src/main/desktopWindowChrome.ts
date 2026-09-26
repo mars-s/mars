@@ -287,10 +287,15 @@ function isCodingPlanPaypalNavigationUrl(url: string): boolean {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
     if (isPaypalHostname(parsed.hostname)) return true;
-    // 后端下发的 PayPal approveUrl 可能先指向 Z.AI 支付 API 中转地址，
-    // 由该地址再 302 到 PayPal。中转 URL 也必须留在当前 webview，否则会被系统浏览器接管。
+    // The PayPal approveUrl issued by the backend may first point at a payment
+    // relay, which then redirects to PayPal. That relay URL must stay in the
+    // current webview, otherwise the system browser takes over the payment. This
+    // fork ships no built-in relay origin: an unconfigured build resolves to ""
+    // and the relay branch matches nothing. The old hardcoded vendor origin was
+    // left in this list and, paired with an empty resolver, was the only entry
+    // that could ever match.
     return (
-      ["https://api.z.ai", resolveZaiBusinessBaseUrl()].includes(parsed.origin) &&
+      resolveZaiBusinessBaseUrl() === parsed.origin &&
       parsed.pathname.startsWith("/api/pay/paypal/")
     );
   } catch {

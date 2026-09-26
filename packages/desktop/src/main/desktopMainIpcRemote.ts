@@ -60,8 +60,13 @@ function isCodingPlanPaypalNavigationUrl(url: string): boolean {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
     if (isPaypalHostname(parsed.hostname)) return true;
+    // Only the operator's own configured payment relay may stay in this webview.
+    // This fork ships no built-in relay origin, so an unconfigured build resolves
+    // to "" and the relay branch matches nothing. The old hardcoded vendor origin
+    // was left in this list and, paired with an empty resolver, was the only
+    // entry that could ever match.
     return (
-      ["https://api.z.ai", resolveZaiBusinessBaseUrl()].includes(parsed.origin) &&
+      resolveZaiBusinessBaseUrl() === parsed.origin &&
       parsed.pathname.startsWith("/api/pay/paypal/")
     );
   } catch {
