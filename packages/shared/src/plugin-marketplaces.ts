@@ -29,17 +29,50 @@ export const DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS: ReadonlySet<string> = new Set(
   // bootstrap 的「Settings 默认启用集合与 CLI 的官方插件声明一致」单测机械对照两者。
 ]);
 
-export const DEFAULT_PLUGIN_MARKETPLACES: DefaultPluginMarketplace[] = [
-  {
-    // ZCode 官方唯一市场：本地 seed 分片与 CDN 分片在 Agent storage 内合并。
-    // CDN manifest 的 name 必须与该 canonical id 一致。
-    id: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
-    source: "https://cdn-zcode.z.ai/zcode/official-plugin/marketplace.json",
-    name: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
-    description: "Official ZCode plugins marketplace: built-in and community plugins for ZCode.",
-    pluginCount: 0,
-  },
-];
+/**
+ * The official marketplace catalog is not fetched from any vendor host. Point
+ * `ZCODE_OFFICIAL_MARKETPLACE_SOURCE` at a self-hosted `marketplace.json` (or an
+ * `owner/repo` git shorthand) to restore the remote catalog. With nothing
+ * configured the official marketplace is not registered as a remote source at
+ * all, so startup never reaches out to a third party and the official store
+ * only exposes the built-in plugins seeded locally. Users can always add their
+ * own local or git marketplaces through the personal sources UI.
+ */
+function readOfficialMarketplaceSource(): string {
+  if (typeof process === "undefined" || !process.env) return "";
+  return process.env.ZCODE_OFFICIAL_MARKETPLACE_SOURCE?.trim() ?? "";
+}
+
+function buildDefaultPluginMarketplaces(
+  officialMarketplaceSource: string,
+): DefaultPluginMarketplace[] {
+  if (!officialMarketplaceSource) return [];
+  return [
+    {
+      // The official marketplace stays a single id: the locally seeded partition
+      // and the fetched one are merged inside Agent storage.
+      id: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+      source: officialMarketplaceSource,
+      name: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+      description: "Official ZCode plugins marketplace: built-in and community plugins for ZCode.",
+      pluginCount: 0,
+    },
+  ];
+}
+
+export const DEFAULT_PLUGIN_MARKETPLACES: DefaultPluginMarketplace[] =
+  buildDefaultPluginMarketplaces(readOfficialMarketplaceSource());
+
+/**
+ * Whether a remote official marketplace catalog origin is configured. Callers use
+ * this to skip refreshes that could only fail: without a registered source the
+ * official marketplace holds just the locally seeded built-in plugins.
+ */
+export function hasOfficialPluginMarketplaceSource(): boolean {
+  return DEFAULT_PLUGIN_MARKETPLACES.some(
+    (marketplace) => marketplace.id === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+  );
+}
 
 // 商店「公开」分段只有一个 ZCode 官方市场 id，内置与 CDN 不再拆分身份。
 export const PUBLIC_STORE_MARKETPLACE_IDS = [ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID] as const;
