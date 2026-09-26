@@ -45,12 +45,6 @@ import {
   createHostApiNetworkTransport,
   registerHostApiNetworkTransportForDispose,
   createOAuthService,
-  createOAuthProviderLogoutHandler,
-  createAccountProviderCredentialStore,
-  createAccountProviderCredentialService,
-  createAccountProviderRequestAuthService,
-  createAccountRequestAuthService,
-  resolveCurrentAccountAccess,
   createSettingsSyncService,
   createBotsService,
   createMediaPreviewService,
@@ -59,15 +53,11 @@ import {
   createSubagentsService,
   createMemoryService,
   createRemoteConversationShareArtifactSource,
-  OAuthCredentialRepo,
 } from "@zcode/services/node";
 import {
-  BIGMODEL_PROVIDER_ID,
   buildRuntimeZCodeApiUrl,
   DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
-  type ProviderFamilyDomain,
   type ZCodeSessionRuntimePreferencesResult,
-  ZAI_PROVIDER_ID,
 } from "@zcode/shared";
 import { assertLegacyRemoteWorkspaceRpcContract } from "./legacyRemoteWorkspaceRpcContract.js";
 import {
@@ -94,9 +84,6 @@ export function createRemoteWorkspaceServiceCollection(params: {
   assertLegacyRemoteWorkspaceRpcContract(params.connectionServices);
   const localSettingService = createSettingService();
   const localCredentialService = createCredentialService();
-  const localAccountProviderCredentialStore = createAccountProviderCredentialStore({
-    credentialService: localCredentialService,
-  });
   const hostApiNetworkTransport = createHostApiNetworkTransport(async () => {
     const settings = await localSettingService.get();
     return {
@@ -109,64 +96,6 @@ export function createRemoteWorkspaceServiceCollection(params: {
     fetchImpl: hostApiNetworkTransport.fetch,
   });
   const localBroadcastService = createBroadcastService(params.parentPort);
-  let handleOAuthProviderLogout: ReturnType<typeof createOAuthProviderLogoutHandler> | null = null;
-  const localOAuthCredentialRepo = new OAuthCredentialRepo(localCredentialService, {
-    onCorruptOAuthSessionCleared: async (providers) => {
-      // remote workspace host 读写的是本机 OAuth 凭据。
-      // 损坏恢复必须和 local host 一样清理 Start/Coding Plan 派生 provider，避免手机 remote 残留旧 key。
-      await Promise.all(
-        providers.map((provider) => handleOAuthProviderLogout?.(provider) ?? Promise.resolve()),
-      );
-    },
-  });
-  const localAccountProviderCredentialService = createAccountProviderCredentialService({
-    credentialStore: localAccountProviderCredentialStore,
-    async loadOAuthAccessToken(family) {
-      const providerId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-      return (await localOAuthCredentialRepo.loadTokenSet(providerId))?.accessToken ?? null;
-    },
-    // desktop-attached remote 只复用本机已解析或旧存储中的 Key；远端刷新仍由本机正式账号链负责。
-    resolveProviderApiKey: async () => null,
-  });
-  const readLocalAccountProviderSettings = async () => {
-    const settings = await localSettingService.get();
-    return {
-      providerFamilyDomain: settings.providerFamilyDomain ?? null,
-      selections: settings.providerFamilyConnectionSelections ?? {},
-    };
-  };
-  const loadLocalAccountIdentity = async (family: ProviderFamilyDomain) => {
-    const providerId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-    return (await localOAuthCredentialRepo.loadUserProfile(providerId))?.id ?? null;
-  };
-  const localAccountRequestAuthService = createAccountRequestAuthService(
-    createAccountProviderRequestAuthService({
-      resolveCurrentAccountAccess: (access) =>
-        resolveCurrentAccountAccess({
-          access,
-          readSettings: readLocalAccountProviderSettings,
-          loadAccountIdentity: loadLocalAccountIdentity,
-        }),
-      loadOAuthTokenSet: (providerId) => localOAuthCredentialRepo.loadTokenSet(providerId),
-      async loadIndividualPlanApiKey(providerId, family) {
-        const oauthProviderId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-        const accountIdentity = (await localOAuthCredentialRepo.loadUserProfile(oauthProviderId))
-          ?.id;
-        if (!accountIdentity) return null;
-        return localAccountProviderCredentialService.loadCodingPlanApiKey({
-          providerId,
-          family,
-          accountIdentity,
-        });
-      },
-      // Team plans no longer exist, so there is no team-plan API key to mint.
-      // Fail closed: a stale team-coding-plan selection can no longer authenticate.
-      resolveTeamPlanApiKey: async () => null,
-    }),
-  );
-  handleOAuthProviderLogout = createOAuthProviderLogoutHandler({
-    accountProviderCredentialStore: localAccountProviderCredentialStore,
-  });
   const conversationShareClient = new ConversationShareHttpClient({
     // 远端 workspace 的分享也必须使用真实 API；本地 Mock 仅用于单测，不生成无法跨进程访问的链接。
     apiClient: localApiClient,
@@ -330,7 +259,6 @@ export function createRemoteWorkspaceServiceCollection(params: {
       IOAuthService,
       createOAuthService(localCredentialService, {
         apiClient: localApiClient,
-        onProviderLogout: handleOAuthProviderLogout,
       }),
     )
     // Provider/Model 事实属于目标 Environment。远端 workspace 的选择和设置视图
