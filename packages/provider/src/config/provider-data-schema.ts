@@ -23,6 +23,10 @@ const nonBlankRequiredString = z.string().refine((value) => value.trim().length 
 
 export const apiKeyAccessDataSchema = z
   .object({
+    // `api-key` is the only type this build produces. The Z.ai coding-plan key is still
+    // accepted so a config written before the removal cannot fail to parse and lock a
+    // user out; no catalog template emits it and nothing branches on it any more. Drop
+    // the literal once the one-way read is no longer worth carrying.
     type: z.enum(["api-key", "zhipu-coding-plan-api-key"]),
     apiKey: z.string().nullable().optional(),
     apiKeyManagementUrl: z.string().url().nullable().optional(),

@@ -718,8 +718,8 @@ export class ConversationShareService implements IConversationShareService {
     this.downloadTimeoutMs = options.downloadTimeoutMs ?? DOWNLOAD_TIMEOUT_MS;
     this.conversationWorkspaceRoot =
       options.conversationWorkspaceRoot ?? getConversationWorkspaceDir();
-    // 兜底写死生产站 https://zcode.z.ai/cn/share，于是测试环境（API base 走
-    // 配置的 ZCode origin）导入后回链仍指向生产站，点分割线打开的是另一个环境的分享。
+    // 曾经兜底写死生产站，于是测试环境（API base 走配置的 ZCode origin）导入后回链
+    // 仍指向生产站，点分割线打开的是另一个环境的分享。
     // 改用与 API base 同一个环境解析器（buildRuntimeZCodeApiUrl 也走它），保证同环境。
     // 优先级不变：显式 option > ZCODE_CONVERSATION_SHARE_WEB_URL > 按环境推导。
     this.shareWebUrl = (

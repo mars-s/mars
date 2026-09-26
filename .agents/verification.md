@@ -166,9 +166,20 @@ are deliberate and each has a recorded reason:
 | `apps/zcode-cli/.../plugins/marketplace.ts` `RETIRED_MARKETPLACE_HOSTS` | The denylist that stops issue #4's retired CDN from being fetched. Removing the literal would reintroduce the traffic it blocks. |
 | `packages/desktop/src/main/desktopMainIpcRemote.ts`, `desktopWindowChrome.ts` | A webview navigation **allowlist** for PayPal checkout, not a call site. Weakening it is an open-redirect regression. |
 | `packages/desktop/electron-builder.config.js` `homepage`, `author.email`, `maintainer` | Package metadata. `deb` packaging via fpm validates all three and fails the artifact stage if they are empty. |
-| `packages/shared/src/model-provider-family.ts` `rootDomain` | A base-URL **classification key**, never a request target. Emptying it would make the trailing-dot FQDN test match everything. |
 
 If you add a hostname to that list, it needs a row here explaining why.
+
+**1b is the stricter check and it is where the vendor identifiers went.** After the
+account-provider removal (issues #8 to #11) the only remaining hits are these, and
+each is a one-way read rather than a live path:
+
+| Survivor | Why it stays |
+| --- | --- |
+| `packages/provider/src/config/provider-data-schema.ts` `zhipu-coding-plan-api-key` | A literal in a **persisted**-config validator. `apiKeyAccessDataSchema` parses both the catalog and a user's saved `provider_config.json`, so dropping the enum member would make an old config fail to parse and lock that user out. No catalog template emits it and nothing branches on it any more. |
+| `apps/zcode-cli/.../storage/session-store/migrations/0020-0022` | **Frozen shipped SQL.** Editing a past migration corrupts replay on a fresh database and mis-aligns an already-migrated one. These only decode historical rows. |
+| `packages/services/src/session/tasksDatabase/provider-selection-v2.ts`, `official-glm-selection-v3.ts` | Same: frozen pre-release decoders and an already-applied `WHERE` clause over historical `model_selection` rows. |
+| `packages/zcode-server-cli/src/platform/serviceManager.ts` `com.zhipu.zcode.server` | A macOS **launchd service name**, so it is a persisted system identifier. Renaming it orphans the service on an in-place upgrade. Not a network surface. |
+| `packages/ui/src/i18n/locales/{en-US,zh-CN}.ts` | Issue #12. Kept until that wave runs, and `login.oauth.regionTag.{zai,bigmodel}` must survive it because `botsUi.ts` still uses those keys for the Lark and Feishu region tags. |
 
 Step 3 is the only one that actually proves it. Steps 1 and 2 prove the code is
 gone, which is necessary but not sufficient.

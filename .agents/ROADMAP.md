@@ -25,7 +25,7 @@ The top priority. Nothing else in stage 1 matters until this is provably done.
 | [#3](https://github.com/mars-s/mars/issues/3) | Stop ARMS RUM and event telemetry | done | merged, 13.4k lines deleted |
 | [#4](https://github.com/mars-s/mars/issues/4) | Stop the remote asset CDN fetch | done | merged, 3 env vars now opt-in |
 | [#5](https://github.com/mars-s/mars/issues/5) | Stop the remote provider-config sync | done | merged, hourly poll removed |
-| [#6](https://github.com/mars-s/mars/issues/6) | Neutralise remaining hardcoded endpoints | todo | next |
+| [#6](https://github.com/mars-s/mars/issues/6) | Neutralise remaining hardcoded endpoints | done | merged, wave A, gate 8/8 |
 
 Wave 1 shipped on `main`. After the three merges: `pnpm install --frozen-lockfile` exit 0,
 `pnpm typecheck` exit 0, `pnpm lint` exit 0 (70 pre-existing warnings). Vendor-host lines
@@ -45,17 +45,17 @@ predictable part of the project into something estimable.
 
 | # | Issue | Status |
 | --- | --- | --- |
-| [#8](https://github.com/mars-s/mars/issues/8) | Delete Z.ai and BigModel catalog templates | todo |
-| [#9](https://github.com/mars-s/mars/issues/9) | Delete coding-plan, pricing and usage stats | todo |
-| [#10](https://github.com/mars-s/mars/issues/10) | Remove Z.ai from welcome screen and login | todo |
-| [#11](https://github.com/mars-s/mars/issues/11) | Delete the Z.ai and BigModel OAuth subsystem | todo |
-| [#12](https://github.com/mars-s/mars/issues/12) | Prune Z.ai i18n keys | todo |
+| [#8](https://github.com/mars-s/mars/issues/8) | Delete Z.ai and BigModel catalog templates | done | 0 `providerRules`, 16 templates survive |
+| [#9](https://github.com/mars-s/mars/issues/9) | Delete coding-plan, pricing and usage stats | done | generic app-usage types kept |
+| [#10](https://github.com/mars-s/mars/issues/10) | Remove Z.ai from welcome screen and login | done | API-key picker lists the 16 survivors |
+| [#11](https://github.com/mars-s/mars/issues/11) | Delete the Z.ai and BigModel OAuth subsystem | done | `OAuthProviderAdapter` seam kept for #13 |
+| [#12](https://github.com/mars-s/mars/issues/12) | Prune Z.ai i18n keys | todo | last; only en-US + zh-CN still hold hits |
 
 ## Stage 1d. UI surgery
 
 | # | Issue | Status |
 | --- | --- | --- |
-| [#15](https://github.com/mars-s/mars/issues/15) | Extract Z.ai plan cards from provider settings | todo |
+| [#15](https://github.com/mars-s/mars/issues/15) | Extract Z.ai plan cards from provider settings | done | no plan-card code left in settings |
 
 The hard one. Depends on [#7](https://github.com/mars-s/mars/issues/7) and
 [#9](https://github.com/mars-s/mars/issues/9) landing first.
