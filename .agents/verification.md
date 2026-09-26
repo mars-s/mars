@@ -468,3 +468,51 @@ rg -n 'chatgpt-account-id' apps/zcode-cli/packages/adapters/src/model/runner-net
 ```
 
 The live flow is unverified; see the #13 section of the roadmap for the manual steps.
+
+## Scanning the source is not the same as scanning the build
+
+The source greps, both typechecks and the whole test suite can all be clean while
+the shipped artifact still carries a live vendor endpoint. Two real instances, found
+by building the fork and grepping `packages/desktop/out` rather than the repo:
+
+**A stale `out/scheduler` chunk survived every rebuild.** `resolveDesktopProductionCleanPaths`
+in `packages/desktop/scripts/run-production-build.mjs` cleaned `out/main`, `out/host`,
+`out/preload` and `out/renderer` but not `out/scheduler`. tsup names chunks by content
+hash and never deletes an old one, and `electron-builder` packages `out/**/*`, so a
+chunk from a previous build stays in `app.asar`. The surviving chunk held a live
+`ZAI_OAUTH_CLIENT_ID` that existed nowhere in source. Fixed by cleaning `out/scheduler`,
+which is what the function's own comment already warned about for the other four.
+
+**The bundler bakes the ambient environment in.** `createSharedDefines()` inlines
+`__ZCODE_ENDPOINT_ENV__` from `pickProductEndpointEnv`, which forwards `ZAI_OAUTH_ORIGIN`,
+`ZAI_BUSINESS_BASE_URL`, `ZAI_OAUTH_CLIENT_ID` and `ZCODE_BASE_URL`. The running upstream
+`/Applications/ZCode.app` exports all of those into every process it spawns, so a build
+launched from inside it faithfully compiled the vendor back in. Source was clean the whole
+time. The fork's own defaults are correct: unconfigured resolves to `""` and fails loudly.
+
+There is also a stale endpoint-scoped catalog on disk at
+`~/.zcode/v2/runtime/provider/<platform>/<version>/endpoint-<hash>/zcode-builtin.json`,
+written by the old build, at `revision 30` with 20 templates including `zai-api` and
+`bigmodel-api`. The runtime prefers an explicit `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` over
+its own bundled catalog, so that file wins if the variable points at it. The fork's
+materializer writes to a different path (`runtime/provider/bundled/`) and always
+overwrites, so the fork's own runtime is unaffected. The old file only matters to a build
+or a CLI run that inherits the variable.
+
+**Build the fork from a shell that does not inherit the old app's environment:**
+
+```bash
+env -u ZAI_OAUTH_ORIGIN -u ZAI_BUSINESS_BASE_URL -u ZAI_OAUTH_CLIENT_ID -u ZAI_OAUTH_APP_ID \
+    -u BIGMODEL_API_BASE_URL -u ZCODE_BASE_URL -u ZCODE_ENDPOINT_ORIGIN \
+    -u ZCODE_BUILTIN_PROVIDER_CONFIG_FILE -u ZCODE_PERSONAL_PROVIDER_CONFIG_FILE \
+    pnpm build:bootstrap
+```
+
+Note for zsh: `env $(env | grep -oE '^(ZAI_|ZCODE_)[A-Z_]+' | sed 's/^/-u /') pnpm ...`
+silently does nothing, because zsh does not word-split an unquoted parameter and `env`
+receives the whole list as one argument. Pass the flags explicitly.
+
+The gate now has a ninth check, `artifact: no vendor leak in build output`, which greps
+`packages/desktop/out` (sourcemaps included, since they ship too) for the vendor hosts and
+the client id, and skips cleanly when nothing has been built. It is verified to fail on an
+injected leak rather than passing vacuously.
