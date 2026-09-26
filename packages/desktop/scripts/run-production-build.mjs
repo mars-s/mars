@@ -17,9 +17,14 @@ export function resolveDesktopProductionCleanPaths(cwd) {
     resolve(cwd, "out/host"),
     resolve(cwd, "out/preload"),
     resolve(cwd, "out/renderer"),
+    // out/scheduler 也是 tsup 分包目录，chunk 名带内容 hash。漏清会让上一版本的
+    // chunk 存活并被 electron-builder 的 out/**/* 打进 app.asar，这正是本函数
+    // 存在的理由；只清四个目录时 scheduler 是个例外，且没有任何东西会回收它。
+    resolve(cwd, "out/scheduler"),
     resolve(cwd, "out/.main-build-ready"),
     resolve(cwd, "out/.host-build-ready"),
     resolve(cwd, "out/.preload-build-ready"),
+    resolve(cwd, "out/.scheduler-build-ready"),
   ];
 }
 

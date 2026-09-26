@@ -188,6 +188,34 @@ check_hygiene() {
 }
 step "hygiene: tree and artifacts" check_hygiene
 
+# The source scans pass while a built artifact can still carry a live vendor
+# endpoint, because the bundler bakes __ZCODE_ENDPOINT_ENV__ in from the ambient
+# environment and because tsup never deletes a chunk whose content hash changed.
+# A real instance: a stale out/scheduler chunk kept a Z.ai OAuth client id that
+# no longer existed anywhere in source, and it would have shipped inside app.asar.
+check_built_artifact_vendor_leak() {
+  local out="packages/desktop/out"
+  if [ ! -d "$out" ]; then
+    echo "  no $out (nothing built yet); skipping"
+    return 0
+  fi
+  # Sourcemaps included: a source map ships inside app.asar and is just as readable.
+  local hits
+  hits=$(rg -l --no-ignore -i \
+    'zcode\.z\.ai|api\.z\.ai|chat\.z\.ai|bigmodel\.cn|cdn-zcode\.z\.ai|client_P8X5CMWmlaRO9gyO' \
+    "$out" 2>/dev/null | head -10)
+  if [ -n "$hits" ]; then
+    echo "  vendor endpoint or client id present in the built artifact:"
+    printf '%s\n' "$hits" | sed 's/^/    /'
+    echo "  A stale chunk, or a ZAI_*/ZCODE_BASE_URL value inherited from the"
+    echo "  environment. rm -rf $out, clear those vars, and rebuild."
+    return 1
+  fi
+  echo "  built artifact carries no vendor endpoint or client id"
+  return 0
+}
+step "artifact: no vendor leak in build output" check_built_artifact_vendor_leak
+
 printf '\n========================================\n'
 printf 'PASSED: %d   FAILED: %d\n' "$PASSED" "$FAILED"
 printf '========================================\n'
