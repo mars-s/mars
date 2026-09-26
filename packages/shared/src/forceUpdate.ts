@@ -1,4 +1,7 @@
-import type { ForceUpdateConfig } from "./coding-plan-subscription.js";
+/** Server-driven minimum version gate. */
+export interface ForceUpdateConfig {
+  minimalVersion: string;
+}
 
 export interface ForceUpdateRequirement {
   currentVersion: string;

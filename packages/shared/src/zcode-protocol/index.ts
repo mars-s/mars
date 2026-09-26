@@ -27,7 +27,7 @@ import { modelSelectionSchema } from "../model-selection.js";
 import { completeModelPropertiesDataSchema } from "../model-config.js";
 import { accountProviderUnavailableReasonSchema } from "../account-provider-state.js";
 import { modelExecutionSchema } from "../model-execution.js";
-import { APP_USAGE_RANGES, appUsageSnapshotSchema } from "../usage-stats.js";
+import { APP_USAGE_RANGES, appUsageSnapshotSchema } from "../app-usage-stats.js";
 import { zcodeAutomationBotDeliveryTargetSchema } from "../bots.js";
 // browser-use 命令/结果契约单一来源：agent 构造、协议校验和 main executor 共用同一 schema。
 import { browserClientModeSchema, browserCommandSchema } from "../browser-use/commands.js";
