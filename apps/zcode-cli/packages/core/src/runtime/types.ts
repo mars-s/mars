@@ -390,6 +390,9 @@ export type RuntimeModelFactory = (input: RuntimeModelFactoryInput) => Model;
  * 入参的 sessionId 必须能路由到客户端持有的会话。child runtime 的账本身份不能
  * 直接用于客户端请求，否则客户端无法找到会话并返回响应，首个模型请求会一直等待。
  * 子 runtime 通过 deriveChildClientPorts 派生端口，将请求路由到父端口绑定的客户端会话。
+ *
+ * `reason: "unauthorized"` 表示上一次尝试被后端 401 拒绝，host 必须先轮换再作答。
+ * 轮换发生在 host 进程、由 grant store 的跨进程锁串行化，本端口只负责转达。
  */
 export interface ProviderRuntimeHeadersPort {
   shouldRefreshBeforeModelRequest?(input: { providerId: string; modelId: string }): boolean;
@@ -397,7 +400,7 @@ export interface ProviderRuntimeHeadersPort {
     abortSignal?: AbortSignal;
     modelId: string;
     providerId: string;
-    reason: "model-request";
+    reason: "model-request" | "unauthorized";
     sessionId: SessionId;
     traceContext: TraceContext;
     turnId?: TurnId;

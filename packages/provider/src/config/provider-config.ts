@@ -5,6 +5,8 @@ import {
   completeApiKeyAccessDataSchema,
   completeProviderApiDataSchema,
   completeProviderConfigDataSchema,
+  isOAuthAccessType,
+  OAUTH_ACCESS_TYPE,
   type providerApiTypeDataSchema,
   type providerGroupDataSchema,
   type providerVisibilityDataSchema,
@@ -22,6 +24,11 @@ import type { ProviderConfigRuleData } from "./rule-data-schema.js";
 
 export type ProviderApiType = z.infer<typeof providerApiTypeDataSchema>;
 export type ProviderGroup = z.infer<typeof providerGroupDataSchema>;
+
+// The credential-less access shape and its predicate belong to the public surface:
+// "which providers cannot be served by a bind-time key snapshot" is a question
+// callers outside this package have to answer too.
+export { OAUTH_ACCESS_TYPE, isOAuthAccessType };
 
 export type ApiKeyAccessConfigInput = Omit<ApiKeyAccessConfigObject, "type"> & {
   readonly type?: ApiKeyAccessConfigObject["type"];
@@ -51,7 +58,36 @@ export class ApiKeyAccessConfig extends ConfigOverlay<ApiKeyAccessConfig> {
   }
 
   validateComplete(path: readonly string[] = []): readonly ConfigValidationIssue[] {
-    return validateConfigSchema(completeApiKeyAccessDataSchema, this.toJSON(), path);
+    const issues = validateConfigSchema(completeApiKeyAccessDataSchema, this.toJSON(), path);
+    if (issues.length > 0) {
+      return issues;
+    }
+    if (isOAuthAccessType(this.type)) {
+      // The grant IS the credential, so a key here is not merely unused: it is a
+      // second, unmanaged copy of a live subscription secret.
+      if (this.apiKey != null) {
+        return [
+          {
+            code: "invalid-config",
+            path: [...path, "apiKey"],
+            message: `配置 ${[...path, "apiKey"].join(".")} 不接受静态 Key`,
+          },
+        ];
+      }
+      return [];
+    }
+    if (typeof this.apiKey !== "string" || this.apiKey.trim().length === 0) {
+      // Same issue the schema used to raise for this shape, so callers and the UI
+      // keep seeing one stable code, path and message for a missing key.
+      return [
+        {
+          code: "required-field-missing",
+          path: [...path, "apiKey"],
+          message: `缺少必填配置 ${[...path, "apiKey"].join(".")}`,
+        },
+      ];
+    }
+    return [];
   }
 
   toJSON(): ApiKeyAccessConfigObject {
@@ -200,7 +236,13 @@ export class ProviderConfig extends ConfigOverlay<ProviderConfig> {
 
   validateComplete(path: readonly string[] = []): readonly ConfigValidationIssue[] {
     // 不再用字段存在性代替值域验证，也不把展示/成员等可选字段变成执行必填项。
-    return validateConfigSchema(completeProviderConfigDataSchema, this.toJSON(), path);
+    const issues = validateConfigSchema(completeProviderConfigDataSchema, this.toJSON(), path);
+    if (issues.length > 0) {
+      return issues;
+    }
+    // The per-shape key rule lives on the access config, because "is a key required
+    // at all" is exactly the question the provider-level schema cannot answer.
+    return this.access?.validateComplete([...path, "access"]) ?? [];
   }
 
   toJSON(): ProviderConfigObject {

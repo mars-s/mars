@@ -2310,7 +2310,18 @@ export const zcodeUserInputResponseSchema = z
   .strict();
 export type ZCodeUserInputResponse = z.infer<typeof zcodeUserInputResponseSchema>;
 
-export const zcodeProviderRuntimeHeadersRequestReasonSchema = z.enum(["model-request"]);
+/**
+ * `model-request` 是一次常规物理请求前取凭据。
+ *
+ * `unauthorized` 是上一次请求被后端 401 拒绝后的**重取**：被拒的 token 对 host 而言
+ * 已经作废，host 必须先轮换再作答，直接重发只会被再拒一次。老的
+ * `isCurrentOAuthCredentialRequest` 只比对 zcode 后端自己的 JWT，OAuth token 永远
+ * 匹配不上它，所以订阅型 provider 的 401 走不到那条轮换路径。
+ */
+export const zcodeProviderRuntimeHeadersRequestReasonSchema = z.enum([
+  "model-request",
+  "unauthorized",
+]);
 export const zcodeProviderRuntimeHeadersRequestParamsSchema = z
   .object({
     requestId: nonEmptyString,

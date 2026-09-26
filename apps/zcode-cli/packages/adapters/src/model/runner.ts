@@ -6,6 +6,8 @@ import {
   ModelErrorCode,
   ModelProtocolError,
   getCurrentModelInvocationContext,
+  type ModelRequestAuth,
+  type ModelRequestDependencies,
 } from "@zcode/contracts";
 import type {
   Logger,
@@ -38,6 +40,7 @@ import {
   type ResolvedAiSdkModel,
 } from "./runner-runtime.js";
 import { createModel, type ModelExecutionRequest } from "./model.js";
+import { composeRequestAuthRefresh } from "./runner-request-auth.js";
 
 export type { AiSdkModelRetryOptions } from "./retry-policy.js";
 export type {
@@ -68,6 +71,17 @@ export interface CreateAiSdkModelOptions {
   modelId: string;
   providerConfig: RegistryProviderConfig;
   modelConfig: RegistryModelConfig;
+  /**
+   * Execution-scope credential dependencies for this model.
+   *
+   * The PRESENCE of `requestAuth` is the declaration that this model cannot be
+   * served by a bind-time snapshot: its credential has to be resolved again on
+   * every physical attempt. It is never inferred from "the provider has no static
+   * api key", because every builtin template omits the key (keys come from user
+   * settings), so that rule would push all static providers onto the host refresh
+   * path and break them. A present dependency with no source fails closed.
+   */
+  requestDependencies?: ModelRequestDependencies;
   displayName?: string;
   options?: ModelOptions;
 }
@@ -144,15 +158,10 @@ export class AiSdkModelAdapter {
       properties,
     };
     const optionSpecs = options.modelConfig.optionSpecs;
+    const requestAuthDependency = options.requestDependencies?.requestAuth;
     const toLegacyRequest = (request: ModelExecutionRequest): AiSdkModelTextRequest => {
       const context = getCurrentModelInvocationContext();
-      // A bound model no longer carries an account access type, so the per-attempt
-      // runtime header refresh port has no consumer here. Drop it explicitly: an
-      // account-shaped auth source must not leak into a static api-key model, and
-      // the reverse (forwarding it unconditionally) would send static provider
-      // credentials to the host refresh path and fail the request before it is sent.
-      const { refreshRuntimeHeadersBeforeAttempt: _accountOnlyRefresh, ...invocationContext } =
-        context ?? {};
+      const { refreshRuntimeHeadersBeforeAttempt: hostRefresh, ...invocationContext } = context ?? {};
       const shouldAttachReasoningTelemetry = request.options.reasoningLevel !== undefined;
       const selectedReasoningLevel = request.options.reasoningLevel;
       return {
@@ -162,6 +171,20 @@ export class AiSdkModelAdapter {
         abortSignal: request.abortSignal,
         maxOutputTokens: request.options.maxOutputTokens,
         ...invocationContext,
+        // Forwarded ONLY for a model that declared the dependency. Unconditional
+        // forwarding is what the old comment was afraid of, and it was right: it
+        // would put every static api-key provider on the host refresh path. What
+        // the old reasoning got wrong was the conclusion, not the fear: a dynamic
+        // credential must never be frozen into the bind-time snapshot, because it
+        // expires and rotates between two physical requests.
+        ...(requestAuthDependency
+          ? {
+              refreshRuntimeHeadersBeforeAttempt: composeRequestAuthRefresh({
+                ...(hostRefresh ? { hostRefresh } : {}),
+                ...(requestAuthDependency.source ? { source: requestAuthDependency.source } : {}),
+              }),
+            }
+          : {}),
         ...(shouldAttachReasoningTelemetry
           ? {
               modelCall: {
@@ -177,7 +200,13 @@ export class AiSdkModelAdapter {
           : {}),
       };
     };
-    const resolveForRequest = (optionValues: Required<ModelOptions>): ResolvedAiSdkModel => {
+    // The per-attempt credential is threaded in here rather than captured at bind
+    // time: `resolveModelForAttempt` calls this once with no auth to build the
+    // bound model, then again with the freshly resolved auth for the real request.
+    const resolveForRequest = (
+      optionValues: Required<ModelOptions>,
+      requestAuth?: ModelRequestAuth,
+    ): ResolvedAiSdkModel => {
       const maxOutputTokens = requireMaxOutputTokens(optionValues);
       return {
         ...boundResolution.resolveRequest({
@@ -185,6 +214,7 @@ export class AiSdkModelAdapter {
             maxOutputTokens,
             reasoningLevel: optionValues.reasoningLevel,
           },
+          ...(requestAuth ? { requestAuth } : {}),
         }),
         properties,
       };
@@ -219,7 +249,7 @@ export class AiSdkModelAdapter {
   private generateTextWithResolved(
     request: AiSdkModelTextRequest,
     resolved: ResolvedAiSdkModel,
-    resolveModel: () => ResolvedAiSdkModel,
+    resolveModel: (requestAuth?: ModelRequestAuth) => ResolvedAiSdkModel,
   ): Promise<ModelTextResult> {
     const projectedRequest = projectRequestHistory(request, resolved);
     return runGenerateText({
@@ -239,7 +269,7 @@ export class AiSdkModelAdapter {
   private async *streamTextWithResolved(
     request: AiSdkModelTextRequest,
     resolved: ResolvedAiSdkModel,
-    resolveModel: () => ResolvedAiSdkModel,
+    resolveModel: (requestAuth?: ModelRequestAuth) => ResolvedAiSdkModel,
   ): AsyncGenerator<ModelStreamEvent> {
     const projectedRequest = projectRequestHistory(request, resolved);
     yield* runStreamText({

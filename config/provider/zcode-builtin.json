@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": 32,
+  "revision": 33,
   "config": {
     "providerConfigRules": {
       "templateRules": [
@@ -546,6 +546,27 @@
             "logo": {
               "type": "builtin",
               "key": "opencode"
+            }
+          }
+        },
+        {
+          "templateId": "chatgpt-subscription",
+          "templateNameMap": {
+            "zh-CN": "ChatGPT",
+            "en-US": "ChatGPT"
+          },
+          "config": {
+            "access": {
+              "type": "oauth"
+            },
+            "api": {
+              "type": "openai-responses",
+              "baseUrl": "https://chatgpt.com/backend-api/codex"
+            },
+            "builtinModelIds": ["gpt-5.6-luna"],
+            "logo": {
+              "type": "builtin",
+              "key": "openai"
             }
           }
         }
@@ -5333,6 +5354,13 @@
           "modelId": "qwen/qwen3.8-max-0902",
           "config": {
             "enabled": false
+          }
+        },
+        {
+          "templateId": "chatgpt-subscription",
+          "modelId": "gpt-5.6-luna",
+          "config": {
+            "enabled": true
           }
         }
       ],

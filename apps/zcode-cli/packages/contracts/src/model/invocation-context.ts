@@ -10,6 +10,15 @@ import type {
 } from "./index.js";
 
 /**
+ * 为什么这一次物理请求需要取动态凭据。
+ *
+ * `unauthorized` 表示上一次尝试被后端 401 拒绝，host 必须先轮换 token 再作答。
+ * 它与常规取值的区别只在 host 侧（轮换 vs 读取），在 adapter 侧完全同构：
+ * 都是"在发请求之前再解一次 requestAuth"。
+ */
+export type ModelRequestCredentialReason = "model-request" | "unauthorized";
+
+/**
  * Runtime 与 Adapter 之间的调用级执行信息。
  *
  * 它不属于业务 ModelRequest，也不允许普通调用方据此改变 Provider 或模型身份。
@@ -30,7 +39,7 @@ export interface ModelInvocationContext {
   preserveProviderStreamBoundaries?: boolean;
   refreshRuntimeHeadersBeforeAttempt?: (input: {
     attempt: number;
-    reason?: "model-request";
+    reason?: ModelRequestCredentialReason;
     abortSignal?: AbortSignal;
     providerId: string;
     modelId: string;
@@ -52,6 +61,8 @@ export interface ModelRequestAuthSourceInput {
   abortSignal?: AbortSignal;
   providerId: string;
   modelId: string;
+  /** 401 重取时为 `unauthorized`，host 会先轮换再作答。 */
+  reason?: ModelRequestCredentialReason;
   traceContext?: TraceContext;
 }
 

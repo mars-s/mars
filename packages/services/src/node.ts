@@ -318,7 +318,9 @@ import { createBotsService } from "./bots/botsService.js";
 import { createBotRemoteWorkspaceService } from "./bots/botRemoteWorkspaceBridge.js";
 import type { SessionMessageSendRequested } from "#src/session/sessionMailbox.js";
 import { createFileWatcherService } from "./fileWatcher/fileWatcherService.js";
-import { createOAuthService } from "./oauth/oauthService.js";
+import { createOAuthService, type OAuthService } from "./oauth/oauthService.js";
+import { CHATGPT_OAUTH_PROVIDER_ID } from "./oauth/providers/chatgpt/chatgptOAuthConfig.js";
+import { resolveChatGptRegistryIdentity } from "#src/zcode-agent/chatgptProviderRequestAuth.js";
 import { isCurrentOAuthCredentialRequest } from "#src/oauth/oauthUnauthorizedRequest.js";
 import { createOAuthProviderLogoutHandler } from "./oauth/oauthProviderLogout.js";
 import { OAuthCredentialRepo } from "./oauth/repo/oauthCredentialRepo.js";
@@ -1849,6 +1851,30 @@ export function createLocalServices(options: {
       }
     },
   };
+  // OAuthService 在下方装配（晚于 agent service），用前向引用 holder 惰性绑定。
+  // 请求级凭据因此按需解析：登录发生在启动之后，不重启进程也能立刻用上。
+  let oauthServiceForProviderRequestAuth: OAuthService | undefined;
+  /**
+   * 动态 provider 凭据的装配点。
+   *
+   * 身份一律来自 host 自己的 provider registry 投影（personal overlay 之后的生效配置），
+   * 绝不来自请求里的 providerId / 名字 / baseUrl：provider-data-schema 允许个人 provider
+   * 指向任意 host，所以按调用方字符串发凭据等于把订阅密钥送到攻击者服务器。
+   */
+  const providerRequestAuthWiring = {
+    providerRequestAuth: {
+      resolveProviderIdentity: async (input: { modelId: string; providerId: string }) => {
+        const view = await providerRuntime.modelSelection.getView();
+        return resolveChatGptRegistryIdentity({ ...input, providers: view.providers });
+      },
+      // 只有注册表身份已经是 ChatGPT 订阅模板时才会走到这里，因此模板到 OAuth
+      // provider 的映射是 host 侧常量决策，不是调用方能选的分支。
+      resolveGrantStore: () =>
+        oauthServiceForProviderRequestAuth?.providerRequestAuthGrantStore(
+          CHATGPT_OAUTH_PROVIDER_ID,
+        ) ?? null,
+    },
+  };
   // OffPeakTaskService 单例在下方 DI register IIFE 中创建（晚于 agent service）；
   // 用前向引用 holder 惰性绑定——offPeak/create 协议请求只会发生在服务集合装配完成后。
   let offPeakTaskServiceForAgent: OffPeakTaskService | undefined;
@@ -1861,6 +1887,7 @@ export function createLocalServices(options: {
         };
   const zcodeAgentService = createZCodeAgentService({
     ...(modelSelectionReadinessSource ? { modelSelectionReadinessSource } : {}),
+    ...providerRequestAuthWiring,
     authorizeLocalMediaPreviewPath: options?.authorizeLocalMediaPreviewPath,
     ...offPeakToolWiring,
     commandResolver: options?.zcodeAgentCommandResolver,
@@ -2089,6 +2116,7 @@ export function createLocalServices(options: {
     apiClient,
     onProviderLogout: handleOAuthProviderLogout,
   });
+  oauthServiceForProviderRequestAuth = oauthService;
   const zcodeJwtLogoutLogger = createServiceLogger("zcode-jwt-logout");
   zcodeJwtLogoutHandlerRef.current = (input, headers) => {
     // 条件退出本身已串行去重；不能丢弃等待旧候选期间到来的新凭据 401。

@@ -1,5 +1,5 @@
 import { traceContextToLogContext } from "../deps.js";
-import type { ModelRequestAuth } from "@zcode/contracts";
+import type { ModelRequestAuth, ModelRequestCredentialReason } from "@zcode/contracts";
 import type { Model, TraceContext } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 
@@ -13,7 +13,7 @@ export function createRefreshRuntimeHeadersBeforeModelAttempt(
 ):
   | ((attemptInput: {
       attempt: number;
-      reason?: "model-request";
+      reason?: ModelRequestCredentialReason;
       abortSignal?: AbortSignal;
     }) => Promise<{
       headersApplied: boolean;

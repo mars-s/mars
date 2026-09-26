@@ -9,6 +9,11 @@ const redactedHeaderNames = new Set([
   "api-key",
   "openai-api-key",
   "x-off-peak-ticket-id",
+  // ChatGPT subscription routing id. It contains none of the substrings
+  // `shouldRedactHeader` looks for, so without this entry the value was written
+  // to the network log in full. It is an account identifier, not a bearer token,
+  // but the log has no retention bound, so it is redacted like the rest.
+  "chatgpt-account-id",
 ]);
 
 export function sanitizeModelNetworkHeaders(value: unknown): Record<string, string> {
