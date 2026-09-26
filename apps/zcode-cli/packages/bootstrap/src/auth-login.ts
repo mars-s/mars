@@ -18,11 +18,6 @@ import { createConfig } from "@zcode/adapters/config";
 import { createNodeHttpClientAdapter } from "@zcode/adapters/http";
 import type { EnvRecord } from "@zcode/adapters/model";
 import { buildZCodeEndpointUrls, resolveRuntimeZCodeEndpointOrigin } from "@zcode/shared";
-import {
-  readStandaloneCodingPlanProviders,
-  standaloneAccountIdentityCredentialKey,
-  standaloneAccountProviderCredentialKey,
-} from "./app/standalone-account-provider-runtime.js";
 import { throwIfAborted, waitWithAbort } from "./auth-login-abort.js";
 import { setTimeout as delay } from "node:timers/promises";
 import { pollUntilReady } from "./auth-login-polling.js";
@@ -167,25 +162,9 @@ export async function logoutZCodeCli(
 ): Promise<LogoutZCodeCliResult> {
   const credentialStore =
     options.credentialStore ?? createSharedZCodeCredentialStore({ env: options.env });
-  const providerIds = (await readStandaloneCodingPlanProviders(options.env ?? process.env)).map(
-    ({ providerId }) => providerId,
-  );
-  const identityKeys = providerIds.map(standaloneAccountIdentityCredentialKey);
-  const identities = await credentialStore.loadMany(identityKeys);
-  const dynamicApiKeyKeys = providerIds.flatMap((providerId) => {
-    const identity = identities[standaloneAccountIdentityCredentialKey(providerId)]?.trim();
-    return identity
-      ? [
-          standaloneAccountProviderCredentialKey({
-            providerId,
-            accountIdentity: identity,
-          }),
-        ]
-      : [];
-  });
   // The active provider namespace is derived from whatever is on disk rather
-  // than from the provider catalog, so a logout still clears a namespace the
-  // catalog no longer declares.
+  // than from a provider catalog, so a logout still clears a namespace no
+  // shipped catalog declares.
   const activeProvider = (
     await credentialStore.load(SHARED_ZCODE_CREDENTIAL_KEYS.activeProvider)
   )?.trim();
@@ -196,8 +175,6 @@ export async function logoutZCodeCli(
     ...Object.values(SHARED_ZCODE_CREDENTIAL_KEYS),
     ...LEGACY_VENDOR_CREDENTIAL_KEYS,
     ...activeProviderKeys,
-    ...identityKeys,
-    ...dynamicApiKeyKeys,
   ];
   const current = await credentialStore.loadMany(keys);
   await credentialStore.deleteIfValues(

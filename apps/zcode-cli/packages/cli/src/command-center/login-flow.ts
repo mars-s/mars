@@ -1,43 +1,21 @@
 import type { TuiSelection, TuiSubmitPrompt } from "@zcode/tui";
 import { getZCodeCopy } from "@zcode/i18n";
-import { getModelProviderFamilySpec, MODEL_PROVIDER_FAMILY_SPECS } from "@zcode/shared";
 import type { CommandCenterApp, CommandCenterLoginResult } from "./types.js";
 import { randomUUID } from "node:crypto";
 
 /**
- * The provider namespaces the operator's ZCode backend can sign a user into.
- * Read from the shared family table rather than a hardcoded list so this
- * screen never names a vendor the fork does not ship.
+ * The fork ships no provider catalog, so there is no built-in list of namespaces
+ * a sign-in can target. The operator's ZCode backend owns that vocabulary, so
+ * this screen has no items to offer and falls back to its empty message; the
+ * namespace is supplied by hand as `/login <provider>` and validated by shape.
  */
-export function loginProviderIds(): readonly string[] {
-  return MODEL_PROVIDER_FAMILY_SPECS.map((spec) => spec.id);
-}
-
-export function loginProviderLabel(providerId: string): string {
-  const spec = MODEL_PROVIDER_FAMILY_SPECS.find((candidate) => candidate.id === providerId);
-  return spec ? getModelProviderFamilySpec(spec.id).label : providerId;
-}
-
 export function buildLoginSelection(locale?: string): TuiSelection {
   const copy = getZCodeCopy(locale).tui.loginSetup;
   return {
     emptyMessage: copy.emptyMessage,
     filterable: false,
     help: copy.help,
-    items: loginProviderIds().map((providerId) => ({
-      command: `/login ${providerId}`,
-      id: `browser-${providerId}`,
-      keywords: [providerId, "oauth", "browser", "login"],
-      pending: {
-        cancelStatus: copy.pending.cancelStatus,
-        help: copy.pending.help,
-        primary: copy.options.browser.pendingPrimary,
-        secondary: copy.options.browser.pendingSecondary,
-        status: copy.pending.status,
-      },
-      primary: `${loginProviderLabel(providerId)} ${copy.options.browser.primary}`,
-      secondary: copy.options.browser.secondary,
-    })),
+    items: [],
     prompt: copy.prompt,
     title: copy.title,
   };
@@ -45,11 +23,7 @@ export function buildLoginSelection(locale?: string): TuiSelection {
 
 export function loginSetupResponse(locale?: string): string {
   const copy = getZCodeCopy(locale).tui.loginSetup;
-  const providerIds = loginProviderIds();
-  if (providerIds.length === 0) {
-    return `${copy.response}\n${copy.emptyMessage}`;
-  }
-  return `${copy.response} ${providerIds.map(loginProviderLabel).join(", ")}`;
+  return `${copy.response}\n${copy.emptyMessage}`;
 }
 
 export function formatLoginResult(result: CommandCenterLoginResult): string {
@@ -60,7 +34,7 @@ export function formatLoginResult(result: CommandCenterLoginResult): string {
       : "";
 
   return [
-    `Signed in to ${loginProviderLabel(result.providerId ?? "")} as ${label}.`,
+    `Signed in to ${result.providerId ?? ""} as ${label}.`,
     `Credentials: ${result.credentialsPath}${browserNote}`,
   ].join("\n");
 }
