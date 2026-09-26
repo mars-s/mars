@@ -160,7 +160,6 @@ export async function runZCodeProtocolAgent(
     });
     options.lifecycle?.signal.throwIfAborted();
     logger.info("Worker Provider Registry 已就绪", {
-      accountRevision: providerRegistryRuntime.snapshot.sourceRevisions.account,
       configRevision: providerRegistryRuntime.snapshot.sourceRevisions.config,
       event: "zcode_protocol.provider_registry.ready",
       module: "bootstrap.zcode_protocol",
@@ -269,7 +268,6 @@ export async function runZCodeProtocolAgent(
       mcpPort,
       mcpTelemetry: mcpTelemetryTracker,
       sessionStore,
-      syncAccountProviderConfig: activeProviderRegistryRuntime.syncAccountProviderConfig,
       refreshProviderRegistry: async (reason) => {
         await activeProviderRegistryRuntime.runtime.registryService.refresh(reason);
       },
