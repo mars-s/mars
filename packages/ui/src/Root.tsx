@@ -3,8 +3,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { LucideProvider, RefreshCw } from "lucide-react";
 import {
   APP_RUNTIME_PREFERENCES_CHANGED_BROADCAST_CHANNEL,
+  DEFAULT_DYNAMIC_WORKFLOW_MODE,
   DesktopCommandIds,
   appRuntimePreferencesChangedBroadcastPayloadSchema,
+  createDynamicWorkflowClientConfig,
+  type DynamicWorkflowClientConfig,
   type RemoteTarget,
 } from "@zcode/shared";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
@@ -19,7 +22,6 @@ import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { SSHDialog } from "@/SSHDialog.js";
 import { SettingsPage } from "@/SettingsPage.js";
-import { CodingPlanUpgradeDialogProvider } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { WelcomeScreen, type LoginCompleteReason } from "@/WelcomeScreen.js";
 import { setDefaultFileDisplayBasePath } from "@/lib/fileDisplay.js";
 import { countAllUnreadTasks } from "@/lib/unreadTaskCount.js";
@@ -80,6 +82,29 @@ import {
 } from "@/v4/telemetry/ConversationTelemetryAttachment.js";
 
 const DEFAULT_LUCIDE_STROKE_WIDTH = 1.5;
+
+/**
+ * Fail-closed dynamic workflow availability source.
+ *
+ * The previous source was the Z.ai subscription service: its `getDynamicWorkflowClientConfig`
+ * read the rollout from the vendor `/client/configs` envelope, and that service is gone with the
+ * rest of the Z.ai surface. No host capability serves the feature key any more, and the renderer
+ * cannot read the `ZCODE_DYNAMIC_WORKFLOW_MODE` override because Desktop main only writes it into
+ * the Host process env. So the snapshot resolves to the shared default (disabled) until a
+ * vendor-neutral source exists: unknown is treated as not offered, the same verdict the store
+ * already applies to a failed read.
+ *
+ * Module level on purpose: the store keys its request latch and its effect dependency on the
+ * service identity, so a fresh object per render would refetch forever.
+ */
+const DYNAMIC_WORKFLOW_AVAILABILITY_SERVICE = {
+  getDynamicWorkflowClientConfig(): Promise<DynamicWorkflowClientConfig> {
+    return Promise.resolve(
+      createDynamicWorkflowClientConfig(DEFAULT_DYNAMIC_WORKFLOW_MODE, "default"),
+    );
+  },
+};
+
 interface RemoteConnectionOpenPreference {
   preferredKind?: RemoteTarget["kind"];
   preferredWslDistro?: string;
@@ -122,9 +147,7 @@ export function Root(props: RootProps) {
                   <AssistantCodeCommentFeatureProvider
                     enabled={props.assistantCodeCommentCardsEnabled}
                   >
-                    <CodingPlanUpgradeDialogProvider>
-                      <RootInner {...props} />
-                    </CodingPlanUpgradeDialogProvider>
+                    <RootInner {...props} />
                   </AssistantCodeCommentFeatureProvider>
                 </DiffsWorkerPoolProvider>
               </TabStoreProvider>
@@ -172,7 +195,7 @@ function RootInner({
   // 动态工作流灰度快照的唯一取数点：
   // 放在 app 级 ServiceProvider 这一层取一次，自动化页与 run 面板只读。消费方可能位于
   // 工作区级 ServiceProvider 内（远程 Host 的 accessor），由它们取数会拿到另一台 Host 的答案。
-  useDynamicWorkflowAvailabilityLoader(services.codingPlanSubscriptionService);
+  useDynamicWorkflowAvailabilityLoader(DYNAMIC_WORKFLOW_AVAILABILITY_SERVICE);
 
   const { intl, locale } = useZCodeIntl();
   const theme = useZCodeStore((state) => state.theme);
