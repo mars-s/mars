@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { Effect, Schema } from "effect";
 import type { ProviderConfig } from "./protocol.js";
 
@@ -5,12 +7,14 @@ const EnvConfigSchema = Schema.Struct({
   port: Schema.Number,
   host: Schema.String,
   workspace: Schema.String,
+  dataDir: Schema.String,
 });
 
 export interface GatewayConfig {
   port: number;
   host: string;
   workspace: string;
+  dataDir: string;
   provider: ProviderConfig;
 }
 
@@ -20,6 +24,7 @@ export function loadGatewayConfig() {
       port: Number(process.env.MARS_GATEWAY_PORT ?? 3037),
       host: process.env.MARS_GATEWAY_HOST?.trim() || "127.0.0.1",
       workspace: process.env.MARS_WORKSPACE?.trim() || process.cwd(),
+      dataDir: process.env.MARS_DATA_DIR?.trim() || join(homedir(), ".mars"),
     });
 
     return {

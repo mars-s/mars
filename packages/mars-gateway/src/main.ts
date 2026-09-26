@@ -30,7 +30,7 @@ function send(ws: WebSocket, message: GatewayServerMessage) {
 }
 
 const config = await Effect.runPromise(loadGatewayConfig());
-const runtime = new MarsAgentRuntime(config.workspace, config.provider);
+const runtime = new MarsAgentRuntime(config.workspace, config.provider, config.dataDir);
 
 const server = createServer(async (req, res) => {
   try {
@@ -191,4 +191,5 @@ wss.on("connection", (ws) => {
 server.listen(config.port, config.host, () => {
   console.log(`[mars-gateway] local gateway listening on http://${config.host}:${config.port}`);
   console.log(`[mars-gateway] workspace ${config.workspace}`);
+  console.log(`[mars-gateway] data ${config.dataDir}`);
 });
