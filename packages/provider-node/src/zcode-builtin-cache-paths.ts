@@ -17,7 +17,6 @@ export interface ZCodeBuiltinCachePathOptions {
 
 export interface ZCodeBuiltinCachePaths {
   readonly activeFilePath: string;
-  readonly controlFilePath: string;
 }
 
 /** 按平台与 App 版本隔离 Active/LKG；路径本身就是兼容范围。 */
@@ -37,7 +36,6 @@ export function resolveZCodeBuiltinCachePaths(
   );
   return {
     activeFilePath: join(directory, "zcode-builtin.json"),
-    controlFilePath: join(directory, "zcode-builtin-refresh.json"),
   };
 }
 
