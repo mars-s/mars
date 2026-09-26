@@ -7,7 +7,6 @@ import {
   Bot,
   Palette,
   Sun,
-  BarChart3,
   Terminal,
   AlarmClock,
   Anchor,
@@ -149,12 +148,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: FileSearch,
     titleId: "settings.workspaceFileSearch.title",
     groupId: "basics",
-  },
-  {
-    id: "usage",
-    icon: BarChart3,
-    titleId: "settings.usageTitle",
-    groupId: "dataAndStats",
   },
 ];
 

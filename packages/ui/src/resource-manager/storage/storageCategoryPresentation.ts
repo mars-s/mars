@@ -12,7 +12,18 @@ import {
   Route,
 } from "lucide-react";
 import type { StorageCategoryId, StorageCategoryUsage, StorageRootUsage } from "@zcode/shared";
-import { APP_USAGE_MODEL_CHART_COLORS } from "@/settings/usage-stats/appUsageChartPalette.js";
+
+// This palette used to live in @/settings/usage-stats/appUsageChartPalette.ts and was removed
+// together with the coding-plan usage UI. It is storage presentation, not coding-plan surface,
+// so the colours are inlined here unchanged: same entries, same order, same CSS variables.
+const APP_USAGE_MODEL_CHART_COLORS = [
+  "var(--color-usage-chart-1)",
+  "var(--color-usage-chart-2)",
+  "var(--color-usage-chart-3)",
+  "var(--color-usage-chart-4)",
+  "var(--color-usage-chart-5)",
+  "var(--color-usage-chart-6)",
+] as const;
 
 export const STORAGE_CATEGORY_ICONS: Record<StorageCategoryId, typeof Folder> = {
   sessionStore: Database,

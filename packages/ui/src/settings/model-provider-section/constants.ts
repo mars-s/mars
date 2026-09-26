@@ -1,7 +1,6 @@
 import {
   BIGMODEL_PROVIDER_ID,
   buildBigModelApiUrl,
-  buildBigModelCodingPlanPersonalManageUrl,
   BUILTIN_MODEL_PROVIDER_IDS,
   createUuid,
   type OAuthProviderId,
@@ -9,8 +8,6 @@ import {
   ZAI_PROVIDER_ID,
   type BuiltinModelProviderId,
   type UsageQuotaLimit,
-  type UsageEntitlementSubscriptionDetail,
-  type UsageEntitlementSnapshot,
 } from "@zcode/shared";
 import type { ProviderSettingsFormProvider } from "@/lib/providerSettingsFormTypes.js";
 import { getProviderFormLabel } from "@/lib/providerSettingsFormTypes.js";
@@ -21,9 +18,6 @@ export function generateId(): string {
 
 export const PRESET_SUBSCRIPTION_TIMEOUT_MS = 2 * 60 * 1000;
 export const BIGMODEL_REGISTRATION_URL = buildBigModelApiUrl({ ZCODE_ENV }, "/login");
-const BIGMODEL_CODING_PLAN_PERSONAL_MANAGE_URL = buildBigModelCodingPlanPersonalManageUrl({
-  ZCODE_ENV,
-});
 
 export interface PresetProviderSpec {
   id: BuiltinModelProviderId;
@@ -66,71 +60,12 @@ export type CodingPlanStatus =
 
 export type TeamPlanAvailabilityReason = "not-allocated" | "expired" | "credential-unavailable";
 
-interface CodingPlanProviderSpec {
-  id: CodingPlanProviderId;
-  oauthProviderId: OAuthProviderId;
-  label: string;
-  providerName: string;
-  purchaseUrl?: string;
-}
-
-// The Z.ai entries deliberately ship without purchaseUrl: the vendor manage page is
-// not a built-in default any more. StatusCards only renders the "Manage" action when
-// both purchaseUrl and the open handler are present, so an absent URL hides the
-// action instead of producing a dead link.
-export const CODING_PLAN_PROVIDER_SPECS: CodingPlanProviderSpec[] = [
-  {
-    id: BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan,
-    oauthProviderId: ZAI_PROVIDER_ID,
-    label: "Z.ai - Coding Plan",
-    providerName: "Z.ai",
-  },
-  {
-    id: BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan,
-    oauthProviderId: ZAI_PROVIDER_ID,
-    label: "Z.ai - Coding Plan",
-    providerName: "Z.ai",
-  },
-  {
-    id: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-    oauthProviderId: BIGMODEL_PROVIDER_ID,
-    label: "BigModel - Coding Plan",
-    providerName: "BigModel",
-    purchaseUrl: BIGMODEL_CODING_PLAN_PERSONAL_MANAGE_URL,
-  },
-  {
-    id: BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan,
-    oauthProviderId: BIGMODEL_PROVIDER_ID,
-    label: "BigModel- Coding Plan",
-    providerName: "BigModel",
-    purchaseUrl: BIGMODEL_CODING_PLAN_PERSONAL_MANAGE_URL,
-  },
-];
-
-export interface CodingPlanEntitlementState {
-  snapshot: UsageEntitlementSnapshot | null;
-  loading: boolean;
-  error: string | null;
-}
-
 export function resolveModelProviderDisplayName(
   provider: Pick<ProviderSettingsFormProvider, "providerId" | "config">,
 ): string {
-  if (
-    provider.providerId === BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan ||
-    provider.providerId === BUILTIN_MODEL_PROVIDER_IDS.zaiTeamCodingPlan
-  ) {
-    return "Z.ai - Coding Plan";
-  }
-
-  if (provider.providerId === BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan) {
-    return "Start Plan";
-  }
-
-  if (provider.providerId === BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan) {
-    return "Start Plan";
-  }
-
+  // The Z.ai / BigModel Coding Plan and Start Plan label branches were removed with the
+  // coding-plan surface: those provider ids are no longer published by the catalog, and a
+  // hardcoded vendor plan name is exactly the surface being deleted.
   return getProviderFormLabel(provider);
 }
 
@@ -164,8 +99,6 @@ export type ModelProviderNavItem =
       subscriptionBillingCycle?: string | null;
       subscriptionRenewTime?: string | null;
       subscriptionExpireTime?: string | null;
-      subscriptionDetails?: UsageEntitlementSubscriptionDetail[];
-      quotaLimits?: UsageQuotaLimit[];
       /** 官方 Server MCP 额度（服务端下发的总额度）。不在 quota.limits[] 里，单独透传给额度卡片。 */
       mcpQuotaLimit?: UsageQuotaLimit | null;
       purchaseUrl?: string;
@@ -195,8 +128,6 @@ export type ModelProviderNavItem =
       subscriptionBillingCycle?: string | null;
       subscriptionRenewTime?: string | null;
       subscriptionExpireTime?: string | null;
-      subscriptionDetails?: UsageEntitlementSubscriptionDetail[];
-      quotaLimits?: UsageQuotaLimit[];
       /** 官方 Server MCP 额度（服务端下发的总额度）。不在 quota.limits[] 里，单独透传给额度卡片。 */
       mcpQuotaLimit?: UsageQuotaLimit | null;
       purchaseUrl?: string;
