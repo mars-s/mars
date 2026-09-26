@@ -78,8 +78,19 @@ absent, so anything beyond a driven UI check has to be built. `maintain-verifica
 still has no target because there is no `.claude/skills/verify/` feature map; run
 `/create-verification-skill` first.
 
-The phone remote connect is the one check wave 1 touched and has **not** been proven.
-It is the first thing to drive once there is a harness.
+The phone remote connect has been investigated. It is **not** a relay, tunnel or
+QR pairing feature: there is no vendor-hosted control server in this tree. What
+exists is **Bot Channels** (`packages/services/src/bots/`), which lets a phone
+drive the workspace through the operator's own Telegram, Weixin, Feishu or Lark
+bot, plus a generic `webhook` provider for headless use. See
+`verification.md` for the full map and a headless proof.
+
+It is **intact for local workspaces**, which need no network at all. Remote
+(SSH/Docker/WSL) workspaces do need `ZCODE_CDN_BASE_URL` pointed at a self-hosted
+release asset base, because the vendor default was removed in issue #4. That is
+the documented trade in `DECISIONS.md`, not a regression, but it is the one
+behavioural break to tell the owner about. The `mock-cdn` fallback is generated
+by `pnpm prepare:remote-assets`, not committed, so dev needs that run once.
 
 ## Process
 

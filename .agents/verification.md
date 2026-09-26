@@ -131,6 +131,45 @@ rg -n 'ZCODE_TELEMETRY_REPORT_ENDPOINT|ZCODE_ARMS_RUM_ENDPOINT' \
 nettop -P -L 1 -J bytes_in,bytes_out -p $(pgrep -f 'zcode|app-server' | tr '\n' ',' | sed 's/,$//')
 ```
 
+### Check 1 is two different checks, and only one of them is a per-issue gate
+
+The single `z\.ai|bigmodel\.cn|zhipu` pattern above matches **148 lines across 64
+files**, and almost everything it finds beyond the actual hostnames is a
+TypeScript identifier or a display string, not a network call:
+
+- schema discriminants: `"zhipu-account"`, `"zhipu-coding-plan-api-key"`
+- type and function names: `ZhipuAccountMode`, `zaiProviderConfig`
+- i18n values: `"settings.modelProvider.templateGroup.zhipu": "Zhipu"`
+- telemetry label comparisons
+
+Those are the subject of issues #8, #9, #10, #11 and #12. So check 1 as written
+**cannot go green until all five land**, and using it as the done-when for a
+single issue guarantees a false failure. Use the two checks below instead.
+
+```bash
+# 1a. THE PER-ISSUE GATE. Hostnames are what actually get dialled, so this is
+#     the check that belongs on issue #6 and any future endpoint change.
+rg -n 'zcode\.z\.ai|api\.z\.ai|chat\.z\.ai|bigmodel\.cn|open\.bigmodel\.cn|cdn-zcode\.z\.ai|zhipu-ai\.feishu\.cn|https?://z\.ai' \
+  packages/ apps/ config/ scripts/ --glob '!**/generated/**' --glob '!**/*.md'
+
+# 1b. THE PROGRAM END STATE. Keep the original pattern for the last issue in the
+#     de-Z.ai programme, when every identifier and translation is gone too.
+rg -n 'z\.ai|bigmodel\.cn|zhipu' packages/ apps/ config/ scripts/ \
+  --glob '!**/generated/**' --glob '!**/*.md'
+```
+
+**1a is expected to return a short, justified list, not zero.** These survivors
+are deliberate and each has a recorded reason:
+
+| Survivor | Why it stays |
+| --- | --- |
+| `apps/zcode-cli/.../plugins/marketplace.ts` `RETIRED_MARKETPLACE_HOSTS` | The denylist that stops issue #4's retired CDN from being fetched. Removing the literal would reintroduce the traffic it blocks. |
+| `packages/desktop/src/main/desktopMainIpcRemote.ts`, `desktopWindowChrome.ts` | A webview navigation **allowlist** for PayPal checkout, not a call site. Weakening it is an open-redirect regression. |
+| `packages/desktop/electron-builder.config.js` `homepage`, `author.email`, `maintainer` | Package metadata. `deb` packaging via fpm validates all three and fails the artifact stage if they are empty. |
+| `packages/shared/src/model-provider-family.ts` `rootDomain` | A base-URL **classification key**, never a request target. Emptying it would make the trailing-dot FQDN test match everything. |
+
+If you add a hostname to that list, it needs a row here explaining why.
+
 Step 3 is the only one that actually proves it. Steps 1 and 2 prove the code is
 gone, which is necessary but not sufficient.
 
@@ -258,8 +297,96 @@ These need a real provider and cannot be automated here yet.
 
 - Welcome screen shows ChatGPT OAuth and OpenCode Go. No Z.ai, no BigModel.
 - Settings has no pricing, usage, or coding plan section. **Blocked on #9 and #15.**
-- The phone remote connect still connects. **Not yet run.** Wave 1 changed the
-  asset origin resolution, so this one matters and has not been proven.
+- The phone remote connect still connects. **Investigated, not yet executed.** It is
+  Bot Channels, not a relay, and it is intact for local workspaces. See the
+  "Phone remote control" section below.
+
+## Phone remote control
+
+Investigated 2026-09-26. Read this before trusting any older note that calls it a
+"remote connect" or a "relay". Neither is accurate.
+
+**There is no vendor-hosted phone control service in this tree.** What exists is
+Bot Channels, `packages/services/src/bots/`, which lets a phone drive the
+workspace through the operator's *own* bot on Telegram, Weixin, Feishu or Lark.
+The UI entry is `WorkspaceWebRemoteControlTrigger.tsx` in the sidebar footer, and
+the dialog offers exactly those four plus a generic `webhook` provider.
+
+Transport is outbound-only to the operator's own bot. There is no port to open
+and no tunnel. The generic `webhook` provider listens on the headless server's
+`POST /api/bots/webhook`, default port 3030.
+
+| Host | Nature |
+| --- | --- |
+| `api.telegram.org` | Telegram long poll, operator's own bot token |
+| `ilinkai.weixin.qq.com` | Tencent iLink, operator's own bot |
+| `open.feishu.cn` / `open.larksuite.com` | ByteDance, operator's own app |
+| `accounts.feishu.cn` / `accounts.larksuite.com` | ByteDance device-code OAuth |
+
+**Zero Z.ai hosts on this path.** Nothing was neutralised here because nothing
+needed to be. Bot credentials live in the OS keychain via `ICredentialService`,
+not in env, and config is persisted to `~/.zcode/v2/bot-config.v3.json`. No
+secret belongs in `.agents/`, which is committed.
+
+### Status
+
+**Intact for local workspaces.** A local workspace needs no network at all: with
+no `workspaceIdentity` the service uses the in-process task service, so a phone
+can drive it with nothing configured. `git log` confirms no bot file was touched
+by any of the telemetry or CDN removals.
+
+**Remote workspaces need a self-hosted asset origin.** A remote (SSH/Docker/WSL)
+session pulls runtime assets from an origin, and issue #4 removed the vendor
+default. `packages/server/src/remote/remoteAssetCache.ts` now throws with an
+explicit message telling the operator to set `ZCODE_CDN_BASE_URL`. This is the
+documented trade in `DECISIONS.md`, not a bug, but it is a behaviour change worth
+stating to the owner. The `mock-cdn` development fallback is generated by
+`pnpm prepare:remote-assets` and is not committed, so a fresh dev checkout needs
+that run once before remote workspaces work.
+
+### Proving it without a phone
+
+The `webhook` provider is a first-class provider on the same inbound, dispatch and
+reply path as Telegram, so it exercises everything except the phone app and the
+third-party platform hop. **This has not been executed yet.** It writes to the
+data directory, so sandbox it:
+
+```bash
+export ZCODE_DATA_BASE_DIR="$(mktemp -d)"
+export PORT=3399
+node packages/server/dist/entry-http.js &
+```
+
+Seed a `webhook` bot into `$ZCODE_DATA_BASE_DIR/.zcode/v2/bot-config.v3.json`
+with `provider: "webhook"`, `enabled: true`, a `providerUserId`, and
+`allowedWorkspaces: ["*"]`, then POST to `/api/bots/webhook` with
+`{"botId": ..., "userId": ..., "text": "/status", "chatType": "private"}`.
+
+PASS is HTTP 200 with `ok: true` and a non-empty `replies[].text` that is not one
+of `webhookSecretInvalid`, `userNotBound`, `privateChatOnly` or `botDisabled`,
+plus a `bot-state.v3.json` written with `bots.<id>.workspaceId` populated, which
+proves the binding to a workspace landed.
+
+An open socket is a weaker check and proves transport only, not the handshake:
+a bare `ws` client to `ws://127.0.0.1:3399/ws` upgrades and receives
+`clientMode: "web-remote-replayable"`. Loopback is not special-cased for auth;
+`/ws` is unauthenticated on every host, which is why `zcode-server-cli` refuses
+to bind non-loopback at all.
+
+### Security notes found along the way
+
+Pre-existing, not regressions, but on a path the owner wants kept:
+
+- A bot with no `webhookSecretRef` skips authentication entirely
+  (`botsService.ts:2605`), and `entry-http.ts` permits a non-loopback host when no
+  `authToken` is set. That is an unauthenticated remote-command path into the
+  agent if a webhook bot is created carelessly.
+- `POST /api/rpc-host-capability` issues a host capability to any unauthenticated
+  caller. It is one-shot with a 30s TTL, which bounds it.
+- The webhook secret comparison is a non-constant-time `!==`.
+- The name is actively misleading: the component is `WebRemoteControlDialog` and
+  the env vars say `WEB_REMOTE_CONTROL_RELAY`, but the feature is neither web nor
+  a relay. Worth renaming to `mobileRemoteControl` / `botChannel`.
 
 ## Reporting rules
 
