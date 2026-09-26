@@ -1,11 +1,7 @@
 import type { IServiceAccessor, ProviderSettingsView } from "@zcode/services";
 import type { ProviderFamilyConnectionSelection } from "@zcode/shared";
 import type { AccountConnectionLoss } from "@/root/accountConnectionRefreshObserver.js";
-import {
-  resolveFirstSubscribedTeamPlanConnectionWithContext,
-  resolveModelProviderFamilyConnectionProviderId,
-} from "@/lib/modelProviderFamilyConnectionSelection.js";
-import { getEnterprisePricingProducts } from "@/root/oauthTeamPricing.js";
+import { resolveModelProviderFamilyConnectionProviderId } from "@/lib/modelProviderFamilyConnectionSelection.js";
 import { logger } from "@/logger.js";
 
 /** 只计算建议，不替用户保存；闭包固定按钮展示的那个目标，点击时重新校验。 */
@@ -41,7 +37,10 @@ export async function prepareAccountConnectionSwitch(
   if (!isOriginal(view)) return null;
   // 可用性统一取自最新 Account View；权益快照读取随 Z.ai 订阅面一起下线，
   // 目标连接是否可用由 Host 的 accountState 事实裁决。
-  const isAvailable = (selection: ProviderFamilyConnectionSelection, view: ProviderSettingsView) => {
+  const isAvailable = (
+    selection: ProviderFamilyConnectionSelection,
+    view: ProviderSettingsView,
+  ) => {
     const providerId = resolveModelProviderFamilyConnectionProviderId({
       providerFamilyDomain: family,
       selection,
@@ -51,40 +50,20 @@ export async function prepareAccountConnectionSwitch(
       "available"
     );
   };
+  // Only the individual coding plan can be suggested now: enterprise team pricing was the sole
+  // source of a team candidate, and it is gone with the Z.ai billing surface.
   let selection: ProviderFamilyConnectionSelection | undefined;
-  let label: string | undefined;
   if (isAvailable({ kind: "individual-coding-plan" }, view))
     selection = { kind: "individual-coding-plan" };
-  if (!selection) {
-    const pricing = await getEnterprisePricingProducts(services, family);
-    if (pricing.status === "success") {
-      for (const product of pricing.productList) {
-        const contexts = product.teamProjects?.length ? product.teamProjects : [product];
-        for (const context of contexts) {
-          const candidate = resolveFirstSubscribedTeamPlanConnectionWithContext({
-            teamProducts: [{ ...product, teamProjects: [], ...context }],
-          });
-          if (!candidate || JSON.stringify(candidate) === JSON.stringify(original)) continue;
-          if (isAvailable(candidate, view)) {
-            selection = candidate;
-            label =
-              context.organizationName?.trim() ||
-              context.projectName?.trim() ||
-              candidate.organizationId;
-            break;
-          }
-        }
-        if (selection) break;
-      }
-    }
-  }
   if (!selection || !event.isCurrent()) return null;
   const target = selection;
   let running = false;
   let applied = false;
   return {
     selection: target,
-    label,
+    // The organisation/project label only ever came from the removed team candidate, so callers
+    // now always fall back to their i18n title. The key stays to keep the result shape stable.
+    label: undefined,
     async apply(): Promise<"switched" | "stale"> {
       if (running || applied || !event.isCurrent()) return "stale";
       running = true;
