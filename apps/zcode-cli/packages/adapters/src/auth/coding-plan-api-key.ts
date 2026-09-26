@@ -1,7 +1,6 @@
 import type { HttpClientPort, HttpClientRunOptions, TraceContext } from "@zcode/contracts";
-import { resolveBigModelApiOrigin } from "@zcode/shared";
+import { resolveBigModelApiOrigin, resolveZaiBusinessBaseUrl } from "@zcode/shared";
 
-const ZAI_API_HOST = "https://api.z.ai";
 const JSON_CONTENT_TYPE = "application/json";
 const ZCODE_API_KEY_NAME = "zcode-api-key";
 const DEFAULT_ORG_NAME = "默认机构";
@@ -90,11 +89,12 @@ export function createCodingPlanApiKeyResolver(
         );
       }
 
-      const bizToken = await resolveZaiBizToken(options, accessToken, runOptions);
+      const zaiHost = resolveZaiApiHost();
+      const bizToken = await resolveZaiBizToken(options, accessToken, zaiHost, runOptions);
       return resolveBizApiKey(
         {
           authorization: `Bearer ${bizToken}`,
-          host: ZAI_API_HOST,
+          host: zaiHost,
           httpClient: options.httpClient,
           requireSecretKey: true,
           trace: options.trace,
@@ -105,9 +105,19 @@ export function createCodingPlanApiKeyResolver(
   };
 }
 
+/**
+ * Business host for the zai family. No vendor host is built in here: this is the
+ * ZAI_BUSINESS_BASE_URL origin the operator configured, resolved once per resolve call so the
+ * login exchange and the business API call can never diverge onto different hosts.
+ */
+function resolveZaiApiHost(): string {
+  return resolveZaiBusinessBaseUrl(process.env);
+}
+
 async function resolveZaiBizToken(
   options: CodingPlanApiKeyResolverOptions,
   oauthAccessToken: string,
+  zaiHost: string,
   runOptions?: HttpClientRunOptions,
 ): Promise<string> {
   const payload = await requestRemoteData<RemoteZaiBizToken>(
@@ -119,7 +129,7 @@ async function resolveZaiBizToken(
       },
       method: "POST",
       trace: options.trace,
-      url: `${ZAI_API_HOST}/api/auth/z/login`,
+      url: `${zaiHost}/api/auth/z/login`,
     },
     runOptions,
   );
