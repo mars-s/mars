@@ -21,3 +21,25 @@ Format: `- **<what changed>** — <agent> — <issue or reason>`
 - **Pinned every pstack role to `space-bunny-free`.** — ZCode — owner instruction.
 - **`pnpm install` verified clean.** 14.5s against a warm store, exit 0. — ZCode —
   baseline check before touching anything.
+
+## 2026-09-26 — wave 1 lane: provider-config sync (issue #5)
+
+Removed layer 3 of the provider config. `zcode-builtin-remote-synchronizer.ts` (lease/TTL/failure
+backoff hourly scheduler) and `zcode-builtin-download.ts` (the fetch of
+`https://<endpoint>/api/v1/client/configs` followed by a CDN release) are deleted, along with
+`zcodeBuiltinRemoteConfig.ts` in services. 13 files, 520 lines deleted, 36 added.
+
+What survives on purpose: the bundled JSON in `packages/server/tsup.config.ts` stays the single
+source of truth, the Active/LKG file stays a discardable cache of it, and
+`ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` still overrides both for air-gapped installs.
+
+The load-bearing part is the timer. The 60s `setInterval` in `NodeProviderConfigRuntime` used to
+run `refreshZCodeBuiltin()`, which went to the network. It is now created only when a recovery
+listener is registered, so a default install does no background polling at all.
+
+Verified on `main` after the merge: `pnpm typecheck` exit 0, `pnpm lint` exit 0 (70 warnings, all
+pre-existing). Also checked that no consumer still switches on the removed `"skipped"` result.
+
+Left for later: orphaned `zcode-builtin-refresh.json` lease files from old installs are never
+cleaned up, and `onZCodeBuiltinRefreshError` is now a misnomer (it reports recovery-check
+failures, not refreshes).
