@@ -5,7 +5,6 @@ import {
   resolveFirstSubscribedTeamPlanConnectionWithContext,
   resolveModelProviderFamilyConnectionProviderId,
 } from "@/lib/modelProviderFamilyConnectionSelection.js";
-import { hasActiveUsageEntitlementSnapshot } from "@/lib/codingPlanProvider.js";
 import { getEnterprisePricingProducts } from "@/root/oauthTeamPricing.js";
 import { logger } from "@/logger.js";
 
@@ -40,35 +39,21 @@ export async function prepareAccountConnectionSwitch(
   };
   const view = await services.providerSettingsService.getView();
   if (!isOriginal(view)) return null;
-  const isAvailable = async (
-    selection: ProviderFamilyConnectionSelection,
-    snapshot: ProviderSettingsView,
-  ) => {
+  // 可用性统一取自最新 Account View；权益快照读取随 Z.ai 订阅面一起下线，
+  // 目标连接是否可用由 Host 的 accountState 事实裁决。
+  const isAvailable = (selection: ProviderFamilyConnectionSelection, view: ProviderSettingsView) => {
     const providerId = resolveModelProviderFamilyConnectionProviderId({
       providerFamilyDomain: family,
       selection,
     });
-    if (selection.kind !== "team-coding-plan")
-      return (
-        snapshot.providers.find((p) => p.providerId === providerId)?.accountState?.availability ===
-        "available"
-      );
-    // 未选中的 Team 没有可复用的 current 事实。按按钮的具体组织/项目查询，
-    // 不能把团队名单存在或另一个 Team 的权益当成目标可用。
-    const { kind: planKind, ...identity } = selection;
-    const entitlement = await services.usageStatsService.getEntitlementSnapshot({
-      preferredProviderId: providerId,
-      includeSubscription: true,
-      accountAccess: { type: "zhipu-account", family, planKind, ...identity },
-      allowDisabledPreferredProvider: true,
-      requirePreferredProvider: true,
-      allowEnvApiKey: false,
-    });
-    return hasActiveUsageEntitlementSnapshot(entitlement, providerId);
+    return (
+      view.providers.find((p) => p.providerId === providerId)?.accountState?.availability ===
+      "available"
+    );
   };
   let selection: ProviderFamilyConnectionSelection | undefined;
   let label: string | undefined;
-  if (await isAvailable({ kind: "individual-coding-plan" }, view))
+  if (isAvailable({ kind: "individual-coding-plan" }, view))
     selection = { kind: "individual-coding-plan" };
   if (!selection) {
     const pricing = await getEnterprisePricingProducts(services, family);
@@ -80,7 +65,7 @@ export async function prepareAccountConnectionSwitch(
             teamProducts: [{ ...product, teamProjects: [], ...context }],
           });
           if (!candidate || JSON.stringify(candidate) === JSON.stringify(original)) continue;
-          if (await isAvailable(candidate, view)) {
+          if (isAvailable(candidate, view)) {
             selection = candidate;
             label =
               context.organizationName?.trim() ||
@@ -107,7 +92,7 @@ export async function prepareAccountConnectionSwitch(
         const latest = await services.providerSettingsService.refresh(
           "account-connection-switch-confirm",
         );
-        if (!isOriginal(latest) || !(await isAvailable(target, latest)) || !event.isCurrent())
+        if (!isOriginal(latest) || !isAvailable(target, latest) || !event.isCurrent())
           return "stale";
         await services.settingService.update(
           {

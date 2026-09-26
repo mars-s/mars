@@ -1,7 +1,18 @@
 import { create } from "zustand";
 import type { DynamicWorkflowClientConfig } from "@zcode/shared";
-import type { ICodingPlanSubscriptionService } from "@zcode/services";
 import { logger } from "@/logger.js";
+
+/**
+ * Dynamic workflow availability only needs the one capability below. It used to be typed
+ * against the Z.ai subscription service, which is part of the removed vendor surface;
+ * depending on the capability itself keeps the feature while dropping that coupling.
+ * Any host service exposing this method still satisfies the loader.
+ */
+export interface DynamicWorkflowAvailabilityService {
+  getDynamicWorkflowClientConfig(options?: {
+    forceRefresh?: boolean;
+  }): Promise<DynamicWorkflowClientConfig>;
+}
 
 // ============================================================
 // 动态工作流灰度快照在 renderer 的唯一副本
@@ -29,9 +40,9 @@ export interface DynamicWorkflowAvailabilitySnapshot {
 
 interface DynamicWorkflowAvailabilityState extends DynamicWorkflowAvailabilitySnapshot {
   /** 首次取数；同一个 service 出过结果后是 no-op，并发调用共用同一次请求。 */
-  ensureLoaded(service: ICodingPlanSubscriptionService): Promise<void>;
+  ensureLoaded(service: DynamicWorkflowAvailabilityService): Promise<void>;
   /** 绕过闩与 Host 的 1h 快照缓存重取（forceRefresh）。 */
-  refresh(service: ICodingPlanSubscriptionService): Promise<void>;
+  refresh(service: DynamicWorkflowAvailabilityService): Promise<void>;
 }
 
 const INITIAL_SNAPSHOT: DynamicWorkflowAvailabilitySnapshot = {
@@ -42,12 +53,12 @@ const INITIAL_SNAPSHOT: DynamicWorkflowAvailabilitySnapshot = {
 
 let inFlight: Promise<void> | null = null;
 /** 已经出过结果（成功或失败）的 service 实例；同一实例不再重复请求。 */
-let settledService: ICodingPlanSubscriptionService | null = null;
+let settledService: DynamicWorkflowAvailabilityService | null = null;
 
 type PublishSnapshot = (snapshot: DynamicWorkflowAvailabilitySnapshot) => void;
 
 async function loadDynamicWorkflowConfig(
-  service: ICodingPlanSubscriptionService,
+  service: DynamicWorkflowAvailabilityService,
   options: { forceRefresh?: boolean },
   publish: PublishSnapshot,
 ): Promise<void> {

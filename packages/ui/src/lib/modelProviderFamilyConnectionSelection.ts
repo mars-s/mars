@@ -2,10 +2,8 @@ import type {
   EnterpriseCodingPlanPricingProduct,
   ProviderFamilyConnectionSelection,
   ProviderFamilyDomain,
-  UsageEntitlementSnapshot,
 } from "@zcode/shared";
 import { getModelProviderFamilySpec } from "@zcode/shared";
-import { hasActiveUsageEntitlementSnapshot } from "@/lib/codingPlanProvider.js";
 
 export type ModelProviderFamilyConnectionSelection = ProviderFamilyConnectionSelection;
 
@@ -58,24 +56,13 @@ export function resolveFirstSubscribedTeamPlanConnectionWithContext(params: {
 
 export function resolveAutomaticModelProviderFamilyConnectionSelection(params: {
   providerFamilyDomain: ProviderFamilyDomain;
-  codingPlanEntitlement: UsageEntitlementSnapshot | null;
-  startPlanEntitlement: UsageEntitlementSnapshot | null;
   teamProducts?: readonly EnterpriseCodingPlanPricingProduct[];
   /** 首次登录可落到购买入口；修复已有连接时只能选确认可用的套餐。 */
   allowPurchaseEntry?: boolean;
-  /** 当前 Account View 的统一判定优先于旧余额快照，尤其区分待生效与可用。 */
+  /** 当前 Account View 是个人连接可用性的唯一判定来源。 */
   codingPlanAvailable?: boolean;
-  startPlanAvailable?: boolean;
 }): ModelProviderFamilyConnectionSelection | null {
-  const familySpec = getModelProviderFamilySpec(params.providerFamilyDomain);
-
-  if (
-    params.codingPlanAvailable ??
-    hasActiveUsageEntitlementSnapshot(
-      params.codingPlanEntitlement,
-      familySpec.individualCodingPlanProviderId,
-    )
-  ) {
+  if (params.codingPlanAvailable) {
     return {
       kind: "individual-coding-plan",
     };
