@@ -3,6 +3,7 @@
 // 且 plugins.ts 已接近 max-lines 门禁。
 import {
   ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
+  hasOfficialPluginMarketplaceSource,
   zcodeProtocolNotifications,
   zcodePluginsReferenceCatalogParamsSchema,
   zcodePluginsResolveSuggestedReferenceParamsSchema,
@@ -138,6 +139,16 @@ export async function resolveSuggestedPluginReference(
 
   const initial = readState();
   if (initial.entry) return toResult(initial.entry);
+
+  // No catalog origin is configured, so there is nothing to fetch. Refreshing an
+  // unregistered marketplace would only stall for the timeout and then report a
+  // misleading "not found" failure; say the real reason instead.
+  if (!hasOfficialPluginMarketplaceSource()) {
+    return unavailable(
+      "marketplace_refresh_unavailable",
+      "未配置官方插件目录来源（ZCODE_OFFICIAL_MARKETPLACE_SOURCE），无法刷新 zcode-plugins-official",
+    );
+  }
 
   // 旧流程只有官方 Marketplace 刷新完成后才把 missing 结果返回 UI，网络等待期间
   // 没有任何反馈，用户会误以为点击未生效。首次本地检查缺失后先通知同一 operation 进入 loading。

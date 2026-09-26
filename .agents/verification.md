@@ -49,6 +49,32 @@ nettop -P -L 1 -J bytes_in,bytes_out -p $(pgrep -f 'zcode|app-server' | tr '\n' 
 Step 3 is the only one that actually proves it. Steps 1 and 2 prove the code is
 gone, which is necessary but not sufficient.
 
+## The remote asset and marketplace origins are operator-configured
+
+Remote connect and the plugin marketplace both stay, but neither has a built-in
+asset host any more. Nothing is fetched until an operator points the app at
+their own origin.
+
+| Origin | Env var | Unset behaviour |
+| --- | --- | --- |
+| Remote release assets | `ZCODE_CDN_BASE_URL` (build-time `__ZCODE_CDN_BASE_URL__`, dev override `ZCODE_REMOTE_ASSET_CDN_BASE_URL`) | Development uses `mock-cdn`; a packaged build fails with an explicit "no remote asset origin is configured" error |
+| Official marketplace catalog | `ZCODE_OFFICIAL_MARKETPLACE_SOURCE` | The official marketplace is not registered as a remote source, so startup fetches nothing and the store shows only locally seeded built-in plugins |
+| Official plugin store icons | `ZCODE_OFFICIAL_PLUGIN_ASSETS_BASE_URL` | Listings carry no icon and the store falls back to default plugin artwork |
+
+```bash
+# No vendor asset host survives in shipped source.
+rg -n 'cdn-zcode\.z\.ai' packages/ apps/ config/ scripts/ \
+  --glob '!**/node_modules/**' --glob '!**/*.md'
+
+# With nothing configured, remote connect still works in development off mock-cdn.
+node scripts/prepare-prebuilds.mjs
+pnpm dev:desktop   # connect to a phone remote host; no network asset fetch happens
+```
+
+A packaged build with no `ZCODE_CDN_BASE_URL` is expected to fail remote connect
+with the explicit error. That is the intended state until a self-hosted asset
+base is configured; it is not a regression to be "fixed" by restoring a default.
+
 ## Proving the provider change works
 
 ```bash

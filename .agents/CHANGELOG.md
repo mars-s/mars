@@ -9,6 +9,23 @@ Format: `- **<what changed>** — <agent> — <issue or reason>`
 
 ## Unreleased
 
+- **Removed every `cdn-zcode.z.ai` origin from shipped source.** Remote release
+  assets, the official marketplace catalog, official plugin store icons and the
+  suggested-prompt icons no longer have a built-in vendor host; each is now
+  operator-configured via `ZCODE_CDN_BASE_URL`,
+  `ZCODE_OFFICIAL_MARKETPLACE_SOURCE` and `ZCODE_OFFICIAL_PLUGIN_ASSETS_BASE_URL`.
+  Remote connect and the plugin marketplace both stay. Development remote connect
+  still runs off `mock-cdn`; a packaged build with nothing configured now fails
+  with an explicit "no remote asset origin is configured" error instead of
+  reaching a third party. — w1/cdn — issue #4, de-Z.ai-ify the asset CDN path.
+  `packages/desktop/src/main/remoteCdn.ts`,
+  `packages/server/src/remote/remoteAssetCache.ts`,
+  `packages/shared/src/plugin-marketplaces.ts`,
+  `apps/zcode-cli/packages/bootstrap/src/app/official-plugin-definitions.ts`,
+  `apps/zcode-cli/packages/bootstrap/src/zcode-protocol/plugin-reference-catalog.ts`,
+  `packages/ui/src/v4/featureSuggestedPrompts.ts`,
+  `packages/ui/src/v4/ConversationDraftSuggestedPrompts.tsx`.
+
 - **Reverted the Mars fork back to upstream ZCode 3.14.3.** Deleted
   `packages/mars-gateway` and `packages/mars-desktop`, restored the original
   ZCode theme, restored the Z.ai env config. Working tree verified byte-identical

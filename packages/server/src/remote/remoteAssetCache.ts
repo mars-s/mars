@@ -167,7 +167,17 @@ export async function ensureRemoteReleaseDirFromCdn(
   const platformArch = options.platformArch?.trim();
   const version = options.version?.trim();
 
-  if (remoteCdnBaseUrls.length === 0 || !remoteCacheDir || !platformArch || !version) {
+  if (remoteCdnBaseUrls.length === 0) {
+    // Remote assets have no built-in host: the operator has to point remote connect
+    // at a self-hosted release asset base. Never guess one here.
+    throw new Error(
+      "[deploy] no remote asset origin is configured. Set ZCODE_CDN_BASE_URL to a self-hosted " +
+        "release asset base, or ZCODE_REMOTE_ASSET_CDN_BASE_URL to a full version-qualified " +
+        "override, before connecting to a remote host.",
+    );
+  }
+
+  if (!remoteCacheDir || !platformArch || !version) {
     throw new Error(
       `[deploy] production remote assets require remoteCdnBaseUrl or remoteCdnBaseUrls, remoteCacheDir and platformArch ` +
         `(remoteCdnBaseUrl=${options.remoteCdnBaseUrl ?? "<empty>"}, remoteCdnBaseUrls=${JSON.stringify(options.remoteCdnBaseUrls ?? [])}, remoteCacheDir=${options.remoteCacheDir ?? "<empty>"}, platformArch=${options.platformArch ?? "<empty>"}).`,
