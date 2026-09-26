@@ -54,7 +54,11 @@ export interface OfficialPluginDefinition {
   version: string;
 }
 
-const ZAI_AUTHOR = { name: "Z.ai", url: "https://z.ai" } as const;
+// Store listings are attributed by author name only. The vendor homepage used to be
+// hardcoded here as author metadata; it was never an endpoint the app calls, and the
+// store renders the author as plain text, so the name is kept and the URL is dropped
+// instead of adding an operator setting for display metadata.
+const ZAI_AUTHOR = { name: "Z.ai" } as const;
 
 // Store listing icons are not served from a vendor host. Point
 // ZCODE_OFFICIAL_PLUGIN_ASSETS_BASE_URL at a self-hosted asset root (one directory

@@ -74,20 +74,22 @@ interface CodingPlanProviderSpec {
   purchaseUrl?: string;
 }
 
+// The Z.ai entries deliberately ship without purchaseUrl: the vendor manage page is
+// not a built-in default any more. StatusCards only renders the "Manage" action when
+// both purchaseUrl and the open handler are present, so an absent URL hides the
+// action instead of producing a dead link.
 export const CODING_PLAN_PROVIDER_SPECS: CodingPlanProviderSpec[] = [
   {
     id: BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan,
     oauthProviderId: ZAI_PROVIDER_ID,
     label: "Z.ai - Coding Plan",
     providerName: "Z.ai",
-    purchaseUrl: "https://z.ai/manage-apikey/subscription",
   },
   {
     id: BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan,
     oauthProviderId: ZAI_PROVIDER_ID,
     label: "Z.ai - Coding Plan",
     providerName: "Z.ai",
-    purchaseUrl: "https://z.ai/manage-apikey/subscription",
   },
   {
     id: BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,

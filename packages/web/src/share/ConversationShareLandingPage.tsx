@@ -87,8 +87,19 @@ interface Copy {
   artifactCountOther: string;
 }
 
-// 站点首页本身就是下载入口，没有 /download 这个 path（单独的下载链接会 404）。
-const ZCODE_DOWNLOAD_URL = "https://zcode.z.ai";
+// The site home page is the download entry: there is no /download path, because a
+// standalone download link would 404. The vendor host is not built in any more, so
+// the operator-configured site origin is used, and an empty value means there is no
+// download link. Every anchor below is skipped in that case, so no link can render
+// with an empty href.
+function resolveConfiguredSiteOrigin(): string {
+  const env = import.meta.env;
+  return env?.VITE_ZCODE_BASE_URL?.trim() || env?.VITE_ZCODE_ENDPOINT_ORIGIN?.trim() || "";
+}
+
+const ZCODE_DOWNLOAD_URL = resolveConfiguredSiteOrigin();
+// Guards every anchor below: a falsy URL renders no link at all, never href="".
+const hasDownloadLink = ZCODE_DOWNLOAD_URL !== "";
 
 const COPY: Record<ConversationShareLandingLocale, Copy> = {
   "zh-CN": {
@@ -542,9 +553,11 @@ export function ConversationShareLandingPage({
               >
                 {copy.retryOpen}
               </a>
-              <a className="text-brand underline underline-offset-2" href={ZCODE_DOWNLOAD_URL}>
-                {copy.downloadZCode}
-              </a>
+              {hasDownloadLink ? (
+                <a className="text-brand underline underline-offset-2" href={ZCODE_DOWNLOAD_URL}>
+                  {copy.downloadZCode}
+                </a>
+              ) : null}
             </div>
           </ShareContentInset>
         ) : null}
@@ -661,7 +674,7 @@ export function ConversationShareLandingStatus({
             ))}
           </div>
         ) : null}
-        {canRetry || isNotFound ? (
+        {canRetry || (isNotFound && hasDownloadLink) ? (
           <div className="mt-5 flex flex-wrap gap-2">
             {canRetry ? (
               <button
@@ -672,7 +685,7 @@ export function ConversationShareLandingStatus({
                 {copy.retry}
               </button>
             ) : null}
-            {isNotFound ? (
+            {isNotFound && hasDownloadLink ? (
               <a
                 className="rounded-md bg-primary px-4 py-2 text-ui-base text-primary-foreground"
                 href={ZCODE_DOWNLOAD_URL}
