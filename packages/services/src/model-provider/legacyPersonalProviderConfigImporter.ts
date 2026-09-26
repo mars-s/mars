@@ -43,10 +43,10 @@ export function importLegacyPersonalProviderConfig(
     const providerId = legacy.id.trim();
     if (!providerId) continue;
     // 已发布 config.json 也把 builtin:* 标成 custom；保留身份必须先于 source。
-    // The two retired Z.ai / BigModel builtin ids used to map onto pay-per-token API
-    // templates. Those templates are gone from the catalog, so re-creating the rule
-    // would only leave a dangling one: they are dropped here exactly like every other
-    // builtin:* and account:* identity, and the pay-per-token key is no longer migrated.
+    // The retired vendor builtin ids used to map onto pay-per-token API templates. Those
+    // templates are gone from the catalog, so re-creating the rule would only leave a
+    // dangling one: they are dropped here exactly like every other builtin:* and account:*
+    // identity, and the pay-per-token key is no longer migrated.
     if (providerId.startsWith("builtin:") || providerId.startsWith("account:")) continue;
     // Built-in 整体由当前 ZCode Built-in Config 与 Account Overlay 重建；models-dev 已
     // 退役，workspace 也不是全局 Personal 输入。只允许旧自定义 Provider 进入新文件。

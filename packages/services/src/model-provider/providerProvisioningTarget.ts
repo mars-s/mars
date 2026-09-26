@@ -16,7 +16,6 @@ import {
 import type { ICredentialService } from "../credential/credential.js";
 import type { ISettingService } from "../setting/setting.js";
 import type { ProviderRuntime } from "./providerRuntime.js";
-import type { AccountProviderService } from "@zcode/provider";
 import type { IProviderProvisioningTargetService } from "./providerProvisioning.js";
 import {
   PROVIDER_PROVISIONING_OAUTH_CREDENTIAL_KEYS,
@@ -30,7 +29,6 @@ const OAUTH_CREDENTIAL_KEYS = new Set<string>(PROVIDER_PROVISIONING_OAUTH_CREDEN
 export interface ProviderProvisioningTargetOptions {
   readonly providerRuntime: ProviderRuntime;
   readonly personalRepository: PersonalProviderConfigRepository;
-  readonly accountProviderSource: AccountProviderService;
   readonly credentialService: ICredentialService;
   readonly settingService: ISettingService;
   readonly personalConfigFilePath: string;
@@ -83,7 +81,6 @@ export function createProviderProvisioningTarget(
           // 先登记再写入：底层原子写即使在替换完成后才抛错，也必须进入回滚集合。
           applied.settings = true;
           await options.settingService.update({
-            providerFamilyDomain: envelope.accountSettings.providerFamilyDomain ?? undefined,
             providerFamilyConnectionSelections:
               envelope.accountSettings.providerFamilyConnectionSelections,
           });
@@ -107,7 +104,6 @@ export function createProviderProvisioningTarget(
             return personalUpdate;
           });
 
-          await options.accountProviderSource.refresh("provider-provisioning");
           const snapshot =
             await options.providerRuntime.registryService.refresh("provider-provisioning");
           if (
@@ -253,7 +249,6 @@ async function rollback(
         errors.push(new Error("Account Settings 在同步期间被其它操作修改，跳过回滚"));
       } else {
         await options.settingService.update({
-          providerFamilyDomain: before.settings.providerFamilyDomain,
           providerFamilyConnectionSelections: before.settings.providerFamilyConnectionSelections,
         });
       }
@@ -265,7 +260,6 @@ async function rollback(
     return new Error(errors.map(formatError).join("；"));
   }
   try {
-    await options.accountProviderSource.refresh("provider-provisioning-rollback");
     await options.providerRuntime.registryService.refresh("provider-provisioning-rollback");
   } catch (error) {
     return error instanceof Error ? error : new Error(String(error));
@@ -287,7 +281,6 @@ function toProvisioningAccountSettings(
   settings: Awaited<ReturnType<ISettingService["get"]>>,
 ): ProviderProvisioningEnvelope["accountSettings"] {
   return {
-    providerFamilyDomain: settings.providerFamilyDomain ?? null,
     providerFamilyConnectionSelections: settings.providerFamilyConnectionSelections ?? {},
   };
 }

@@ -38,8 +38,9 @@ interface OffPeakTaskServiceDeps {
   resolveCodingPlanSupport: () => Promise<OffPeakCodingPlanSupport>;
   /** 只返回安全 hostname；解析失败返回空串，不能影响创建业务结果。 */
   resolveTelemetryProviderName: () => Promise<string>;
-  /** 用当前完整 Registry 解析并校验固定 Off-Peak Provider 的选择。 */
+  /** 用当前完整 Registry 解析并校验调用方指定 Provider 的选择。 */
   resolveModelSelection: (input: {
+    readonly providerId: string;
     readonly modelId?: string;
     readonly reasoningLevel?: string;
   }) => Promise<
@@ -147,6 +148,7 @@ export class OffPeakTaskService implements IOffPeakTaskService {
   /** Host 派发前的窄检查；最终执行仍由目标 Agent ModelFactory 重新校验。 */
   async validateDispatchModelSelection(selection: ModelSelection): Promise<boolean> {
     const resolved = await this.deps.resolveModelSelection({
+      providerId: selection.providerId,
       modelId: selection.modelId,
       ...(selection.options?.reasoningLevel
         ? { reasoningLevel: selection.options.reasoningLevel }
@@ -179,6 +181,7 @@ export class OffPeakTaskService implements IOffPeakTaskService {
       };
     }
     const selection = await this.deps.resolveModelSelection({
+      providerId: params.modelSelection.providerId,
       modelId: params.modelSelection.modelId,
       ...(params.modelSelection.options?.reasoningLevel
         ? { reasoningLevel: params.modelSelection.options.reasoningLevel }
@@ -382,6 +385,7 @@ export class OffPeakTaskService implements IOffPeakTaskService {
     const candidate = params.modelSelection ?? existing.modelSelection;
     if (!candidate) return null;
     const selection = await this.deps.resolveModelSelection({
+      providerId: candidate.providerId,
       modelId: candidate.modelId,
       ...(candidate.options?.reasoningLevel
         ? { reasoningLevel: candidate.options.reasoningLevel }
