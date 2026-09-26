@@ -10,11 +10,11 @@ Stage plan, issue index, wave status. Read `CONTEXT.md` first.
 
 | # | Issue | Status |
 | --- | --- | --- |
-| [#2](https://github.com/mars-s/mars/issues/2) | Record a verified green build on the reverted tree | review |
+| [#2](https://github.com/mars-s/mars/issues/2) | Record a verified green build on the reverted tree | done |
 
-`pnpm install` and `pnpm typecheck` both exit 0. `pnpm lint` and `pnpm fmt:check`
-still need recording. See `verification.md` for the caveat that typecheck
-excludes `apps/zcode-cli`.
+`pnpm install`, `pnpm typecheck` and `pnpm lint` all exit 0. `pnpm fmt:check` exits 1
+on 31 pre-existing `bots/` files and is therefore not a gate. See `verification.md`
+for the caveat that typecheck excludes `apps/zcode-cli`.
 
 ## Stage 1a. Stop phoning home
 
@@ -22,10 +22,15 @@ The top priority. Nothing else in stage 1 matters until this is provably done.
 
 | # | Issue | Status | Owner |
 | --- | --- | --- | --- |
-| [#3](https://github.com/mars-s/mars/issues/3) | Stop ARMS RUM and event telemetry | in flight | worker, `w1/telemetry` |
-| [#4](https://github.com/mars-s/mars/issues/4) | Stop the remote asset CDN fetch | in flight | worker, `w1/cdn` |
-| [#5](https://github.com/mars-s/mars/issues/5) | Stop the remote provider-config sync | in flight | worker, `w1/provider-sync` |
-| [#6](https://github.com/mars-s/mars/issues/6) | Neutralise remaining hardcoded endpoints | todo | after the three above |
+| [#3](https://github.com/mars-s/mars/issues/3) | Stop ARMS RUM and event telemetry | done | merged, 13.4k lines deleted |
+| [#4](https://github.com/mars-s/mars/issues/4) | Stop the remote asset CDN fetch | done | merged, 3 env vars now opt-in |
+| [#5](https://github.com/mars-s/mars/issues/5) | Stop the remote provider-config sync | done | merged, hourly poll removed |
+| [#6](https://github.com/mars-s/mars/issues/6) | Neutralise remaining hardcoded endpoints | todo | next |
+
+Wave 1 shipped on `main`. After the three merges: `pnpm install --frozen-lockfile` exit 0,
+`pnpm typecheck` exit 0, `pnpm lint` exit 0 (70 pre-existing warnings). Vendor-host lines
+across `packages/ apps/ config/ scripts/` went from 68 to 64, in 30 files down to 27. What
+is left is auth and provider-catalog endpoints, not background traffic, and that is stage 1c.
 
 ## Stage 1b. Unblock the type cascade
 

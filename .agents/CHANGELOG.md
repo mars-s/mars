@@ -60,3 +60,62 @@ pre-existing). Also checked that no consumer still switches on the removed `"ski
 Left for later: orphaned `zcode-builtin-refresh.json` lease files from old installs are never
 cleaned up, and `onZCodeBuiltinRefreshError` is now a misnomer (it reports recovery-check
 failures, not refreshes).
+
+## 2026-09-26 — wave 1 lane: asset CDN (issue #4)
+
+`DEFAULT_CDN_BASE_URL = https://cdn-zcode.z.ai` is gone. `resolveRemoteCdnBaseUrls` returns
+`[]` when nothing is configured, which promotes the local mock-CDN path that
+`remoteAssetDeployDecision` already preferred, rather than deleting the remote path. Three env
+vars now carry the whole contract: `ZCODE_CDN_BASE_URL`, `ZCODE_OFFICIAL_MARKETPLACE_SOURCE`
+and `ZCODE_OFFICIAL_PLUGIN_ASSETS_BASE_URL`.
+
+The plugin engine was not touched. `parseMarketplaceSourceInput` still accepts directory, file,
+git, github and url sources, and the built-in official plugins are still seeded at startup from
+`OFFICIAL_PLUGIN_DEFINITIONS`, so the marketplace survives; what is gone is the remote/community
+portion of the catalog, which `DECISIONS.md` entry 4 already accepted.
+
+I then fixed `.env.example` myself. It still shipped `ZCODE_CDN_BASE_URL=https://cdn-zcode.z.ai`
+and `ZCODE_REMOTE_ASSET_CDN_BASE_URL=https://cdn-zcode.z.ai/...`, so a developer copying it
+would have silently undone the whole lane. Both are now empty and documented as
+operator-configured, with the two new vars added.
+
+## 2026-09-26 — wave 1 lane: telemetry (issue #3)
+
+The vendor telemetry path is gone: the `@arms/rum-electron` dependency and its patch, 9
+desktop `*Telemetry.ts` aggregators, the ARMS bootstrap and RUM bridge, the crash-capture
+remote reporter, the whole `@zcode/telemetry` CLI package (OTLP exporter, bootstrap, agent trace
+runtime), and the shared `ZCODE_TELEMETRY_*` / `ZCODE_ARMS_RUM_ENDPOINT` surface. 129 files,
+13,417 lines deleted.
+
+Two behaviours worth remembering:
+
+  `reportTelemetryEvent` stays a platform method because 8 UI modules call it, but its main-side
+  channel is now `DiscardTelemetryEvent` and resolves without doing anything. Deleting the method
+  would have left 8 renderers with a rejected `ipcRenderer.invoke`.
+
+  `isZCodeAgentTelemetryEnvKey` was replaced by an explicit literal `OTEL_*` guard rather than
+  deleted. Removing it outright would have let OTEL credentials flow into Bash and MCP
+  subprocesses, which is the confused-deputy problem it existed to stop.
+
+`crashReporter` now runs with `uploadToServer: false`, so crash dumps stay local.
+
+### The one bug the worker's own verification missed
+
+The worker removed the ARMS patch from `pnpm-lock.yaml` and deleted the patch file, but left
+`pnpm.patchedDependencies` in the root `package.json` still pointing at it. `pnpm install` died
+with `ENOENT: no such file or directory, open 'patches/@arms__rum-electron@0.0.3.patch'`. The
+worker's `typecheck` and `lint` both passed because it ran them against a pre-existing
+`node_modules` without reinstalling. Removing the declaration makes
+`pnpm install --frozen-lockfile` exit 0 with `Packages: -243`.
+
+The lesson for every future wave in this repo: **a lockfile or manifest change is not verified
+until `pnpm install --frozen-lockfile` has been run after it.** `pnpm typecheck` and
+`pnpm lint` prove nothing about installability.
+
+### Known second channel, deliberately not touched
+
+`packages/desktop/src/main/localTtft*` still exports OTLP, but only to an endpoint the user
+configures via `OTEL_EXPORTER_OTLP_*`. It contains no hardcoded vendor host and was out of scope
+for issue #3. It is a second telemetry channel and should be a deliberate decision, not an
+accident. Same for the CLI MCP telemetry tracker, which reports over local IPC to the app and
+never to the network; its desktop consumer is gone, so its output now has nowhere to land.
