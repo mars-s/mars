@@ -85,7 +85,12 @@ It is the first thing to drive once there is a harness.
 
 | # | Issue | Status |
 | --- | --- | --- |
-| [#16](https://github.com/mars-s/mars/issues/16) | Resolve the language conflict in AGENTS.md | todo |
+| [#16](https://github.com/mars-s/mars/issues/16) | Resolve the language conflict in AGENTS.md | done |
+
+Resolved by translating `AGENTS.md` to English only and replacing the conflicting
+rule with "When fixing a bug, comment in English on the cause and on the reasoning
+behind the fix." All 61 backticked code spans were kept byte-identical and the file
+now contains no Han characters.
 
 ## Later stages, not yet planned
 
