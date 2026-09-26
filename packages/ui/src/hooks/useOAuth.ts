@@ -6,12 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OAuthProviderId, OAuthProviderMeta } from "@zcode/shared";
-import {
-  BIGMODEL_PROVIDER_ID,
-  isCredentialDecryptError,
-  resolveSafeTelemetryHostname,
-  ZAI_PROVIDER_ID,
-} from "@zcode/shared";
+import { isCredentialDecryptError, resolveSafeTelemetryHostname } from "@zcode/shared";
 import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { LoginEntryPurpose } from "@/store/index.js";
@@ -87,9 +82,9 @@ export function useOAuth() {
         }
 
         platform.registerOAuthState({ state, provider: startedProvider });
-        setOAuthPollingActive(
-          startedProvider === ZAI_PROVIDER_ID || startedProvider === BIGMODEL_PROVIDER_ID,
-        );
+        // Any provider that returns an authorize URL needs the callback poll running.
+        // The Z.ai / BigModel special case is gone together with those providers.
+        setOAuthPollingActive(true);
         platform.openExternal(authorizeUrl);
         void reportAppTelemetryEvent(
           platform,

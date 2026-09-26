@@ -12,7 +12,6 @@ import {
   resolveKnownProviderCodeFailureReason,
   resolveLegacyProviderEnvelopeCode,
   resolveStableTransportCodeAttribution,
-  resolveTrustedProviderCodeFailureReason,
 } from "@/lib/chatErrorAttributionEvidence.js";
 import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
 
@@ -185,11 +184,6 @@ export function resolveTelemetryAttribution(params: {
   const trustedProviderBusinessCode = providerId
     ? params.error.attribution?.providerErrorCode?.trim() || params.error.code?.trim() || ""
     : "";
-  const trustedProviderReason = resolveTrustedProviderCodeFailureReason({
-    providerId: params.error.attribution?.providerId,
-    providerErrorCode: params.error.attribution?.providerErrorCode,
-    errorCode: params.error.code,
-  });
   const resolve = (
     failureReason: string,
     inferredSource: TelemetryErrorSource = "",
@@ -232,16 +226,6 @@ export function resolveTelemetryAttribution(params: {
       // reason 自身携带的更窄边界；否则 EPIPE 和本地 provider 配置错误会被写进 provider 桶。
       return { errorSource: unambiguousSource, failureReason: structuredReason };
     }
-    if (
-      explicitSource === "provider" &&
-      structuredReason === "rate_limited" &&
-      params.error.attribution?.retryable === false &&
-      trustedProviderReason === "quota_exhausted"
-    ) {
-      // Bug 原因：adapter 的 reason 同时承担运行时失败分类，终态套餐额度码因此统一落成
-      // rate_limited；telemetry 只对可信 builtin + 非重试事实规范为业务根因 quota_exhausted。
-      return { errorSource: "provider", failureReason: "quota_exhausted" };
-    }
     // Bug 原因：旧实现先归一化 reason，再把所有非空 reason 统一反推成 provider，
     // 会把 proxy_error/provider_not_configured 等已知事实归错桶。source 必须使用同一份证据解析；
     // invalid_request/rate_limited 等歧义 reason 缺少上游证据时保持空值。
@@ -281,12 +265,10 @@ export function resolveTelemetryAttribution(params: {
     return resolve(stableAttribution.reason, stableAttribution.source);
   }
 
-  // 修复原因：130x/300x 等业务码是 BigModel/Z.AI 的 provider 局部词表，不能把自定义
+  // 修复原因：130x/300x 等业务码是单个 vendor 的 provider 局部词表，不能把自定义
   // provider 的同名 code 误归因为套餐到期或配额耗尽；缺少 provider 身份时也只能退回
   // HTTP 状态码/受控文案证据，避免把通用 error.code 当成全局业务码。
-  if (trustedProviderReason) {
-    return resolve(trustedProviderReason, "provider");
-  }
+  // 那条按 builtin provider 身份放行业务码的分支已随 provider family 一起下线。
   if (
     params.error.attribution?.source === "provider" &&
     isGenericProviderInvalidRequestCode(trustedProviderBusinessCode)

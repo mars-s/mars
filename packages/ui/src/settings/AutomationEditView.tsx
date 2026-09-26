@@ -1485,33 +1485,9 @@ export function AutomationEditView({
     if (!modelSelectionView) return [];
     return buildAutomationModelSelectGroups({
       selectedProvider: ZCODE_AGENT_PROVIDER,
-      labels: {
-        apiKeyLabel: intl.formatMessage({ id: "settings.modelProvider.apiKey" }),
-        apiKeyBadgeLabel: intl.formatMessage({
-          id: "settings.modelProvider.connectionMode.apiKeyBadge",
-        }),
-        codingPlanLabel: intl.formatMessage({
-          id: "settings.modelProvider.connectionMode.codingPlan",
-        }),
-        codingPlanBadgeLabel: intl.formatMessage({
-          id: "settings.modelProvider.connectionMode.codingPlanBadge",
-        }),
-        startPlanLabel: intl.formatMessage({
-          id: "settings.modelProvider.connectionMode.startPlan",
-        }),
-        startPlanBadgeLabel: intl.formatMessage({
-          id: "settings.modelProvider.connectionMode.startPlanBadge",
-        }),
-        teamPlanBadgeLabel: intl.formatMessage({
-          id: "settings.modelProvider.connectionMode.teamPlanBadge",
-        }),
-        teamPlanFallbackLabel: intl.formatMessage({
-          id: "settings.modelProvider.connectionMode.teamPlan",
-        }),
-      },
       registrySelectionView: modelSelectionView,
     });
-  }, [intl, modelSelectionView]);
+  }, [modelSelectionView]);
   const isSelectedConversationWorkspace = selectedWorkspace?.workspacePurpose === "conversation";
   // automation 数据只持久化 workspaceKey/path，编辑态曾直接把 conversation
   // backing path 当项目展示成 default。匹配当前 canonical 候选恢复 purpose 后，

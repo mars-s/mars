@@ -1,22 +1,14 @@
-import type { OAuthProviderId } from "@zcode/shared";
-import { BIGMODEL_PROVIDER_ID, ZAI_PROVIDER_ID } from "@zcode/shared";
 import { LogInIcon } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
-import bigModelIcon from "@/assets/provider-icons/logo-bigmodel.svg";
-import zaiIcon from "@/assets/provider-icons/logo-zai.svg";
 
-const OAUTH_PROVIDER_ICON_SRC: Partial<Record<OAuthProviderId, string>> = {
-  [BIGMODEL_PROVIDER_ID]: bigModelIcon,
-  [ZAI_PROVIDER_ID]: zaiIcon,
-};
-
-export function renderOAuthProviderIcon(provider: OAuthProviderId, className?: string) {
-  const src = OAUTH_PROVIDER_ICON_SRC[provider];
-  if (!src) {
-    return <LogInIcon className={cn("shrink-0", className)} />;
-  }
-
-  return (
-    <img src={src} alt="" aria-hidden="true" className={cn("shrink-0 object-contain", className)} />
-  );
+/**
+ * Generic OAuth provider icon.
+ *
+ * The Z.ai / BigModel per-provider icon table is gone with those OAuth providers, and no
+ * replacement vendor is registered here, so every provider renders the neutral login glyph.
+ * The `provider` argument is kept because this file backs the `@zcode/ui/oauth-provider-icon`
+ * entry point, which is consumed from outside this package.
+ */
+export function renderOAuthProviderIcon(_provider: string, className?: string) {
+  return <LogInIcon className={cn("shrink-0", className)} />;
 }

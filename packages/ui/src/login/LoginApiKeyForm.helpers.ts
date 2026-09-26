@@ -1,5 +1,5 @@
 import { isApiKeyAccess, resolveProviderTemplateName } from "@zcode/provider";
-import { type AppSettings, type Locale } from "@zcode/shared";
+import { type Locale } from "@zcode/shared";
 import type { ModelSelectionView, ProviderSettingsView } from "@zcode/services";
 import { encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 
@@ -43,19 +43,6 @@ export function shouldShowLoginApiKeyLink(
   apiKeyUrl: string | undefined,
 ): boolean {
   return Boolean(apiKeyUrl) && apiKeyValue.trim().length === 0;
-}
-
-export function buildLoginApiKeySkipSettings(
-  now: number,
-): Pick<AppSettings, "providerFamilyDomainUpdatedAt" | "providerFamilyDomainMigrated"> {
-  // Skip only means the user declined to enter a key for now. The API key entry is no
-  // longer tied to a vendor family, so nothing is written to providerFamilyDomain here:
-  // leaving it untouched keeps every family visible in the model picker instead of
-  // pinning the user to a family the catalog no longer ships.
-  return {
-    providerFamilyDomainUpdatedAt: now,
-    providerFamilyDomainMigrated: true,
-  };
 }
 
 export function buildLoginApiKeyDefaultModelPreferenceFromSelection(

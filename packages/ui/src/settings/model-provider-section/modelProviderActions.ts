@@ -14,10 +14,6 @@ export async function confirmAndDeleteModelProvider({
   intl: IntlInstance;
   deleteProvider: (providerId: string) => Promise<void>;
 }) {
-  if (provider.config.group === "zai-family" || provider.config.group === "bigmodel-family") {
-    return;
-  }
-
   logger.info("[ModelProviderSection] 请求删除自定义模型供应商", {
     providerId: provider.providerId,
     providerName: getProviderFormLabel(provider),

@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   DesktopCommandIds,
-  type AppSettings,
   type IPlatformService,
   type RemoteTarget,
   type UserInfo,
@@ -12,7 +11,6 @@ import type { IServiceAccessor } from "@zcode/services";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
-import { resolveLogoutProviderFamilyDomain } from "@/lib/providerFamilyDomainSettings.js";
 import { isRendererReloadNavigation } from "@/lib/rendererNavigation.js";
 import { parseWslUncWorkspacePath } from "@/lib/wslUncWorkspace.js";
 import { logger } from "@/logger.js";
@@ -81,10 +79,9 @@ export function useRootWorkspaceActions({
   preferDirectoryBrowser,
   openDirectoryBrowser,
   refreshProviderState,
-  updateAppSettings,
   setOAuthError,
   setUser,
-  onProviderFamilyDomainClearedAfterLogout,
+  onLoggedOut,
   userId,
   onOpenRemoteConnection,
   workbenchGroupClientMode = "desktop-continuous",
@@ -101,10 +98,9 @@ export function useRootWorkspaceActions({
   preferDirectoryBrowser: boolean;
   openDirectoryBrowser?: () => void;
   refreshProviderState: () => Promise<void>;
-  updateAppSettings: (patch: Partial<AppSettings>) => Promise<void>;
   setOAuthError: (error: string | null) => void;
   setUser: (user: UserInfo | null) => void;
-  onProviderFamilyDomainClearedAfterLogout?: () => void;
+  onLoggedOut?: () => void;
   userId?: string;
   onOpenRemoteConnection?: (preference?: OpenRemoteConnectionPreference) => void;
   workbenchGroupClientMode?: ZCodeTaskClientMode;
@@ -323,21 +319,11 @@ export function useRootWorkspaceActions({
       },
       "Root",
     );
-    const settingsBeforeLogout = await services.settingService.get();
-    const nextProviderFamilyDomain = resolveLogoutProviderFamilyDomain({
-      currentDomain: settingsBeforeLogout.providerFamilyDomain,
-    });
     await services.oauthService.logout();
-    await updateAppSettings({
-      providerFamilyDomain: (nextProviderFamilyDomain ?? "") as AppSettings["providerFamilyDomain"],
-      providerFamilyDomainUpdatedAt: Date.now(),
-      providerFamilyDomainMigrated: true,
-    });
-    if (!nextProviderFamilyDomain) {
-      onProviderFamilyDomainClearedAfterLogout?.();
-    }
-    // ZAI/BigModel provider 已恢复为 App 登录镜像。
-    // 派生 Coding/Start key 由 OAuth logout 的 host hook 统一清理，Root 只负责刷新展示态。
+    // The provider family setting is gone, so logout no longer writes any family state.
+    // The caller is told to reopen the login entry, exactly as before: after signing out the
+    // user has no account-backed provider left and must connect one or paste a key.
+    onLoggedOut?.();
     setOAuthError(null);
     setUser(null);
     // 退出登录后刷新 Account Source 与 Registry，避免继续展示退出前的 Provider 状态。
@@ -349,14 +335,11 @@ export function useRootWorkspaceActions({
     intl,
     requestConfirmation,
     refreshProviderState,
-    onProviderFamilyDomainClearedAfterLogout,
+    onLoggedOut,
     platform,
     services.oauthService,
-    services.modelSelectionService,
-    services.settingService,
     setOAuthError,
     setUser,
-    updateAppSettings,
     userId,
   ]);
 
