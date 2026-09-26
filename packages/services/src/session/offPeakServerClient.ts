@@ -10,10 +10,7 @@ import {
   REQUEST_ID_HEADER_NAME,
 } from "#src/providers/api/requestIdHeaders.js";
 import { buildZCodeSourceHeaders } from "#src/providers/sourceHeaders.js";
-import {
-  buildOffPeakPlanIdentityHeaders,
-  type OffPeakCredentialSnapshot,
-} from "./offPeakRuntimeModel.js";
+import type { OffPeakCredentialSnapshot } from "./offPeakRuntimeModel.js";
 
 /** 服务端准入态（两轴状态机的服务端轴）。 */
 export const offPeakTicketStateSchema = z.enum([
@@ -76,7 +73,7 @@ const takeNumberAvailabilityResponseSchema = z
   })
   .passthrough();
 
-/** 业务错误体（HTTP 非 2xx 时尽力解析；zai 网关惯例 code/msg，字段缺失容忍）。 */
+/** Business error body: parsed best-effort on a non-2xx response; the gateway uses the code/msg convention and missing fields are tolerated. */
 const errorBodySchema = z
   .object({
     code: z.number().optional(),
@@ -160,7 +157,6 @@ export function createOffPeakServerClient(deps: OffPeakServerClientDeps): OffPea
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         authorization: `Bearer ${credentials.jwt}`,
         "x-coding-plan-api-key": credentials.codingPlanApiKey,
-        ...buildOffPeakPlanIdentityHeaders(credentials),
       });
       const response = await fetchImpl(`${origin}/api/v1/off-peak${path}`, {
         method,
@@ -180,7 +176,6 @@ export function createOffPeakServerClient(deps: OffPeakServerClientDeps): OffPea
         // 可恢复的服务端拒绝使用 warn；只记录契约元数据，禁止记录凭证原文、指纹或响应体。
         deps.logger.warn(undefined, "off-peak request rejected", {
           bizCode: errorBody.code,
-          credentialKind: credentials.kind,
           httpStatus: response.status,
           method,
           path,

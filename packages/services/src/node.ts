@@ -128,24 +128,12 @@ export { createOAuthProviderLogoutHandler } from "./oauth/oauthProviderLogout.js
 export { OAuthCredentialRepo } from "./oauth/repo/oauthCredentialRepo.js";
 export { ensureDeviceMid } from "./device/deviceMid.js";
 export type { EnsureDeviceMidOptions } from "./device/deviceMid.js";
-export type { AccountRequestAuthResolver } from "./model-provider/accountProviderRequestAuthService.js";
 export { createAccountProviderCredentialStore } from "./model-provider/accountProviderCredentialStore.js";
 export type {
   AccountProviderCredentialStore,
   AccountProviderCredentialStoreOptions,
 } from "./model-provider/accountProviderCredentialStore.js";
 export { importLegacyPersonalProviderConfig } from "./model-provider/legacyPersonalProviderConfigImporter.js";
-export {
-  createAccountProviderConfigSource,
-  createAccountProviderConnectionResolver,
-  resolveCurrentAccountAccess,
-} from "./model-provider/accountProviderConnectionResolver.js";
-export { bindAccountProviderInvalidation } from "./model-provider/accountProviderInvalidation.js";
-export type {
-  AccountProviderConfigSourceOptions,
-  AccountProviderConnectionResolverOptions,
-  AccountProviderConnectionSettings,
-} from "./model-provider/accountProviderConnectionResolver.js";
 export {
   createProviderConfigRuntime,
   ProviderConfigRuntime,
@@ -178,10 +166,6 @@ export {
   IModelSelectionService,
   IProviderSettingsService,
 } from "./model-provider/providerFacadeServices.js";
-export { createAccountRequestAuthService } from "./model-provider/accountRequestAuthService.js";
-export type { IAccountRequestAuthService } from "./model-provider/accountRequestAuthService.js";
-export { createAccountProviderRequestAuthService } from "./model-provider/accountProviderRequestAuthService.js";
-export { createAccountProviderCredentialService } from "./model-provider/accountProviderCredentialService.js";
 // Storage：service 与 adapters 工厂；desktop host 负责组装（Worker runner 在 desktop 包内）
 export { createStorageService } from "./storage/app/storageService.js";
 export type {
@@ -254,18 +238,12 @@ export {
   createOffPeakOriginResolver,
   resolveOffPeakCredentials,
   resolveOffPeakCodingPlanSupport,
-  resolveOffPeakMockUpstream,
   OffPeakCodingPlanUnavailableError,
   OffPeakCredentialsUnavailableError,
   OffPeakModelUnavailableError,
   OffPeakPermanentDispatchError,
 } from "./session/offPeakRuntimeModel.js";
 export { createServiceLogger } from "./logger/serviceLogger.js";
-export {
-  buildOfficialMcpAuthHeaders,
-  createOfficialMcpAuthHeadersResolver,
-  resolveOfficialMcpCredentials,
-} from "./official-mcp/officialMcpCredentials.js";
 export {
   computeAutomationNextRunAt,
   computeNextRunAt,
@@ -325,9 +303,8 @@ import { GitCommitMessageGenerator } from "./git/gitCommitMessageGenerator.js";
 import { createGitCheckpointService } from "./git/gitCheckpointService.js";
 import { createSystemService } from "./system/systemService.js";
 import { createTerminalService } from "./terminal/terminalService.js";
-import { createSettingServiceWithMigrations } from "./setting/settingService.js";
+import { createSettingService } from "./setting/settingService.js";
 import { createOnboardingRecordService } from "./onboarding/onboardingRecordService.js";
-import { createLegacyTeamOrganizationResolver } from "./model-provider/legacyTeamOrganizationResolver.js";
 import { createObservableSettingService } from "./setting/observableSettingService.js";
 import { createCredentialService } from "./credential/credentialService.js";
 import { createBroadcastService } from "./broadcast/broadcastService.js";
@@ -347,16 +324,6 @@ import { isCurrentOAuthCredentialRequest } from "#src/oauth/oauthUnauthorizedReq
 import { createOAuthProviderLogoutHandler } from "./oauth/oauthProviderLogout.js";
 import { OAuthCredentialRepo } from "./oauth/repo/oauthCredentialRepo.js";
 import { readLegacyZCodeConfigProviders } from "./model-provider/legacyZCodeConfigProviderReader.js";
-import { createAccountProviderCredentialStore } from "./model-provider/accountProviderCredentialStore.js";
-import { createAccountProviderCredentialService } from "./model-provider/accountProviderCredentialService.js";
-import { createAccountProviderRequestAuthService } from "./model-provider/accountProviderRequestAuthService.js";
-import {
-  createAccountProviderConfigSource,
-  resolveCurrentAccountAccess,
-} from "./model-provider/accountProviderConnectionResolver.js";
-import { bindAccountProviderInvalidation } from "./model-provider/accountProviderInvalidation.js";
-import { AccountProviderApiClient } from "./model-provider/accountProviderApiClient.js";
-import { AccountProviderApiKeyResolver } from "./model-provider/accountProviderApiKeyResolver.js";
 import { createProviderConfigRuntime } from "./model-provider/providerConfigRuntime.js";
 import {
   createProviderRuntimeFromConfigRuntime,
@@ -377,10 +344,6 @@ import {
 import { createProviderProvisioningTarget } from "./model-provider/providerProvisioningTarget.js";
 import { IProviderProvisioningTargetService } from "./model-provider/providerProvisioning.js";
 import { resolveClientConfigPlatform } from "./runtime-tools/clientPlatform.js";
-import {
-  createAccountRequestAuthService,
-  type IAccountRequestAuthService,
-} from "./model-provider/accountRequestAuthService.js";
 import { createClientConfigService } from "./client-config/clientConfigService.js";
 import { IClientConfigService } from "./client-config/clientConfig.js";
 import { createClientScenesService } from "./client-scenes/clientScenesService.js";
@@ -426,9 +389,7 @@ import {
   createOffPeakOriginResolver,
   resolveOffPeakCredentials,
   resolveOffPeakCodingPlanSupport,
-  resolveOffPeakMockUpstream,
 } from "./session/offPeakRuntimeModel.js";
-import { createOfficialMcpAuthHeadersResolver } from "./official-mcp/officialMcpCredentials.js";
 import {
   createOfficialMcpTrustedOriginRegistry,
   OFFICIAL_MCP_DEV_TRUSTED_ORIGINS_ENV,
@@ -480,9 +441,6 @@ import {
   resolveSafeEndpointHostname,
   ZCODE_JWT_INVALID_BROADCAST_CHANNEL,
   formatLogPrefix,
-  OFF_PEAK_PROVIDER_IDS,
-  BIGMODEL_PROVIDER_ID,
-  type ProviderFamilyDomain,
   type ServiceAuthorityMode,
   resolveRuntimeZCodeEndpointOrigin,
   type BrowserBackendDescriptor,
@@ -495,9 +453,6 @@ import {
   type ZCodeAutomation,
   type ZCodeAutomationRun,
   ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV,
-  ZAI_PROVIDER_ID,
-  zcodeAccountAccessSchema,
-  zcodeProviderAccountAccessSchema,
   ZCODE_VERSION,
   ZCODE_ENV,
   buildRuntimeZCodeApiUrl,
@@ -627,18 +582,10 @@ const providerProvisioningTriggerDisposers = new WeakMap<
 // （stdioDesktopPresentationSurface 单测稳定复现），Linux 的 unlink-while-open 语义掩盖了泄漏。
 // 与其它侧表一样按 ServiceCollection 登记并在 dispose 时统一 close。
 const sharedSqliteRepos = new WeakMap<ServiceCollection, ReadonlyArray<{ close(): void }>>();
-const accountRequestAuthServices = new WeakMap<ServiceCollection, IAccountRequestAuthService>();
 export type OffPeakRequestAuthBuilder = (
   ticketId: string,
 ) => Promise<{ apiKey: string; headers: Record<string, string> }>;
 const offPeakRequestAuthBuilders = new WeakMap<ServiceCollection, OffPeakRequestAuthBuilder>();
-
-/** Local Host 进程内能力；不会随 ServiceCollection 暴露到通用 RPC Channel。 */
-export function getAccountRequestAuthService(
-  services: ServiceCollection,
-): IAccountRequestAuthService | undefined {
-  return accountRequestAuthServices.get(services);
-}
 
 /** Local Host 进程内的 Provisioning Source；不会把凭据通过通用 RPC 暴露给 Renderer。 */
 export function getProviderProvisioningSource(
@@ -1262,10 +1209,6 @@ export function createLocalServices(options: {
   parentPort?: Parameters<typeof createBroadcastService>[0];
   /** Host 装配层注入的设置权威；与网络 transport 必须来自同一 Window Host 生命周期。 */
   settingService?: ISettingService;
-  /** 与注入的本地 Setting 共用写队列；外部远端 Setting 不传，由其权威 Host 完成迁移。 */
-  prepareLegacyAccountConnections?: ReturnType<
-    typeof createSettingServiceWithMigrations
-  >["prepareLegacyAccountConnections"];
   /** 注入后由 ServiceCollection 接管释放，并供 Host 其它 app-managed 下载复用。 */
   hostApiNetworkTransport?: HostApiNetworkTransport;
   /** Desktop Host 请求 Main 登记 Agent 已授权的精确本地视频路径。 */
@@ -1369,9 +1312,8 @@ export function createLocalServices(options: {
     console.error(formatLogPrefix("appCaCert", process.pid), "ensure app CA cert failed:", error);
   }
 
-  const localSettings = options?.settingService ? null : createSettingServiceWithMigrations();
   const settingService = createObservableSettingService(
-    options?.settingService ?? localSettings!.service,
+    options?.settingService ?? createSettingService(),
   );
   const resolveCurrentZCodeEndpointOrigin = async () =>
     resolveRuntimeZCodeEndpointOrigin(process.env, {
@@ -1384,9 +1326,6 @@ export function createLocalServices(options: {
         options.onProviderProvisioningSourceChanged?.("credential");
       }
     },
-  });
-  const accountProviderCredentialStore = createAccountProviderCredentialStore({
-    credentialService,
   });
   const broadcastService = createBroadcastService(options?.parentPort ?? null);
   const gitCheckpointService = createGitCheckpointService();
@@ -1429,68 +1368,6 @@ export function createLocalServices(options: {
       );
     },
   });
-  const accountProviderApiKeyRemoteClient = new AccountProviderApiClient(apiClient);
-  const accountProviderApiKeyResolver = new AccountProviderApiKeyResolver(
-    accountProviderApiKeyRemoteClient.fetchRemoteData.bind(accountProviderApiKeyRemoteClient),
-  );
-  const accountProviderCredentialService = createAccountProviderCredentialService({
-    credentialStore: accountProviderCredentialStore,
-    async loadOAuthAccessToken(family) {
-      const oauthProviderId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-      return (await oauthCredentialRepo.loadTokenSet(oauthProviderId))?.accessToken ?? null;
-    },
-    resolveProviderApiKey: (family, accessToken) =>
-      accountProviderApiKeyResolver.resolveProviderApiKey(
-        family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID,
-        accessToken,
-      ),
-  });
-  const resolveLegacyTeamOrganization = createLegacyTeamOrganizationResolver({
-    apiClient,
-    loadOAuthTokenSet: (family) =>
-      oauthCredentialRepo.loadTokenSet(family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID),
-  });
-  const readAccountProviderSettings = async () => {
-    // 迁移只在账号事实入口协调。ApiClient 的代理/端点仍读普通 Setting，不递归等待迁移。
-    // 外部注入的 Setting（远端 attachment）由其所属 Host 管理，不读取本机旧文件。
-    const prepare =
-      options?.prepareLegacyAccountConnections ?? localSettings?.prepareLegacyAccountConnections;
-    const unresolvedFamilies = (await prepare?.(resolveLegacyTeamOrganization)) ?? [];
-    const settings = await settingService.get();
-    return {
-      providerFamilyDomain: settings.providerFamilyDomain ?? null,
-      selections: settings.providerFamilyConnectionSelections ?? {},
-      unresolvedFamilies,
-    };
-  };
-  const loadAccountIdentity = async (family: ProviderFamilyDomain) => {
-    const oauthProviderId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-    return (await oauthCredentialRepo.loadUserProfile(oauthProviderId))?.id ?? null;
-  };
-  const accountRequestAuthService = createAccountRequestAuthService(
-    createAccountProviderRequestAuthService({
-      resolveCurrentAccountAccess: (access) =>
-        resolveCurrentAccountAccess({
-          access,
-          readSettings: readAccountProviderSettings,
-          loadAccountIdentity,
-        }),
-      loadOAuthTokenSet: (providerId) => oauthCredentialRepo.loadTokenSet(providerId),
-      async loadIndividualPlanApiKey(providerId, family) {
-        const oauthProviderId = family === "zai" ? ZAI_PROVIDER_ID : BIGMODEL_PROVIDER_ID;
-        const accountIdentity = (await oauthCredentialRepo.loadUserProfile(oauthProviderId))?.id;
-        if (!accountIdentity) return null;
-        return accountProviderCredentialService.loadCodingPlanApiKey({
-          providerId,
-          family,
-          accountIdentity,
-        });
-      },
-      // Team plans no longer exist, so there is no team-plan API key to mint.
-      // Fail closed: a stale team-coding-plan selection can no longer authenticate.
-      resolveTeamPlanApiKey: async () => null,
-    }),
-  );
   const providerConfigLog = createServiceLogger("provider-config");
   const clientConfigPlatform = resolveClientConfigPlatform();
   const providerConfigRuntime = createProviderConfigRuntime({
@@ -1523,12 +1400,6 @@ export function createLocalServices(options: {
     // Repository 仅在新 Personal 配置不存在时导入，并保留旧文件以便回滚。
     readLegacyProviders: () => readLegacyZCodeConfigProviders(),
   });
-  const accountProviderConfigSource = createAccountProviderConfigSource({
-    configSource: providerConfigRuntime.configService,
-    readSettings: readAccountProviderSettings,
-    loadAccountIdentity,
-  });
-  const accountProviderRuntimeLog = createServiceLogger("account-provider-runtime");
   const modelSelectionConfiguredDefaultSource = new NodeModelSelectionConfigRepository({
     personalRepository: providerConfigRuntime.personalRepository,
   });
@@ -1547,32 +1418,18 @@ export function createLocalServices(options: {
       }
     }),
     settingService.onDidUpdate((event) => {
-      if (
-        event.keys.includes("providerFamilyDomain") ||
-        event.keys.includes("providerFamilyConnectionSelections")
-      ) {
+      if (event.keys.includes("providerFamilyConnectionSelections")) {
         options.onProviderProvisioningSourceChanged?.("account-settings");
       }
     }),
   ];
-  const disposeAccountProviderInvalidation = bindAccountProviderInvalidation({
-    onDidUpdateSetting: (listener) => settingService.onDidUpdate(listener),
-    refresh: (reason) => accountProviderConfigSource.refresh(reason),
-  });
-  const accountProviderRefreshErrorDispose = accountProviderConfigSource.onDidRefreshError(
-    (event) => {
-      accountProviderRuntimeLog.warn(undefined, "account provider source refresh failed", {
-        error: event.error,
-        reasons: event.reasons,
-      });
-    },
-  );
   let providerConnectivityAgentService:
     | Pick<IZCodeAgentService, "testModelConnectivity">
     | undefined;
   const providerRuntime = createProviderRuntimeFromConfigRuntime({
     configRuntime: providerConfigRuntime,
-    accountSource: accountProviderConfigSource,
+    // No account source is wired any more, so the runtime keeps the fail-closed empty
+    // default: account-backed providers are absent rather than half-configured.
     modelSelectionConfiguredDefaultSource,
     disposeModelSelectionConfiguredDefaultSource: () =>
       modelSelectionConfiguredDefaultSource.dispose(),
@@ -1584,16 +1441,8 @@ export function createLocalServices(options: {
         return providerConnectivityAgentService.testModelConnectivity(input);
       },
     }),
-    disposeAccountSource: () => {
-      disposeAccountProviderInvalidation();
-      accountProviderRefreshErrorDispose();
-      accountProviderConfigSource.dispose();
-    },
   });
-  handleOAuthProviderLogout = createOAuthProviderLogoutHandler({
-    accountProviderCredentialStore,
-    refreshAccountProviders: (reason: string) => accountProviderConfigSource.refresh(reason),
-  });
+  handleOAuthProviderLogout = createOAuthProviderLogoutHandler();
   // mcpSync/hooks 里引用 zcodeAgentService 的闭包是惰性调用，声明顺序不影响初始化。
   const skillsService = createSkillsService({ isDesktopRuntime: true });
   const mcpSyncService = createMcpSyncService({
@@ -1612,7 +1461,6 @@ export function createLocalServices(options: {
   // 只要当前进程已经装配 Provider Runtime，就由该 Environment 自己的 Selection View
   // 决定执行就绪状态。Desktop-attached remote 也读取远端自己的 Config/Account Facts。
   const modelSelectionReadinessSource = providerRuntime.modelSelection;
-  const agentAccountProviderConfigSource = accountProviderConfigSource;
   // ===== Computer Use Helper lifecycle 层（port 自 feat）=====
   // 根因修复：app 启动时预 spawn 的 agent 早于 broker ready → buildCuaProductHelperAgentEnv 在
   // 1s grace 内拿不到 ready helper → 返回 BROKER_UNAVAILABLE → 那些 agent 的 computer-use MCP
@@ -2013,10 +1861,6 @@ export function createLocalServices(options: {
           resolveOffPeakTaskService: () => offPeakTaskServiceForAgent,
         };
   const zcodeAgentService = createZCodeAgentService({
-    ...(agentAccountProviderConfigSource
-      ? { accountProviderConfigSource: agentAccountProviderConfigSource }
-      : {}),
-    accountRequestAuthService,
     ...(modelSelectionReadinessSource ? { modelSelectionReadinessSource } : {}),
     authorizeLocalMediaPreviewPath: options?.authorizeLocalMediaPreviewPath,
     ...offPeakToolWiring,
@@ -2034,13 +1878,6 @@ export function createLocalServices(options: {
     spawnFallbackCwd: options?.zcodeAgentSpawnFallbackCwd,
     // browser-use：host→main 执行桥透传给 agent service 的 onRequest browserExecute 路由。
     browserControlExecutor: options?.browserControlExecutor,
-    // 官方 Server MCP 身份头：host 是唯一身份权威，Agent 经反向请求索取。
-    // Provider 存在性读取正式 Model Selection View；不恢复旧 Provider Snapshot。
-    officialMcpAuthHeadersResolver: createOfficialMcpAuthHeadersResolver({
-      accountRequestAuthService,
-      credentialService,
-      modelSelectionService: providerRuntime.modelSelection,
-    }),
     // host 是身份权威边界：provenance/origin 必须在这里再校验一次，不能只依赖 agent
     // adapter 的 fetch wrapper。判定实现与 CLI 侧共用 @zcode/shared 的同一份，避免分叉。
     // origin 解析复用 resolveCurrentZCodeEndpointOrigin——与闲时任务同口径（含 settings
@@ -2271,35 +2108,9 @@ export function createLocalServices(options: {
         zcodeJwtLogoutLogger.warn("ZCode JWT logout failed", { error });
       });
   };
-  // Desktop Host 曾从 Settings View 再扫描一次 Account Provider，既绕开
-  // Registry 的 entitlement/executable 事实，也在多个套餐同时可见时无法唯一选择。
-  // 闲时服务与 Host 派发必须共享同一个 Registry-backed 凭据解析闭包。
-  const offPeakCredentialResolverDeps = {
-    credentialService,
-    accountRequestAuthService,
-    resolveAccountProvider: async () => {
-      await providerRuntime.start();
-      // start 缓存的是首次就绪；账号后到或切换后必须读 Registry 最近完成的快照。
-      const snapshot = providerRuntime.registryService.getSnapshot()!;
-      const providers = snapshot.resolution.registryProviders.filter(
-        (candidate) =>
-          candidate.config.access.type === "zhipu-account" &&
-          (candidate.config.access.mode === "individual-coding-plan" ||
-            candidate.config.access.mode === "team-coding-plan"),
-      );
-      if (providers.length !== 1) return null;
-      const provider = providers[0]!;
-      const config = provider.config;
-      const staticAccess = zcodeProviderAccountAccessSchema.parse(config.access.toJSON());
-      const access = await accountRequestAuthService.resolveAccessCurrent(staticAccess);
-      if (!access) return null;
-      return {
-        providerId: provider.providerId,
-        access: zcodeAccountAccessSchema.parse(access),
-        ...(config.api?.baseUrl ? { baseURL: config.api.baseUrl } : {}),
-      };
-    },
-  };
+  // The account-provider credential path is gone, so off-peak credentials resolve from
+  // the environment alone and the mock gateway is the only supported source.
+  const offPeakCredentialResolverDeps = { env: process.env };
   const buildOffPeakRequestAuthForTicket: OffPeakRequestAuthBuilder = async (ticketId) =>
     buildOffPeakRequestAuth({
       credentials: await resolveOffPeakCredentials(offPeakCredentialResolverDeps),
@@ -2394,7 +2205,10 @@ export function createLocalServices(options: {
         const resolveCredentials = () => resolveOffPeakCredentials(offPeakCredentialResolverDeps);
         const originResolver = createOffPeakOriginResolver({
           logger: offPeakLogger,
-          resolveUpstream: () => resolveOffPeakMockUpstream(offPeakCredentialResolverDeps),
+          // The coding-plan upstream came from the account provider, which no longer
+          // exists. Returning null keeps the gateway in offline mode: it answers with
+          // its own fixed Anthropic response instead of proxying.
+          resolveUpstream: async () => null,
         });
         const offPeakTaskRepo = new OffPeakTaskRepo();
         // OffPeakTaskRepo 也持有 tasks-index.sqlite 连接；收集到链前数组，services 建好后统一登记
@@ -2413,15 +2227,9 @@ export function createLocalServices(options: {
             resolveSafeEndpointHostname(await originResolver.resolveOrigin()),
           resolveModelSelection: async (input) => {
             await providerRuntime.start();
-            const support = await resolveOffPeakCodingPlanSupport(offPeakCredentialResolverDeps);
-            const providerId = support.supported
-              ? OFF_PEAK_PROVIDER_IDS[support.providerFamily]
-              : undefined;
-            const provider = providerId
-              ? providerRuntime.registryService
-                  .getView()
-                  .providers.find((candidate) => candidate.providerId === providerId)
-              : undefined;
+            const provider = providerRuntime.registryService
+              .getView()
+              .providers.find((candidate) => candidate.providerId === input.providerId);
             const modelId = input.modelId ?? provider?.models[0]?.modelId;
             if (!provider || !modelId) {
               return {
@@ -2429,12 +2237,12 @@ export function createLocalServices(options: {
                 validation: {
                   ok: false as const,
                   code: "provider-not-found" as const,
-                  providerId: OFF_PEAK_PROVIDER_IDS.zai,
+                  providerId: input.providerId,
                 },
               };
             }
-            // 旧行没有 Provider 身份；只能复用当前账号凭据链已裁定的 Account Family，
-            // 不能靠 Registry/JSON 顺序在 Z.ai 与 BigModel 间猜测。
+            // 旧行没有 Provider 身份；只能复用当前账号凭据链已裁定的 Provider，
+            // 不能靠 Registry/JSON 顺序在候选之间猜测。
             const selection = {
               providerId: provider.providerId,
               modelId,
@@ -2509,7 +2317,6 @@ export function createLocalServices(options: {
   // Helper 懒启动：不预热——Helper 由 SDK 首次 CUA 调用拉起（spawn env 注入
   // 稳定 socket），或用户显式授权流（restartHelper）拉起。启动即零 Helper 常驻。
 
-  accountRequestAuthServices.set(services, accountRequestAuthService);
   offPeakRequestAuthBuilders.set(services, buildOffPeakRequestAuthForTicket);
 
   providerRuntimes.set(services, providerRuntime);
@@ -2524,7 +2331,6 @@ export function createLocalServices(options: {
       createProviderProvisioningTarget({
         providerRuntime,
         personalRepository: providerConfigRuntime.personalRepository,
-        accountProviderSource: accountProviderConfigSource,
         credentialService,
         settingService,
         personalConfigFilePath: join(resolveAppConfigDir(), PERSONAL_PROVIDER_CONFIG_FILE_NAME),

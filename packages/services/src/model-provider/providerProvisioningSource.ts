@@ -19,14 +19,10 @@ import {
 import type { ISettingService } from "../setting/setting.js";
 
 const CREDENTIAL_FILE_NAME = "credentials.json";
+// The vendor-specific OAuth token keys are gone with their providers. The global login
+// mirror and the active-provider pointer are the only OAuth facts still worth syncing.
 export const PROVIDER_PROVISIONING_OAUTH_CREDENTIAL_KEYS = [
   "oauth:active_provider",
-  "oauth:zai:access_token",
-  "oauth:zai:refresh_token",
-  "oauth:zai:user_info",
-  "oauth:bigmodel:access_token",
-  "oauth:bigmodel:refresh_token",
-  "oauth:bigmodel:user_info",
   "zcodejwttoken",
 ] as const;
 
@@ -56,7 +52,6 @@ export function createProviderProvisioningSource(
       // 默认与规则来自同一份持锁读取，不能把两次读取的值拼成不存在的配置版本。
       const personalConfig = encodeProviderConfigFile(personal).config;
       const accountSettings = {
-        providerFamilyDomain: settings.providerFamilyDomain ?? null,
         providerFamilyConnectionSelections: settings.providerFamilyConnectionSelections ?? {},
       };
       return providerProvisioningEnvelopeSchema.parse({
