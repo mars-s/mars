@@ -19,8 +19,6 @@ import type {
   IModelSelectionService,
   IProviderSettingsService,
 } from "./model-provider/providerFacadeServices.js";
-import type { IUsageStatsService } from "./usage-stats/usageStats.js";
-import type { ICodingPlanSubscriptionService } from "./coding-plan-subscription/codingPlanSubscription.js";
 import type { IClientConfigService } from "./client-config/clientConfig.js";
 import type { IClientScenesService } from "./client-scenes/clientScenes.js";
 import type { ISkillsService } from "./skills/skills.js";
@@ -68,8 +66,6 @@ export interface IServiceAccessor {
   readonly providerSettingsService: IProviderSettingsService;
   /** 当前 Environment Registry 发布的唯一模型选择 View。 */
   readonly modelSelectionService: IModelSelectionService;
-  readonly usageStatsService: IUsageStatsService;
-  readonly codingPlanSubscriptionService: ICodingPlanSubscriptionService;
   readonly clientConfigService: IClientConfigService;
   readonly clientScenesService: IClientScenesService;
   /** 闲时任务管理（独立服务面）。 */
