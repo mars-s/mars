@@ -3,7 +3,6 @@ import {
   CodingPlanWebviewChannels,
   isTrustedCodingPlanWebviewOrigin,
   PlatformChannels,
-  type ModelProviderFamilyId,
 } from "@zcode/shared";
 
 // Coding Plan 官网页 preload：
@@ -63,7 +62,9 @@ function isTrustedCodingPlanBridgeLocation(): boolean {
 }
 
 interface NotifyPurchaseCompletePayload {
-  provider: ModelProviderFamilyId;
+  // The provider family concept is gone, so the guest only has to name a non empty
+  // provider string. The channel payload shape is validated here, not trusted.
+  provider: string;
 }
 
 type CodingPlanReportContext = Record<string, string>;
@@ -82,7 +83,7 @@ if (isTrustedCodingPlanBridgeLocation()) {
         ipcRenderer.sendToHost(CodingPlanWebviewChannels.PurchaseComplete, {
           provider: payload.provider,
           timestamp: Date.now(),
-        } satisfies import("@zcode/shared").CodingPlanPurchaseCompletePayload);
+        });
       } catch {
         // host renderer 尚未 attach 或 webview 被销毁时 sendToHost 会抛；
         // 官网页自身不依赖此调用成功，静默即可。
@@ -116,7 +117,7 @@ if (isTrustedCodingPlanBridgeLocation()) {
       if (!nativeBridge) return;
       const bridge = {
         notifyPurchaseComplete(payload: NotifyPurchaseCompletePayload) {
-          if (payload?.provider !== "zai" && payload?.provider !== "bigmodel") {
+          if (typeof payload?.provider !== "string" || !payload.provider) {
             return;
           }
           nativeBridge.notifyPurchaseComplete(payload);
