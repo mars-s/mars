@@ -49,7 +49,7 @@ predictable part of the project into something estimable.
 | [#9](https://github.com/mars-s/mars/issues/9) | Delete coding-plan, pricing and usage stats | done | generic app-usage types kept |
 | [#10](https://github.com/mars-s/mars/issues/10) | Remove Z.ai from welcome screen and login | done | API-key picker lists the 16 survivors |
 | [#11](https://github.com/mars-s/mars/issues/11) | Delete the Z.ai and BigModel OAuth subsystem | done | `OAuthProviderAdapter` seam kept for #13 |
-| [#12](https://github.com/mars-s/mars/issues/12) | Prune Z.ai i18n keys | todo | last; only en-US + zh-CN still hold hits |
+| [#12](https://github.com/mars-s/mars/issues/12) | Prune Z.ai i18n keys | done | 601 keys per locale file, 1467 lines |
 
 ## Stage 1d. UI surgery
 

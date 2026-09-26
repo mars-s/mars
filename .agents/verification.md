@@ -179,7 +179,9 @@ each is a one-way read rather than a live path:
 | `apps/zcode-cli/.../storage/session-store/migrations/0020-0022` | **Frozen shipped SQL.** Editing a past migration corrupts replay on a fresh database and mis-aligns an already-migrated one. These only decode historical rows. |
 | `packages/services/src/session/tasksDatabase/provider-selection-v2.ts`, `official-glm-selection-v3.ts` | Same: frozen pre-release decoders and an already-applied `WHERE` clause over historical `model_selection` rows. |
 | `packages/zcode-server-cli/src/platform/serviceManager.ts` `com.zhipu.zcode.server` | A macOS **launchd service name**, so it is a persisted system identifier. Renaming it orphans the service on an in-place upgrade. Not a network surface. |
-| `packages/ui/src/i18n/locales/{en-US,zh-CN}.ts` | Issue #12. Kept until that wave runs, and `login.oauth.regionTag.{zai,bigmodel}` must survive it because `botsUi.ts` still uses those keys for the Lark and Feishu region tags. |
+| `login.oauth.regionTag.{zai,bigmodel}` | **Must stay.** `packages/ui/src/botsUi.ts:80,82` maps the `lark` bot to the `.zai` key and `feishu` to `.bigmodel`. The values are vendor-neutral ("Global" / "CN"); only the key names are legacy. The phone and Bot Channels feature is a hard non-negotiable, so do not rename or prune these. |
+| `settings.themeMode.zai-{light,dark}`, `sidebar.settings.theme.zai-{light,dark}` | The fork's own theme identifiers, not the vendor. `settingsPageConfig.ts:29-30` lists the modes, `settingsCodePreview.tsx:130` builds the id dynamically, and `WorkspaceSidebarFooter.tsx:258,263` use the sidebar keys. They are also persisted in `localStorage["zcode-theme"]`, so renaming them would flash every existing user to the wrong theme. |
+| `mode.{label,description}.glm.*` | `glm` here is the ZCode agent provider identity, not the vendor. Live in `packages/ui/src/chat-input-toolbar/display-help.ts`. |
 
 Step 3 is the only one that actually proves it. Steps 1 and 2 prove the code is
 gone, which is necessary but not sufficient.
