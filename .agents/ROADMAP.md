@@ -66,9 +66,9 @@ The hard one. Depends on [#7](https://github.com/mars-s/mars/issues/7) and
 | --- | --- | --- |
 | [#13](https://github.com/mars-s/mars/issues/13) | Implement the ChatGPT OAuth adapter | code done, live flow unverified |
 | [#14](https://github.com/mars-s/mars/issues/14) | OpenCode Go end-to-end verification path | blocked, needs `op signin` |
-| [#16](https://github.com/mars-s/mars/issues/16) | Local CLIProxyAPI provider route | code done, live model call proven |
+| [#17](https://github.com/mars-s/mars/issues/17) | Local CLIProxyAPI provider route | code done, live model call proven |
 
-### #16 evidence: the local proxy route
+### #17 evidence: the local proxy route
 
 `cliproxy-local` is a shipped catalog template pointing at
 `http://127.0.0.1:8317/v1` with `api-key` access and `openai-responses` apiType.
