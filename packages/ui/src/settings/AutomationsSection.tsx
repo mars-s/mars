@@ -1,4 +1,3 @@
-import { useCodingPlanEntryGate } from "@/settings/CodingPlanEntryButton.js";
 /* eslint-disable max-lines -- 定时任务主视图集中维护列表、创建/编辑整页路由与启停/删除操作，集中更利于交互一致。 */
 import {
   useCallback,
@@ -10,9 +9,9 @@ import {
   type SVGProps,
 } from "react";
 import { CircleCheck, RotateCcw, TriangleAlert } from "lucide-react";
+import type { ModelSelectionView } from "@zcode/services";
 import {
   AUTOMATION_CREATE_LIMIT,
-  BUILTIN_MODEL_PROVIDER_IDS,
   TID_AUTOMATION_ACTION_DELETE,
   TID_AUTOMATION_ACTION_TOGGLE,
   TID_AUTOMATION_CARD,
@@ -41,6 +40,7 @@ import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { AutomationScheduledTemplateIcon } from "@/settings/AutomationScheduledTemplateIcon.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useServices } from "@/hooks/useServices.js";
+import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import {
@@ -53,10 +53,6 @@ import { useProviderSettingsView } from "@/hooks/useProviderSettingsView.js";
 import { useOffPeakEligibility } from "@/hooks/useOffPeakEligibility.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { logger } from "@/logger.js";
-import {
-  createIdleTimeCodingPlanFunnelContext,
-  resolveCodingPlanEntryPlanStateFromProviderSettings,
-} from "@/lib/codingPlanFunnelTelemetry.js";
 import {
   useAutomationManagementStore,
   type AutomationRunNowResult,
@@ -97,7 +93,6 @@ import {
   AutomationRunNowIcon,
   AutomationTrashIcon,
 } from "@/settings/AutomationDesignPrimitives.js";
-import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { SETTINGS_FRAME_CONTENT_CLASSNAME } from "@/settings/SettingsPageParts.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
@@ -173,6 +168,9 @@ interface AutomationsSectionProps {
 }
 
 export const AUTOMATIONS_TOAST_ANCHOR_ID = "automations-main-toast-anchor";
+
+/** Host model registry has not answered yet; OffPeakEditView treats it as "no candidates". */
+const EMPTY_MODEL_SELECTION_VIEW: ModelSelectionView = { revision: 0, providers: [] };
 
 function toast(message: string, options?: ToastOptions): number {
   return showToast(message, {
@@ -527,13 +525,19 @@ export function AutomationsSection({
 }: AutomationsSectionProps) {
   const { intl, locale } = useZCodeIntl();
   const platform = usePlatform();
-  const { clientScenesService, offPeakTaskService, zcodeAgentService } = useServices();
+  const { clientScenesService, modelSelectionService, offPeakTaskService, zcodeAgentService } =
+    useServices();
+  // The off-peak model picker reads the Host model registry directly, the same source the
+  // scheduled automation form uses. It used to ride along on the Z.ai gray config fetch.
+  const offPeakModelSelectionRead = useModelSelectionServiceView(modelSelectionService);
+  const offPeakModelSelectionView =
+    offPeakModelSelectionRead.state.status === "ready"
+      ? offPeakModelSelectionRead.state.view
+      : EMPTY_MODEL_SELECTION_VIEW;
   const confirmDialog = useConfirmDialog();
-  const { openCodingPlanUpgrade } = useCodingPlanUpgradeDialog();
   const providerSettingsRead = useProviderSettingsView();
   const providerSettingsView =
     providerSettingsRead.state.status === "ready" ? providerSettingsRead.state.view : null;
-  const { status: entryStatus, label: entryLabel, retry: retryEntry } = useCodingPlanEntryGate();
   const { settings: sharedSettings, update: updateSharedSettings } = useSettings();
   useOffPeakEligibility(sharedSettings, providerSettingsView?.revision);
 
@@ -556,7 +560,6 @@ export function AutomationsSection({
   const automationTemplates = useAutomationTemplates(clientScenesService);
   const offPeakTasks = useOffPeakTaskStore((state) => state.tasks);
   const offPeakStoreLoading = useOffPeakTaskStore((state) => state.loading);
-  const offPeakGrayConfig = useOffPeakTaskStore((state) => state.grayConfig);
   const offPeakCodingPlanSupport = useOffPeakTaskStore((state) => state.codingPlanSupport);
   const offPeakTakeNumberAvailability = useOffPeakTaskStore(
     (state) => state.takeNumberAvailability,
@@ -622,18 +625,15 @@ export function AutomationsSection({
     return activeTab && isWorkspaceTab(activeTab) ? activeTab : undefined;
   });
   const currentWorkspaceIsRemote = isRemoteAutomationWorkspace(activeWorkspaceTab);
-  // 灰度中途翻转：只藏创建入口；有非终态存量仍展示并跑到终态。
-  const offPeakGrayEnabled = offPeakGrayConfig?.enabled === true;
-  const offPeakCreationEnabled = offPeakGrayEnabled && !currentWorkspaceIsRemote;
-  // 扫描全部 provider 会把未选中的 Coding Plan 当成当前执行凭证。
-  // mock 演示字段仍可覆盖；真实路径只接受与当前 family/selectedKey 一致的脱敏 resolver 快照。
+  // The gray gate goes down with the Z.ai subscription surface: creation and the Idle tab now
+  // follow the workspace constraint alone. Eligibility still comes from the Host-side fact.
+  const offPeakCreationEnabled = !currentWorkspaceIsRemote;
+  // Scanning every provider would treat an unselected Coding Plan as the current credential.
+  // Only a redacted resolver snapshot matching the current family/selected connection counts.
   const offPeakNoPlan =
-    offPeakGrayConfig?.codingPlanActive === false ||
-    (offPeakGrayConfig?.codingPlanActive === undefined &&
-      !offPeakStoreLoading &&
-      !isCurrentOffPeakCodingPlanSupported(offPeakCodingPlanSupport, sharedSettings));
-  const offPeakVisible =
-    !currentWorkspaceIsRemote && (offPeakGrayEnabled || offPeakTasks.length > 0);
+    !offPeakStoreLoading &&
+    !isCurrentOffPeakCodingPlanSupported(offPeakCodingPlanSupport, sharedSettings);
+  const offPeakVisible = !currentWorkspaceIsRemote;
   const hasAnyTasks = automations.length > 0 || offPeakTasks.length > 0;
   const visibleTabs = resolveVisibleAutomationTabs({
     hasAnyTasks,
@@ -660,7 +660,9 @@ export function AutomationsSection({
     const reason = resolveOffPeakCreateBlockReason({
       availabilityStatus: offPeakTakeNumberAvailabilityStatus,
       canTakeNumber: offPeakTakeNumberAvailability?.canTakeNumber,
-      grayEnabled: offPeakGrayEnabled,
+      // The gray gate is gone, so the feature is always on and the availability checks below
+      // are what actually gate creation.
+      grayEnabled: true,
       noPlan: offPeakNoPlan,
     });
     const tooltip =
@@ -684,7 +686,6 @@ export function AutomationsSection({
   }, [
     intl,
     now,
-    offPeakGrayEnabled,
     offPeakNoPlan,
     offPeakTakeNumberAvailability,
     offPeakTakeNumberAvailabilityStatus,
@@ -806,14 +807,13 @@ export function AutomationsSection({
       await Promise.all([
         refresh(zcodeAgentService),
         offPeakRefresh(offPeakTaskService),
-        ...(offPeakGrayEnabled ? [offPeakRefreshCodingPlanSupport(offPeakTaskService)] : []),
+        offPeakRefreshCodingPlanSupport(offPeakTaskService),
       ]);
       setNow(Date.now());
     } finally {
       setRefreshing(false);
     }
   }, [
-    offPeakGrayEnabled,
     offPeakRefresh,
     offPeakRefreshCodingPlanSupport,
     offPeakTaskService,
@@ -840,44 +840,17 @@ export function AutomationsSection({
     );
   }, [currentWorkspaceIsRemote]);
 
-  const handleOpenCodingPlanUpgrade = useCallback(() => {
-    const providerId =
-      sharedSettings?.providerFamilyDomain === "bigmodel"
-        ? BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan
-        : BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan;
-    const eventText = intl.formatMessage({
-      id: "settings.modelProvider.codingPlan.upgrade",
-    });
-    // 埋点缺失原因：Automations 的闲时入口此前绕过了购买漏斗 context，只打开弹窗。
-    // 这里在用户点击时冻结入口套餐状态，后续 OAuth 只刷新鉴权，不重建 funnel。
-    openCodingPlanUpgrade({
-      providerId,
-      initialAudience: "personal",
-      funnelContext: createIdleTimeCodingPlanFunnelContext({
-        providerId,
-        eventText,
-        entryPlanState: resolveCodingPlanEntryPlanStateFromProviderSettings(providerSettingsView),
-      }),
-    });
-  }, [intl, openCodingPlanUpgrade, providerSettingsView, sharedSettings?.providerFamilyDomain]);
-
+  // The plan-requirement toast no longer carries an upgrade action: the purchase surface it
+  // opened is gone. The block itself still stands, the user just gets the explanation.
   const showCodingPlanRequiredToast = useCallback(() => {
-    toast(entryLabel ?? intl.formatMessage({ id: "offPeak.create.codingPlanToast" }), {
+    toast(intl.formatMessage({ id: "offPeak.create.codingPlanToast" }), {
       durationMs: 8000,
       position: "top-center",
       variant: "info",
-      actionLabel:
-        entryStatus === "loading"
-          ? undefined
-          : (entryLabel ??
-            intl.formatMessage({
-              id: "settings.modelProvider.codingPlan.upgrade",
-            })),
-      onAction: entryStatus === "error" ? retryEntry : handleOpenCodingPlanUpgrade,
       dismissible: true,
       dismissLabel: intl.formatMessage({ id: "common.close" }),
     });
-  }, [handleOpenCodingPlanUpgrade, intl, entryStatus, entryLabel, retryEntry]);
+  }, [intl]);
 
   const showAutomationCreateLimitToast = useCallback(() => {
     toast(
@@ -1379,9 +1352,7 @@ export function AutomationsSection({
         <OffPeakEditView
           editing={editingTask}
           initialDraft={view.mode === "offpeak-create" ? (view.draft ?? null) : null}
-          modelSelectionView={
-            offPeakGrayConfig?.modelSelectionView ?? { revision: 0, providers: [] }
-          }
+          modelSelectionView={offPeakModelSelectionView}
           defaultWorkspacePath={workspacePath ?? ""}
           defaultWorkspaceIdentity={workspaceIdentity}
           saving={
