@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ComponentType } from "react"
 import {
   Bot,
   Brain,
-  Browser,
+  Globe2,
   ChevronLeft,
   Command,
   FileText,
@@ -116,8 +116,8 @@ function ProviderSetup({ health, onReady }: { health: HealthState; onReady: () =
 }
 
 function SidePanel({ kind, onClose }: { kind: "terminal" | "browser" | "files"; onClose: () => void }) {
-  const labels = { terminal: "Terminal", browser: "Browser", files: "Files" } as const;
-  const Icon = kind === "terminal" ? TerminalSquare : kind === "browser" ? Browser : Folder;
+  const labels = { terminal: "Terminal", browser: "Globe2", files: "Files" } as const;
+  const Icon = kind === "terminal" ? TerminalSquare : kind === "browser" ? Globe2 : Folder;
   return (
     <aside className="workbench-panel">
       <div className="workbench-header">
@@ -284,7 +284,7 @@ export default function App() {
         <header className="topbar">
           <div className="top-title">{activeSessionTitle}</div>
           <div className="view-buttons">
-            <button className="icon-button" onClick={() => setRightPane("browser")} title="Browser"><Browser size={16} /></button>
+            <button className="icon-button" onClick={() => setRightPane("browser")} title="Globe2"><Globe2 size={16} /></button>
             <button className="icon-button" onClick={() => setRightPane("terminal")} title="Terminal"><TerminalSquare size={16} /></button>
             <button className="icon-button" onClick={() => setRightPane("files")} title="Files"><Folder size={16} /></button>
             <button className="icon-button" title="Review"><GitPullRequest size={16} /></button>
