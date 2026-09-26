@@ -22,6 +22,10 @@ import type { RegistryProviderConfig } from "@zcode/provider";
 import { withOpenRouterAttributionHeaders } from "@zcode/shared";
 import { createAnthropicCompatFetch } from "./anthropic-stream-compat.js";
 import { createOpenAIResponsesJsonCompatFetch } from "./openai-responses-json-compat.js";
+import {
+  createChatGptCodexResponsesFetch,
+  isChatGptCodexBackend,
+} from "./chatgpt-codex-responses-fetch.js";
 import { createModelOptionMapFetch, type RawRequestBodyCapture } from "./model-option-map-fetch.js";
 import { createNetworkProxyFetch } from "../network/proxy-fetch.js";
 import { createOfficialCodingPlanGatewayFetch } from "./official-coding-plan-gateway.js";
@@ -234,6 +238,7 @@ export class AiSdkModelExecution {
     const rawRequestBodyCapture: RawRequestBodyCapture = {};
     const factory = this.createFactory(
       snapshot.providerId,
+      snapshot.modelId,
       providerConfig,
       optionMaps,
       optionValues,
@@ -254,6 +259,7 @@ export class AiSdkModelExecution {
 
   private createFactory(
     providerId: string,
+    modelId: string,
     providerConfig: AiSdkProviderConfig,
     optionMaps: CompiledModelOptionMaps | undefined,
     optionValues: ModelOptionValues | undefined,
@@ -280,10 +286,23 @@ export class AiSdkModelExecution {
 
     switch (providerConfig.kind) {
       case "openai": {
+        // The Codex backend is a subscription endpoint, not the public OpenAI API:
+        // it requires `store: false` in the body and it answers a stale token with
+        // 401 that only a rotation can clear. Both are keyed off the RESOLVED
+        // registry config, so nothing the request carries can turn this on.
+        const responsesFetch = isChatGptCodexBackend({
+          accessType: providerConfig.access?.type,
+          baseUrl: providerConfig.baseURL,
+        })
+          ? createChatGptCodexResponsesFetch(
+              createOpenAIResponsesJsonCompatFetch(optionFetch),
+              { modelId, providerId },
+            )
+          : createOpenAIResponsesJsonCompatFetch(optionFetch);
         const provider = createOpenAI({
           apiKey,
           baseURL: providerConfig.baseURL,
-          fetch: createOpenAIResponsesJsonCompatFetch(optionFetch),
+          fetch: responsesFetch,
           headers,
         });
         return provider.responses as LanguageModelFactory;

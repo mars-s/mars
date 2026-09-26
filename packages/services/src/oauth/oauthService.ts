@@ -21,6 +21,10 @@ import type { IOAuthService } from "./oauth.js";
 import { isCurrentOAuthCredentialRequest } from "#src/oauth/oauthUnauthorizedRequest.js";
 import { hasOAuthAuthorizationCode, parseOAuthLoginAttribution } from "./callbackAttribution.js";
 import { createOAuthProviderAdapters, type OAuthProviderAdapter } from "./providers/index.js";
+import type {
+  ProviderRequestAuthGrantStore,
+  ProviderRequestAuthGrantStoreCapability,
+} from "./providers/providerAdapter.js";
 import { isDeviceCodeFlowAdapter } from "./providers/chatgpt/chatgptDeviceFlowSession.js";
 import { isSessionTeardownAdapter } from "./providers/chatgpt/chatgptSessionTeardown.js";
 import { OAuthCredentialRepo } from "./repo/oauthCredentialRepo.js";
@@ -1083,6 +1087,29 @@ export class OAuthService implements IOAuthService {
     });
     await this.cancelPending();
     await this.notifyProvidersLogout(providers, accountIdentities);
+  }
+
+  /**
+   * The app-owned grant store for a provider, for the model request path.
+   *
+   * Returns null unless the provider's credential is an app-owned grant that
+   * opted into `ProviderRequestAuthGrantStoreCapability`. That is what makes this
+   * safe to consult from a credential handler: the shared ZCode backend adapters
+   * deliberately do not implement the capability, so their session JWT can never
+   * be handed out as a per-request provider credential.
+   *
+   * Unknown providers also return null rather than throwing, because the caller
+   * is a fail-closed credential path where "no store" and "no such provider" must
+   * be the same answer.
+   */
+  providerRequestAuthGrantStore(provider: OAuthProviderId): ProviderRequestAuthGrantStore | null {
+    const adapter = this.adapters.get(provider) as
+      | (OAuthProviderAdapter & Partial<ProviderRequestAuthGrantStoreCapability>)
+      | undefined;
+    if (typeof adapter?.createRequestAuthGrantStore !== "function") {
+      return null;
+    }
+    return adapter.createRequestAuthGrantStore();
   }
 
   async cancelPending(provider?: OAuthProviderId): Promise<void> {

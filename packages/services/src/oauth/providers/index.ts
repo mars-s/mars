@@ -23,5 +23,11 @@ export function createOAuthProviderAdapters(options: {
   return [new ChatGptOAuthAdapter()];
 }
 
-export type { OAuthProviderAdapter, OAuthProviderContext } from "./providerAdapter.js";
+export type {
+  OAuthProviderAdapter,
+  OAuthProviderContext,
+  ProviderRequestAuthGrant,
+  ProviderRequestAuthGrantStore,
+  ProviderRequestAuthGrantStoreCapability,
+} from "./providerAdapter.js";
 export { ChatGptOAuthAdapter } from "./chatgpt/chatgptOAuthAdapter.js";

@@ -1,7 +1,8 @@
 import type { AiSdkModelAdapter } from "@zcode/adapters/model";
-import type { Model } from "@zcode/contracts";
+import type { Model, ModelRequestDependencies } from "@zcode/contracts";
 import type { AgentRuntimeDeps } from "@zcode/core";
 import {
+  OAUTH_ACCESS_TYPE,
   type ModelSelection,
   type ModelSelectionValidation,
   type Provider,
@@ -71,6 +72,7 @@ export class ApiProviderModelRuntime {
     // 输出预算属于单次请求，由 Agent 执行链显式决定，不能在 ModelFactory 中静默绑定。
     // Selection 已在上面的 Registry 边界完成校验，Factory 不再承担任何缺省修复。
     const normalReasoningLevel = target.selection.options!.reasoningLevel!;
+    const requestDependencies = resolveRequestDependencies(provider, target.requestDependencies);
     return this.#modelAdapter.createModel({
       providerId: provider.providerId,
       modelId: registryModel.modelId,
@@ -79,6 +81,35 @@ export class ApiProviderModelRuntime {
       options: {
         reasoningLevel: normalReasoningLevel,
       },
+      ...(requestDependencies ? { requestDependencies } : {}),
     });
   }
+}
+
+/**
+ * Whether this model must resolve a credential on every physical attempt.
+ *
+ * The caller's explicit dependency wins and is never second-guessed. Otherwise
+ * the registry itself declares it, and only for the access shape that
+ * structurally cannot carry a static key. Deriving it from "no apiKey" in
+ * general would be wrong: every builtin template omits the key because keys come
+ * from user settings, so that rule would drag all static providers onto the
+ * per-request host credential path and fail them before they are sent.
+ *
+ * The synthesized declaration carries NO source on purpose. It says "this model
+ * needs request-level auth"; the adapter fails closed until a host port or a
+ * scoped source is bound. Minting a source here would mean the worker produced
+ * provider credentials itself, which is the one thing that must never happen.
+ */
+function resolveRequestDependencies(
+  provider: Provider,
+  declared: ModelRequestDependencies | undefined,
+): ModelRequestDependencies | undefined {
+  if (declared) {
+    return declared;
+  }
+  if (provider.config.access?.type !== OAUTH_ACCESS_TYPE) {
+    return undefined;
+  }
+  return { requestAuth: {} };
 }

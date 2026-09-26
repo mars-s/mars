@@ -49,7 +49,15 @@ import {
   type ChatGptDeviceFlowCapability,
 } from "./chatgptDeviceFlowSession.js";
 import type { ProviderSessionTeardownCapability } from "./chatgptSessionTeardown.js";
-import { ChatGptGrantRevokedError, ChatGptGrantStore } from "./chatgptGrantStore.js";
+import {
+  ChatGptGrantRevokedError,
+  ChatGptGrantStore,
+  type ChatGptStoredGrant,
+} from "./chatgptGrantStore.js";
+import type {
+  ProviderRequestAuthGrantStore,
+  ProviderRequestAuthGrantStoreCapability,
+} from "../providerAdapter.js";
 
 const log = createServiceLogger("chatgptOAuth");
 
@@ -95,7 +103,11 @@ class FetchApiClient implements ApiClient {
 }
 
 export class ChatGptOAuthAdapter
-  implements OAuthProviderAdapter, ChatGptDeviceFlowCapability, ProviderSessionTeardownCapability
+  implements
+    OAuthProviderAdapter,
+    ChatGptDeviceFlowCapability,
+    ProviderSessionTeardownCapability,
+    ProviderRequestAuthGrantStoreCapability
 {
   readonly supportsDeviceCodeFlow = true as const;
 
@@ -321,6 +333,47 @@ export class ChatGptOAuthAdapter
   }
 
   // ----------------------------------------------------------------- internals
+
+  /**
+   * The grant, as the model request path is allowed to see it.
+   *
+   * Exposed as a narrow read/rotate pair rather than by making the store public,
+   * for two reasons. The token endpoint is pinned here: a caller on the
+   * credential path cannot substitute an exchange, so it cannot be pointed at a
+   * different authorization server. And rotation is the store's own `rotate`, so
+   * the cross-process lock, the peer-rotated adoption branch and the
+   * write-back-before-unlock ordering all still apply on the model path; there is
+   * no second, unlocked refresh route anywhere.
+   */
+  createRequestAuthGrantStore(): ProviderRequestAuthGrantStore {
+    return {
+      read: () => this.grantStore.read(),
+      rotate: (request) =>
+        this.grantStore.rotate({
+          expectedRefreshToken: request.expectedRefreshToken,
+          exchange: (grant) => this.exchangeRefreshToken(grant),
+        }),
+    };
+  }
+
+  private async exchangeRefreshToken(grant: ChatGptStoredGrant): Promise<{
+    accessToken: string;
+    expiresAt: number | null;
+    refreshToken: string;
+  }> {
+    const payload = await this.client.requestToken({
+      grantType: "refresh_token",
+      refreshToken: grant.refreshToken,
+    });
+    const exchanged = readTokenGrant(payload);
+    return {
+      accessToken: exchanged.accessToken,
+      expiresAt: exchanged.expiresInSeconds
+        ? this.now() + exchanged.expiresInSeconds * 1_000
+        : readAccessTokenExpiration(exchanged.accessToken),
+      refreshToken: exchanged.refreshToken,
+    };
+  }
 
   private async persistGrant(grant: ChatGptTokenGrant): Promise<OAuthTokenSet> {
     const stored = await this.grantStore.write({

@@ -21,24 +21,42 @@ const nonBlankRequiredString = z.string().refine((value) => value.trim().length 
   params: { configIssueCode: "required-field-missing" },
 });
 
+/**
+ * Access shape whose credential is minted by an OAuth grant and lives in a grant
+ * store, never in this config.
+ *
+ * It is a discriminator of the CREDENTIAL SOURCE, not a provider family: nothing
+ * branches on it to decide which vendor is being talked to, only to decide that no
+ * static key exists for this provider. The account-provider access member that used
+ * to sit here carried an account type instead, and that whole subsystem is gone.
+ */
+export const OAUTH_ACCESS_TYPE = "oauth" as const;
+
+/** True for the grant-backed access shape, whose `apiKey` is structurally absent. */
+export function isOAuthAccessType(value: unknown): boolean {
+  return value === OAUTH_ACCESS_TYPE;
+}
+
 export const apiKeyAccessDataSchema = z
   .object({
     // `api-key` is the only type this build produces. The Z.ai coding-plan key is still
     // accepted so a config written before the removal cannot fail to parse and lock a
     // user out; no catalog template emits it and nothing branches on it any more. Drop
     // the literal once the one-way read is no longer worth carrying.
-    type: z.enum(["api-key", "zhipu-coding-plan-api-key"]),
+    // `oauth` is the one non-key shape: the credential comes from a grant, not here.
+    type: z.enum(["api-key", OAUTH_ACCESS_TYPE, "zhipu-coding-plan-api-key"]),
     apiKey: z.string().nullable().optional(),
     apiKeyManagementUrl: z.string().url().nullable().optional(),
   })
   .strict();
+// The key is NOT demanded here. Whether a key is required is an access-shape
+// question, and it is answered in `ApiKeyAccessConfig.validateComplete` because the
+// rule differs per shape. Demanding it in the schema would make every grant-backed
+// provider fail completeness and therefore never enter the registry at all.
 export const completeApiKeyAccessDataSchema = apiKeyAccessDataSchema.extend({
-  apiKey: nonBlankRequiredString,
+  apiKey: z.string().nullable().optional(),
 });
 
-// The `zhipu-account` access member is deleted with the account-provider
-// subsystem. `api-key` is the only remaining access type; no replacement
-// discriminator is introduced in its place.
 export const providerAccessDataSchema = apiKeyAccessDataSchema;
 const completeProviderAccessDataSchema = completeApiKeyAccessDataSchema;
 

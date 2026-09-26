@@ -108,6 +108,11 @@ import {
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { createOfficialMcpIssuanceAudit } from "#src/official-mcp/officialMcpIssuanceAudit.js";
 import {
+  answerProviderRequestAuthRequest,
+  type ChatGptRegistryIdentity as ProviderRequestAuthIdentity,
+} from "#src/zcode-agent/chatgptProviderRequestAuth.js";
+import type { ProviderRequestAuthGrantStore } from "#src/oauth/providers/providerAdapter.js";
+import {
   mergeAutomationMutationToolDenylist,
   mergeOffPeakMutationToolDenylist,
 } from "#src/zcode-agent/automationToolPolicy.js";
@@ -855,6 +860,44 @@ interface CreateZCodeAgentServiceOptions extends Omit<
   /** Desktop Host 请求 Main 登记 Agent 已授权的精确本地视频路径。 */
   authorizeLocalMediaPreviewPath?: (path: string) => Promise<string>;
   modelSelectionReadinessSource?: ModelSelectionReadinessSource;
+  /**
+   * 动态 provider 凭据：模型请求级 api key / header 的唯一产出点。
+   *
+   * Agent 进程永远不持有 provider secret，它在每次物理请求前用
+   * `interaction/requestProviderRuntimeHeaders` 向 host 索取本次请求的鉴权材料，
+   * 凭据不会进 session 文件、进 CLI 日志、进请求体。
+   *
+   * **host 侧必须先用自己解析出的 registry 身份判定，再决定要不要发凭据。**
+   * 请求里的 `providerId` 只是一个查表 key：它能否附上凭据，完全由
+   * `resolveProviderIdentity` 返回的注册表事实（模板、访问形态、api 类型、baseUrl）
+   * 决定，绝不由调用方字符串决定。`provider-data-schema.ts` 没有 host 白名单，个人
+   * provider 可以指向任意地址，所以"按名字/按调用方给的 baseUrl 发凭据"等于把订阅
+   * 密钥送到攻击者服务器。
+   *
+   * 缺省（未注入）时该请求一律 `headersApplied: false`，即 fail closed：没有 host 身份
+   * 权威的场景（standalone CLI）宁可不发凭据，也不猜。
+   */
+  providerRequestAuth?: {
+    /**
+     * 用 host 自己的 provider registry 投影解析身份；查不到必须返回 null。
+     * 实现必须返回**生效后**的配置（personal overlay 之后），否则个人覆盖改写
+     * baseUrl 就绕过了注册表事实。
+     */
+    resolveProviderIdentity(input: {
+      modelId: string;
+      providerId: string;
+    }): Promise<ProviderRequestAuthIdentity | null>;
+    /**
+     * The grant store for the provider the identity resolved to, or null.
+     *
+     * A thunk rather than a value because the OAuth service and this service are
+     * assembled in that order, and because signing in happens long after start:
+     * resolving per request is what makes "signed in later" work without a
+     * restart. Returning null (no such provider, or the provider's credential is
+     * not an app-owned grant) is a refusal, never a fallback.
+     */
+    resolveGrantStore(identity: ProviderRequestAuthIdentity): ProviderRequestAuthGrantStore | null;
+  };
   sessionRuntimePreferencesAuthority?: "local" | "external";
   resolveSessionRuntimePreferences?: (
     scope: ZCodeSessionRuntimePreferencesScope,
@@ -2066,13 +2109,37 @@ export function createZCodeAgentService(
             workspaceKey: resolveWorkspaceKey(workspace),
             workspacePath: workspace.workspacePath,
           });
-          // The account-provider subsystem is gone, so no request can carry a resolvable
-          // account credential. Answer fast instead of leaving the request pending until
-          // the CLI side 180s timeout.
-          pendingProviderRuntimeHeaders.delete(pendingKey);
-          void pending.client.respond(pending.protocolRequestId, {
-            headersApplied: false,
-            errorMessage: "Provider request auth is unavailable",
+          // 动态凭据的唯一合法流程，且判定全在 answerProviderRequestAuthRequest 内：
+          // 先解析**注册表身份**，命中才读 grant store。顺序不能反：先读 grant 再判
+          // 身份，等于把订阅密钥读进内存再决定不用它。任何一步拿不到（未注入、查不到、
+          // 模板/baseUrl/访问形态不匹配、没登录、轮换失败）都 fail closed，并且这个
+          // 拒绝在线路上与"没登录"不可区分。
+          void answerProviderRequestAuthRequest({
+            port: options?.providerRequestAuth,
+            providerId: parsed.data.providerId,
+            modelId: parsed.data.modelSelection.modelId,
+            reason: parsed.data.reason,
+            onRefusal: (detail) => {
+              logger.info(request.trace?.traceId, "provider 请求凭据：拒绝附上凭据", {
+                detail,
+                providerId: parsed.data.providerId,
+                reason: parsed.data.reason,
+                requestId: parsed.data.requestId,
+                sessionId: parsed.data.sessionId,
+              });
+            },
+          }).then((response) => {
+            if (response.headersApplied) {
+              // 成功路径也只记 header 名，绝不记值（header 值就是订阅凭据本身）。
+              logger.info(request.trace?.traceId, "provider 请求凭据：已附上本次请求的鉴权材料", {
+                apiKeyPresent: Boolean(response.requestAuth.apiKey),
+                headerNames: Object.keys(response.requestAuth.headers ?? {}).sort(),
+                providerId: parsed.data.providerId,
+                reason: parsed.data.reason,
+                requestId: parsed.data.requestId,
+              });
+            }
+            return client.respond(request.id, response);
           });
           return;
         }

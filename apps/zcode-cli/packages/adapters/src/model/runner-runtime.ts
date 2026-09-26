@@ -2,6 +2,7 @@ import { generateText as aiGenerateText, streamText as aiStreamText } from "ai";
 import type {
   ModelProperties,
   ModelRequestAuth,
+  ModelRequestCredentialReason,
   ModelTextRequest,
   TraceContext,
 } from "@zcode/contracts";
@@ -25,7 +26,7 @@ export interface AiSdkModelTextRequest extends ModelTextRequest {
   traceContext?: TraceContext;
   refreshRuntimeHeadersBeforeAttempt?: (input: {
     attempt: number;
-    reason?: "model-request";
+    reason?: ModelRequestCredentialReason;
     abortSignal?: AbortSignal;
     providerId: string;
     modelId: string;
