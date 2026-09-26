@@ -1,8 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { ProviderSettingsFormProvider } from "@/lib/providerSettingsFormTypes.js";
 import { getProviderFormLabel } from "@/lib/providerSettingsFormTypes.js";
-import type { ProviderFamilyConnectionSelection, ProviderFamilyDomain } from "@zcode/shared";
-import { resolveModelProviderFamilySpecByProviderId } from "@zcode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { ModelProviderNavGroup } from "@/settings/model-provider-section/constants.js";
 import { createCustomProviderNodeKey } from "@/settings/model-provider-section/utils.js";
@@ -82,37 +80,4 @@ export function useModelProviderNavigation({
     navigationItems,
     selectedNavItem,
   };
-}
-
-/**
- * The provider-family connection mode was the only remaining consumer of the
- * coding-plan and team-plan navigation variants, and it is now unreachable:
- * nothing produces those items. The matcher stays exported because the
- * connection mode switch still imports it, and the nav item union still
- * declares those variants.
- */
-export function connectionSelectionMatchesNavigationItem(
-  family: ProviderFamilyDomain,
-  selection: ProviderFamilyConnectionSelection,
-  item: Exclude<ModelProviderNavGroup["items"][number], { type: "codingPlanLoading" }>,
-): boolean {
-  if (item.type === "custom") return false;
-  const familySpec = resolveModelProviderFamilySpecByProviderId(item.presetId ?? "");
-  if (familySpec?.id !== family) return false;
-  if (selection.kind === "start-plan") {
-    return false;
-  }
-  if (selection.kind === "individual-coding-plan") {
-    return (
-      item.type === "codingPlan" && item.presetId === familySpec.individualCodingPlanProviderId
-    );
-  }
-  return (
-    item.type === "teamPlan" &&
-    item.presetId === familySpec.teamCodingPlanProviderId &&
-    // 团队连接按平台、组织和项目定位；订阅商品会在权益快照和 pricing 校正间变化。
-    // 不能把同项目的商品更新误判为连接丢失，否则初始化会出现空选项和错误提示。
-    item.organizationId === selection.organizationId &&
-    item.projectId === selection.projectId
-  );
 }

@@ -301,7 +301,6 @@ export function ModelProviderSection({
       description={intl.formatMessage({ id: "settings.modelProviderDescription" })}
       refreshLabel={intl.formatMessage({ id: "settings.modelProvider.refresh" })}
       loadingLabel={intl.formatMessage({ id: "common.loading" })}
-      presetLoading={customLoading}
       customLoading={customLoading}
       onRefresh={() => {
         void refreshModelProviderSection({ refresh });
@@ -335,8 +334,6 @@ export function ModelProviderSection({
         <ModelProviderSectionDetail
           providerSettingsView={providerSettingsView}
           selectedNavItem={selectedNavItem}
-          navigationItems={navigationItems}
-          presetLoading={customLoading}
           onSave={handleSave}
           onAddPersonalModel={addPersonalModel}
           onSavePersonalModelDraft={savePersonalModelDraft}
@@ -348,7 +345,6 @@ export function ModelProviderSection({
           onReorderProviderModels={reorderProviderModels}
           onTestModel={handleTestModel}
           onOpenApiKeyUrl={handleOpenApiKeyUrl}
-          onSelectNavItem={handleSelectNavItem}
         />
       )}
     </ModelProviderSectionLayout>
