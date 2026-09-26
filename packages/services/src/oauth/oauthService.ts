@@ -21,6 +21,8 @@ import type { IOAuthService } from "./oauth.js";
 import { isCurrentOAuthCredentialRequest } from "#src/oauth/oauthUnauthorizedRequest.js";
 import { hasOAuthAuthorizationCode, parseOAuthLoginAttribution } from "./callbackAttribution.js";
 import { createOAuthProviderAdapters, type OAuthProviderAdapter } from "./providers/index.js";
+import { isDeviceCodeFlowAdapter } from "./providers/chatgpt/chatgptDeviceFlowSession.js";
+import { isSessionTeardownAdapter } from "./providers/chatgpt/chatgptSessionTeardown.js";
 import { OAuthCredentialRepo } from "./repo/oauthCredentialRepo.js";
 import { buildZCodeApiUrlFromEnv } from "./providers/configUtils.js";
 
@@ -38,6 +40,8 @@ interface PendingState {
   timeout: NodeJS.Timeout;
   phase: "awaiting-attribution-or-code" | "awaiting-code-after-attribution";
   completionPromise?: Promise<OAuthCallbackResult | null>;
+  /** Marks a device-code login, which completes through polling, not a deep link. */
+  deviceCode?: boolean;
   polling?: {
     expiresAt: number;
     flowId: string;
@@ -183,6 +187,14 @@ export class OAuthService implements IOAuthService {
       return { status: "signed-out" };
     }
 
+    if (adapter.meta.sessionKind === "provider-token") {
+      // The provider owns its own issuer and issues no shared ZCode JWT, so the
+      // only session fact that can be checked locally is its own access token.
+      // Requiring the backend JWT here would sign a perfectly valid subscriber
+      // out on every launch.
+      return this.restoreProviderTokenSession(adapter, activeProvider, profile);
+    }
+
     // 启动缓存恢复只需要检查共享 zcode JWT；若通过 loadActiveTokenSet 连带读取
     // provider access token，会把后台 profile 刷新重新阻塞到首屏恢复链路。
     const zcodeJwtToken = (await this.credentialService.load(ZCODE_JWT_TOKEN_KEY))?.trim() ?? "";
@@ -204,6 +216,44 @@ export class OAuthService implements IOAuthService {
       );
       if (!invalidated) {
         return this.restoreCachedSessionState();
+      }
+      return { status: "reauthentication-required", reason: "jwt-expired" };
+    }
+
+    log("restoreCachedSession restored:", activeProvider, profile.id);
+    return { status: "authenticated", userInfo: toUserInfo(profile) };
+  }
+
+  private async restoreProviderTokenSession(
+    adapter: OAuthProviderAdapter,
+    activeProvider: OAuthProviderId,
+    profile: OAuthUserProfile,
+  ): Promise<OAuthCachedSessionRestoreResult> {
+    const tokenSet = await this.repo.loadTokenSet(activeProvider);
+    if (!tokenSet) {
+      log("restoreCachedSession skipped: missing provider token set:", activeProvider);
+      return { status: "signed-out" };
+    }
+
+    // An unreadable or expiry-less token is NOT treated as expired: only the
+    // issuer can reject it, and guessing "expired" here would sign out a healthy
+    // subscriber whose token simply carries no exp claim.
+    if (resolveJwtExpiration(tokenSet.accessToken, this.now()).kind === "expired") {
+      serviceLog.info("cached session invalidated because the provider access token expired", {
+        provider: activeProvider,
+      });
+      await this.runSessionMutation(async () => {
+        this.oauthSessionGeneration += 1;
+        await this.repo.clearActiveSession();
+      });
+      await this.cancelPending(activeProvider);
+      try {
+        await this.notifyProviderLogout(activeProvider, profile.id);
+      } catch (error) {
+        serviceLog.warn("expired provider session cleanup failed", {
+          error,
+          provider: activeProvider,
+        });
       }
       return { status: "reauthentication-required", reason: "jwt-expired" };
     }
@@ -460,6 +510,11 @@ export class OAuthService implements IOAuthService {
 
   async startOAuthWithPolling(provider: OAuthProviderId): Promise<OAuthStartResponse> {
     const adapter = this.getEnabledAdapter(provider);
+    if (isDeviceCodeFlowAdapter(adapter)) {
+      // The ZCode backend cannot broker a third-party issuer, so a provider that
+      // owns its own device-code flow must be driven locally.
+      return this.startOAuthInternal(provider);
+    }
     if (!this.apiClient) {
       throw new Error("ApiClient 注入缺失：OAuth polling 必须通过 Providers 传入 apiClient");
     }
@@ -553,13 +608,20 @@ export class OAuthService implements IOAuthService {
   }
 
   async pollPendingOAuth(): Promise<OAuthCallbackResult | null> {
+    const pending = this.pendingState;
+    if (!pending) {
+      return null;
+    }
+    if (pending.deviceCode) {
+      return this.pollPendingDeviceCode(pending);
+    }
+
     const apiClient = this.apiClient;
     if (!apiClient) {
       return null;
     }
-    const pending = this.pendingState;
-    const polling = pending?.polling;
-    if (!pending || !polling) {
+    const polling = pending.polling;
+    if (!polling) {
       return null;
     }
     if (this.now() >= polling.expiresAt) {
@@ -676,6 +738,53 @@ export class OAuthService implements IOAuthService {
     }
   }
 
+  /**
+   * Advances a live device-code login by at most one poll.
+   *
+   * Reuses the pending-state completion path so persistence, generation checks
+   * and duplicate suppression behave exactly as they do for a deep-link login.
+   */
+  private async pollPendingDeviceCode(pending: PendingState): Promise<OAuthCallbackResult | null> {
+    const adapter = this.getAdapter(pending.provider);
+    if (!isDeviceCodeFlowAdapter(adapter)) {
+      return null;
+    }
+
+    let tokenSet: OAuthTokenSet | null;
+    try {
+      tokenSet = await adapter.pollDeviceFlow(pending.state);
+    } catch (error) {
+      if (this.pendingState === pending) this.clearPendingState();
+      throw adapter.normalizeError(error);
+    }
+    if (!tokenSet || this.pendingState !== pending) {
+      return null;
+    }
+
+    return this.runPendingSessionCompletion(pending, async () => {
+      let profile: OAuthUserProfile = {
+        id: "unknown",
+        username: "user",
+        displayName: "ChatGPT",
+      };
+      if (adapter.fetchUserInfo) {
+        try {
+          profile = await this.runWithAdapterError(adapter, () =>
+            adapter.fetchUserInfo!(tokenSet, {
+              providerId: adapter.providerId,
+              state: pending.state,
+              redirectUri: adapter.redirectUri,
+              now: this.now,
+            }),
+          );
+        } catch {
+          // A failed profile lookup must not block a login whose grant is valid.
+        }
+      }
+      return { tokenSet, profile };
+    });
+  }
+
   private async startOAuthInternal(provider: OAuthProviderId): Promise<OAuthStartResponse> {
     const adapter = this.getEnabledAdapter(provider);
 
@@ -690,7 +799,9 @@ export class OAuthService implements IOAuthService {
     const state = randomBytes(32).toString("hex");
     const timeout = setTimeout(() => {
       if (this.pendingState?.state === state) {
-        this.pendingState = null;
+        // clearPendingState, not a bare null: a device-code session has to be
+        // torn down too, or a timed-out login could still be completed by a poll.
+        this.clearPendingState();
       }
     }, OAUTH_TIMEOUT_MS);
 
@@ -700,6 +811,37 @@ export class OAuthService implements IOAuthService {
       timeout,
       phase: "awaiting-attribution-or-code",
     };
+
+    // Device code is the default for providers that support it: the user approves
+    // in a browser and the grant arrives by polling, so no loopback listener and
+    // no fixed port are involved.
+    if (isDeviceCodeFlowAdapter(adapter)) {
+      try {
+        const challenge = await adapter.startDeviceFlow(state);
+        if (this.pendingState?.state !== state) {
+          adapter.cancelDeviceFlow(state);
+          throw new Error("OAuth flow 已被新的登录请求替换");
+        }
+        this.pendingState.deviceCode = true;
+        serviceLog.info("OAuth device code flow started", { provider: adapter.providerId });
+        return {
+          provider: adapter.providerId,
+          authorizeUrl: challenge.verificationUriComplete ?? challenge.verificationUri,
+          state,
+          deviceCode: {
+            userCode: challenge.userCode,
+            verificationUri: challenge.verificationUri,
+            ...(challenge.verificationUriComplete
+              ? { verificationUriComplete: challenge.verificationUriComplete }
+              : {}),
+            expiresAt: challenge.expiresAt,
+          },
+        };
+      } catch (error) {
+        this.clearPendingState();
+        throw error;
+      }
+    }
 
     const authorizeUrl = adapter.buildAuthorizeUrl({
       providerId: adapter.providerId,
@@ -881,6 +1023,9 @@ export class OAuthService implements IOAuthService {
         : null;
       this.oauthSessionGeneration += 1;
       await this.repo.clearActiveSession();
+      if (activeProvider) {
+        await this.clearProviderSessionSecrets(activeProvider);
+      }
       return { activeProvider, accountIdentity };
     });
     if (!result) return false;
@@ -913,6 +1058,7 @@ export class OAuthService implements IOAuthService {
       // provider 的 Unlink 已收敛为 App logout。
       // 只有当前 active provider 才代表登录事实，避免旧 unlink 路径误删非当前 provider token。
       await this.repo.clearActiveSession();
+      await this.clearProviderSessionSecrets(provider);
       return accountIdentity;
     });
     if (loggedOutIdentity !== undefined) {
@@ -930,6 +1076,9 @@ export class OAuthService implements IOAuthService {
       }
       this.oauthSessionGeneration += 1;
       await this.repo.clearAll(providers);
+      for (const provider of providers) {
+        await this.clearProviderSessionSecrets(provider);
+      }
       return identities;
     });
     await this.cancelPending();
@@ -950,13 +1099,41 @@ export class OAuthService implements IOAuthService {
     this.clearPendingState();
   }
 
+  /**
+   * Drops provider-owned secrets that live outside the shared credential store.
+   *
+   * Failing here must not block a logout: the shared session is already gone,
+   * and leaving the UI stuck in a signed-in state is worse than leaving one
+   * orphaned file that the next login overwrites.
+   */
+  private async clearProviderSessionSecrets(provider: OAuthProviderId): Promise<void> {
+    const adapter = this.adapters.get(provider);
+    if (!adapter || !isSessionTeardownAdapter(adapter)) {
+      return;
+    }
+    try {
+      await adapter.clearProviderSessionSecrets();
+    } catch (error) {
+      serviceLog.warn("provider session secret cleanup failed", { error, provider });
+    }
+  }
+
   private clearPendingState(): void {
     if (!this.pendingState) {
       return;
     }
 
-    clearTimeout(this.pendingState.timeout);
+    const pending = this.pendingState;
+    clearTimeout(pending.timeout);
     this.pendingState = null;
+    if (pending.deviceCode) {
+      const adapter = this.adapters.get(pending.provider);
+      if (adapter && isDeviceCodeFlowAdapter(adapter)) {
+        // Drop the device code so a cancelled login cannot be completed by a
+        // late poll that the user never intended to finish.
+        adapter.cancelDeviceFlow(pending.state);
+      }
+    }
   }
 
   private async notifyProviderLogout(

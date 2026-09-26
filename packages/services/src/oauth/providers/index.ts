@@ -1,5 +1,6 @@
 import type { ApiClient } from "@zcode/shared";
 import type { OAuthProviderAdapter } from "./providerAdapter.js";
+import { ChatGptOAuthAdapter } from "./chatgpt/chatgptOAuthAdapter.js";
 
 /**
  * 创建当前可用的 provider adapter 列表。
@@ -16,7 +17,11 @@ export function createOAuthProviderAdapters(options: {
     );
   }
 
-  return [];
+  // ChatGPT authenticates against its own issuer (auth.openai.com) and not against
+  // the ZCode backend, so the adapter carries its own transport and never routes
+  // ChatGPT credentials through the injected backend apiClient.
+  return [new ChatGptOAuthAdapter()];
 }
 
 export type { OAuthProviderAdapter, OAuthProviderContext } from "./providerAdapter.js";
+export { ChatGptOAuthAdapter } from "./chatgpt/chatgptOAuthAdapter.js";

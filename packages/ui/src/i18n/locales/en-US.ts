@@ -854,6 +854,7 @@ const enUS: Record<string, string> = {
   "login.oauth.regionTag.zai": "Global",
   "login.oauth.regionTag.bigmodel": "CN",
   "login.oauth.waiting": "Waiting for {provider} authentication...",
+  "login.oauth.deviceCode.hint": "Enter this code in the browser window that just opened:",
   "login.oauth.loginFailure": "Login failed, please try again",
   "login.oauth.cancel": "Cancel",
   "login.oauth.retry": "Retry login",

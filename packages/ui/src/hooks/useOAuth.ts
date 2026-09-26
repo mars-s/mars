@@ -5,7 +5,7 @@
  * OAuth 回调监听在 Root/App 常驻层，不在此 hook 中。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OAuthProviderId, OAuthProviderMeta } from "@zcode/shared";
+import type { OAuthDeviceCodeChallenge, OAuthProviderId, OAuthProviderMeta } from "@zcode/shared";
 import { isCredentialDecryptError, resolveSafeTelemetryHostname } from "@zcode/shared";
 import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -27,6 +27,11 @@ export function useOAuth() {
   const [activeProvider, setActiveProvider] = useState<OAuthProviderId | null>(null);
   const [loadingProviders, setLoadingProviders] = useState(true);
   const [pendingProvider, setPendingProvider] = useState<OAuthProviderId | null>(null);
+  // Present only while a device-code login is live; the user has to type this
+  // code in a browser, so the login panel cannot render a plain "waiting" state.
+  const [deviceCodeChallenge, setDeviceCodeChallenge] = useState<OAuthDeviceCodeChallenge | null>(
+    null,
+  );
   const loginAttemptRef = useRef(0);
   const setOAuthPollingActive = useZCodeStore((state) => state.setOAuthPollingActive);
 
@@ -73,6 +78,7 @@ export function useOAuth() {
 
         const {
           authorizeUrl,
+          deviceCode,
           state,
           provider: startedProvider,
         } = await oauthService.startOAuthWithPolling(provider);
@@ -85,6 +91,7 @@ export function useOAuth() {
         // Any provider that returns an authorize URL needs the callback poll running.
         // The Z.ai / BigModel special case is gone together with those providers.
         setOAuthPollingActive(true);
+        setDeviceCodeChallenge(deviceCode ?? null);
         platform.openExternal(authorizeUrl);
         void reportAppTelemetryEvent(
           platform,
@@ -112,6 +119,7 @@ export function useOAuth() {
         logger.error("[useOAuth] 启动 OAuth 失败:", err);
         setOAuthPollingActive(false);
         setStatus("error");
+        setDeviceCodeChallenge(null);
         // OAuth 启动失败也属于登录失败，不把服务端或平台错误原文展示给用户。
         // 原文通过 i18n 渲染，避免登录页出现 provider/token 等具体失败原因。
         setError(intl.formatMessage({ id: "login.oauth.loginFailure" }));
@@ -129,6 +137,7 @@ export function useOAuth() {
       setStatus("idle");
       setError(null);
       setPendingProvider(null);
+      setDeviceCodeChallenge(null);
     },
     [oauthService, setOAuthPollingActive],
   );
@@ -137,6 +146,7 @@ export function useOAuth() {
     setStatus("idle");
     setError(null);
     setPendingProvider(null);
+    setDeviceCodeChallenge(null);
   }, []);
 
   /** 由 Root/App 层的回调监听器调用，更新 UI 状态 */
@@ -144,12 +154,14 @@ export function useOAuth() {
     setStatus("error");
     setError(message);
     setPendingProvider(null);
+    setDeviceCodeChallenge(null);
   }, []);
 
   const setOAuthSuccess = useCallback(async () => {
     setStatus("idle");
     setError(null);
     setPendingProvider(null);
+    setDeviceCodeChallenge(null);
     await refreshProviders();
   }, [refreshProviders]);
 
@@ -163,6 +175,7 @@ export function useOAuth() {
     activeProvider,
     loadingProviders,
     pendingProvider,
+    deviceCodeChallenge,
     refreshProviders,
     setOAuthError,
     setOAuthSuccess,
