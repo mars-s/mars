@@ -47,7 +47,22 @@ means you did, and the delta is yours to fix.
 
 Get a baseline with `git stash -u` first. Beware that `tsc -b` writes `.d.ts` and
 `.js` artifacts into `packages/desktop/src/scheduler/`, which then collide with
-`git stash pop`. Delete those four generated files before popping.
+`git stash pop`. Delete those generated files before popping.
+
+**Why those files appear.** `tsconfig.main.json` sets `rootDir: "src/main"` and
+`outDir: "out/main"`, but it imports `../scheduler/schedulerProtocol.js`, which is
+outside that root. TypeScript falls back to the common source directory, so output
+for anything reached from outside `rootDir` lands next to the source instead of in
+`out/`. Confirmed by running each project on its own: `main` produces the strays,
+`preload`, `renderer`, `host` and `scheduler` do not. This is pre-existing and
+predates all of our work.
+
+`.gitignore` now excludes `packages/desktop/src/**/*.{js,d.ts}` and their `.map`
+files, so they cannot be committed. That rule is scoped to the desktop `src` tree
+on purpose: all 1386 tracked files there are `.ts`/`.tsx`, while
+`packages/zcode-cua` tracks 13 hand-written `.js` files that a blanket `*.js`
+ignore would have hidden. If you ever see them as `!!` in `git status
+--ignored`, that is expected and harmless.
 
 ## Baseline commands
 
