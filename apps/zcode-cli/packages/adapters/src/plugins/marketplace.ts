@@ -51,6 +51,35 @@ const MARKETPLACE_JSON_MAX_BYTES = 10 * 1024 * 1024;
 const MARKETPLACE_JSON_MAX_REDIRECTS = 5;
 const MARKETPLACE_JSON_TIMEOUT_MS = 180_000;
 const CLAUDE_MARKETPLACE_FILE = join(".claude-plugin", "marketplace.json");
+
+/**
+ * Asset hosts that used to be a built-in default and are no longer configured.
+ *
+ * A marketplace that was added while one of these was still the default keeps its
+ * record in `known_marketplaces.json` forever, and the store's refresh button
+ * keeps hitting it. Removing the default therefore only affects fresh installs;
+ * upgrading installs need their stale records dropped or the traffic continues.
+ */
+const RETIRED_MARKETPLACE_HOSTS: ReadonlySet<string> = new Set(["cdn-zcode.z.ai"]);
+
+/** True for a url/github/git source pointing at a host we no longer talk to. */
+function isRetiredMarketplaceSource(source: MarketplaceSource): boolean {
+  const url = source.source === "url" || source.source === "git" ? source.url : undefined;
+  if (!url) return false;
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (RETIRED_MARKETPLACE_HOSTS.has(hostname)) return true;
+  // A subdomain of a retired host is the same operator, so treat it the same.
+  for (const retired of RETIRED_MARKETPLACE_HOSTS) {
+    if (hostname.endsWith(`.${retired}`)) return true;
+  }
+  return false;
+}
+
 const ZCODE_MANIFEST_PATH = join(".zcode-plugin", "plugin.json");
 const CLAUDE_MANIFEST_PATH = join(".claude-plugin", "plugin.json");
 const CODEX_MANIFEST_PATH = join(".codex-plugin", "plugin.json");
@@ -278,7 +307,14 @@ export function loadKnownMarketplacesSync(storageRoot: string): KnownMarketplace
 
 export function ensureDefaultPluginMarketplaces(storageRoot: string): KnownMarketplaceRecord[] {
   const known = loadKnownMarketplacesSync(storageRoot);
-  const existingIds = new Set(known.map((record) => record.id));
+
+  // Migration: drop records still pointing at a retired asset host. Without this
+  // an install that predates the removal keeps refreshing a host we no longer
+  // configure. Runs before the add-missing step so a retired record cannot also
+  // block the re-add of a freshly configured default for the same id.
+  const live = known.filter((record) => !isRetiredMarketplaceSource(record.source));
+
+  const existingIds = new Set(live.map((record) => record.id));
   const now = new Date().toISOString();
   const missing = DEFAULT_PLUGIN_MARKETPLACES.filter(
     (marketplace) => !existingIds.has(marketplace.id),
@@ -293,8 +329,8 @@ export function ensureDefaultPluginMarketplaces(storageRoot: string): KnownMarke
       pluginCount: marketplace.pluginCount,
     }),
   );
-  if (missing.length === 0) return known;
-  const next = [...known, ...missing];
+  if (missing.length === 0 && live.length === known.length) return known;
+  const next = [...live, ...missing];
   writeKnownMarketplacesSync(storageRoot, next);
   return next;
 }
