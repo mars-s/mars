@@ -13,6 +13,7 @@ import {
   resolveModelProviderFamilySpecByProviderId,
   resolveProviderFamilyDomainFromOAuthProvider,
   type OAuthProviderId,
+  type ModelProviderFamilyId,
 } from "@zcode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
@@ -507,7 +508,7 @@ function pickFamilyModeNavigationItem(
   selectableNavigationItems: Array<
     Exclude<ModelProviderNavGroup["items"][number], { type: "codingPlanLoading" }>
   >,
-  familyId: "zai" | "bigmodel",
+  familyId: ModelProviderFamilyId,
   connectionSelections: ProviderFamilyConnectionSelectionSettings,
 ): Exclude<ModelProviderNavGroup["items"][number], { type: "codingPlanLoading" }> | null {
   const selection = connectionSelections[familyId];

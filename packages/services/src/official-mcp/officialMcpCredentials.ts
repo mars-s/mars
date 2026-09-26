@@ -22,6 +22,7 @@ import {
   type OfficialMcpAuthFailureReason,
   type ZCodeAccountAccess,
   type ZCodeProviderAccountAccess,
+  type ModelProviderFamilyId,
 } from "@zcode/shared";
 import type { ModelSelectionView } from "@zcode/provider";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
@@ -38,7 +39,7 @@ const ACTIVE_OAUTH_PROVIDER_KEY = "oauth:active_provider";
  * Coding Plan 只会得到一次注定失败的请求，而且失败原因会指向"没有套餐"这种误导结论。
  * 这几行与 bigmodelUsageQuotaProvider 的 reset 通道逻辑等价但独立（见文件头说明）。
  */
-function maasJwtCredentialKey(providerFamily: "zai" | "bigmodel"): string {
+function maasJwtCredentialKey(providerFamily: ModelProviderFamilyId): string {
   return `oauth:${getModelProviderFamilySpec(providerFamily).oauthProviderId}:access_token`;
 }
 
@@ -75,7 +76,7 @@ const CREDENTIAL_RESOLVED_LOG_BUCKET_SECONDS = 3600;
  * MCP 调用都产生 info 日志。凭据有效期跨桶、进入 expired 或切换套餐类型时重新记录。
  */
 function createCredentialResolvedLogKey(input: {
-  providerFamily: "zai" | "bigmodel";
+  providerFamily: ModelProviderFamilyId;
   planTargetType: string | null;
   maasJwtExpiresInSeconds: number | undefined;
 }): string {
@@ -115,7 +116,7 @@ export interface OfficialMcpCredentialSnapshot {
    * 前缀在 buildOfficialMcpAuthHeaders 里加，与 reset / usage 通道的既有约定一致。
    */
   codingPlanAuthorization?: string;
-  providerFamily: "zai" | "bigmodel";
+  providerFamily: ModelProviderFamilyId;
   /** 当前选中连接的产品/额度归属；畸形旧 Team key 无法精确归属时为 null。 */
   planScope: OfficialMcpPlanScope | null;
   /** 实际发往 Server MCP 的身份头 scope；ZAI Team 与 Off-Peak 一致为 null。 */
@@ -127,7 +128,7 @@ export type OfficialMcpCredentialOutcome =
   | { ok: false; reason: OfficialMcpAuthFailureReason };
 
 type SelectedPlan = {
-  providerFamily: "zai" | "bigmodel";
+  providerFamily: ModelProviderFamilyId;
   providerId: string;
   planScope: OfficialMcpPlanScope | null;
   wireScope: OfficialMcpWireScope;
@@ -213,7 +214,7 @@ function createSelectionFingerprint(registry: ModelSelectionView): string {
 }
 
 type OfficialMcpIdentitySnapshot = {
-  activeProvider: "zai" | "bigmodel";
+  activeProvider: ModelProviderFamilyId;
   jwt: string;
   registry: ModelSelectionView;
   selectionFingerprint: string;

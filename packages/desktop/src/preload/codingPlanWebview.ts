@@ -3,6 +3,7 @@ import {
   CodingPlanWebviewChannels,
   isTrustedCodingPlanWebviewOrigin,
   PlatformChannels,
+  type ModelProviderFamilyId,
 } from "@zcode/shared";
 
 // Coding Plan 官网页 preload：
@@ -62,7 +63,7 @@ function isTrustedCodingPlanBridgeLocation(): boolean {
 }
 
 interface NotifyPurchaseCompletePayload {
-  provider: "zai" | "bigmodel";
+  provider: ModelProviderFamilyId;
 }
 
 type CodingPlanReportContext = Record<string, string>;

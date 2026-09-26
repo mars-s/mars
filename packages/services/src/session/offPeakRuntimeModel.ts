@@ -8,6 +8,7 @@ import {
   type OffPeakCodingPlanSupport,
   type OffPeakCodingPlanUnsupportedReason,
   type ZCodeAccountAccess,
+  type ModelProviderFamilyId,
 } from "@zcode/shared";
 import { isOffPeakMockEnabled, startOffPeakMockGateway } from "./offPeakMockGateway.js";
 import type { ServiceLogger } from "../logger/serviceLogger.js";
@@ -63,7 +64,7 @@ export interface OffPeakCredentialSnapshot {
   jwt: string;
   codingPlanApiKey: string;
   kind: OffPeakCodingPlanKind;
-  providerFamily: "zai" | "bigmodel";
+  providerFamily: ModelProviderFamilyId;
   providerId: string;
   /** BigModel Team 组织/项目身份；仅两者同时存在时才允许进入请求头。 */
   organizationId?: string;

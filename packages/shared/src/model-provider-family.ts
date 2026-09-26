@@ -1,25 +1,22 @@
 import { BIGMODEL_PROVIDER_ID, type OAuthProviderId, ZAI_PROVIDER_ID } from "./oauth.js";
-import { BUILTIN_MODEL_PROVIDER_IDS, type BuiltinModelProviderId } from "./model-provider-types.js";
+import { BUILTIN_MODEL_PROVIDER_IDS } from "./model-provider-types.js";
 import { ZCODE_ENV } from "./env.js";
 import { buildBigModelCodingPlanTeamManageUrl } from "./zcodeEndpoint.js";
 
-export type ModelProviderFamilyId = "zai" | "bigmodel";
-export type ProviderFamilyDomain = ModelProviderFamilyId;
-
-export interface ModelProviderFamilySpec {
-  id: ModelProviderFamilyId;
+/**
+ * The shape every family entry must satisfy. Deliberately `string`-typed rather
+ * than a closed union of the vendor ids: adding or removing a family is a data
+ * edit to MODEL_PROVIDER_FAMILY_SPECS below, not a change to thirteen type
+ * signatures scattered across the tree. See DECISIONS.md entry 3.
+ */
+interface ModelProviderFamilySpecShape {
+  id: string;
   label: string;
   rootDomain: string;
-  oauthProviderId: typeof ZAI_PROVIDER_ID | typeof BIGMODEL_PROVIDER_ID;
-  startPlanProviderId:
-    | typeof BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan
-    | typeof BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan;
-  individualCodingPlanProviderId:
-    | typeof BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan
-    | typeof BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan;
-  teamCodingPlanProviderId:
-    | typeof BUILTIN_MODEL_PROVIDER_IDS.zaiTeamCodingPlan
-    | typeof BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan;
+  oauthProviderId: string;
+  startPlanProviderId: string;
+  individualCodingPlanProviderId: string;
+  teamCodingPlanProviderId: string;
   teamCodingPlanManageUrl: string;
 }
 
@@ -44,16 +41,36 @@ export const MODEL_PROVIDER_FAMILY_SPECS = [
     teamCodingPlanProviderId: BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan,
     teamCodingPlanManageUrl: buildBigModelCodingPlanTeamManageUrl({ ZCODE_ENV }),
   },
-] as const satisfies readonly ModelProviderFamilySpec[];
+] as const satisfies readonly ModelProviderFamilySpecShape[];
+
+/**
+ * The single source of truth for which provider families exist. `ModelProviderFamilyId`
+ * is derived from this array, so adding a family is one entry here and removing one
+ * is deleting one entry here.
+ */
+export type ModelProviderFamilyId = (typeof MODEL_PROVIDER_FAMILY_SPECS)[number]["id"];
+
+export type ProviderFamilyDomain = ModelProviderFamilyId;
+
+/** A family entry with its `id` narrowed back to the family union. */
+export type ModelProviderFamilySpec = (typeof MODEL_PROVIDER_FAMILY_SPECS)[number];
+
+const MODEL_PROVIDER_FAMILY_IDS: ReadonlySet<string> = new Set(
+  MODEL_PROVIDER_FAMILY_SPECS.map((spec) => spec.id),
+);
+
+/** Narrows an untrusted string, e.g. one that crossed a channel boundary. */
+export function isModelProviderFamilyId(value: unknown): value is ModelProviderFamilyId {
+  return typeof value === "string" && MODEL_PROVIDER_FAMILY_IDS.has(value);
+}
 
 const MODEL_PROVIDER_FAMILY_SPEC_BY_ID = new Map<ModelProviderFamilyId, ModelProviderFamilySpec>(
   MODEL_PROVIDER_FAMILY_SPECS.map((spec) => [spec.id, spec]),
 );
 
-const MODEL_PROVIDER_FAMILY_ID_BY_PROVIDER_ID = new Map<
-  BuiltinModelProviderId,
-  ModelProviderFamilyId
->(
+// Keyed by string rather than BuiltinModelProviderId so a family may name any
+// provider id, not only the six currently in BUILTIN_MODEL_PROVIDER_IDS.
+const MODEL_PROVIDER_FAMILY_ID_BY_PROVIDER_ID = new Map<string, ModelProviderFamilyId>(
   MODEL_PROVIDER_FAMILY_SPECS.flatMap((spec) =>
     [
       spec.startPlanProviderId,
@@ -72,7 +89,7 @@ export function getModelProviderFamilySpec(
 export function resolveModelProviderFamilyIdByProviderId(
   providerId: string,
 ): ModelProviderFamilyId | null {
-  return MODEL_PROVIDER_FAMILY_ID_BY_PROVIDER_ID.get(providerId as BuiltinModelProviderId) ?? null;
+  return MODEL_PROVIDER_FAMILY_ID_BY_PROVIDER_ID.get(providerId) ?? null;
 }
 
 export function resolveModelProviderFamilyIdByBaseURL(
@@ -110,7 +127,7 @@ export function resolveModelProviderFamilyLabelByProviderId(providerId: string):
 export function normalizeProviderFamilyDomain(
   value: string | null | undefined,
 ): ProviderFamilyDomain | null {
-  return value === "zai" || value === "bigmodel" ? value : null;
+  return isModelProviderFamilyId(value) ? value : null;
 }
 
 export function resolveProviderFamilyDomainFromOAuthProvider(

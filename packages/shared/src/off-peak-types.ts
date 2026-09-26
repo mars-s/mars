@@ -1,4 +1,5 @@
 import type { ZCodeTaskMode } from "./zcode-task-types-core.js";
+import type { ModelProviderFamilyId } from "./model-provider-family.js";
 import type { ModelSelection } from "./model-selection.js";
 
 // ---- 闲时任务(Off-Peak Task)领域类型 ----
@@ -44,7 +45,7 @@ export const OFF_PEAK_PROVIDER_IDS = {
 } as const;
 
 export function resolveOffPeakProviderId(
-  family: "zai" | "bigmodel",
+  family: ModelProviderFamilyId,
 ): (typeof OFF_PEAK_PROVIDER_IDS)[typeof family] {
   return OFF_PEAK_PROVIDER_IDS[family];
 }
@@ -76,7 +77,7 @@ export type OffPeakCodingPlanSupport =
   | {
       supported: true;
       kind: OffPeakCodingPlanKind;
-      providerFamily: "zai" | "bigmodel";
+      providerFamily: ModelProviderFamilyId;
       providerId: string;
     }
   | {

@@ -5,6 +5,7 @@
  * 而额度是可以独立描述的一组类型（不依赖统计聚合结构），拆出后两边都在门禁内。
  * 这里只依赖自身，usage-stats.ts 单向导入并 re-export，不构成循环依赖。
  */
+import type { ModelProviderFamilyId } from "./model-provider-family.js";
 
 export interface UsageQuotaSnapshot {
   level: string | null;
@@ -51,11 +52,11 @@ export const MCP_USAGE_QUOTA_LIMIT_TYPE = "MCP_USAGE_LIMIT" as const;
 /** MCP 额度所属的 Coding Plan 连接，供 UI 判断能否显示在当前 provider tab 下。 */
 export type UsageMcpQuotaScope =
   | {
-      providerFamily: "zai" | "bigmodel";
+      providerFamily: ModelProviderFamilyId;
       targetType: "PERSONAL";
     }
   | {
-      providerFamily: "zai" | "bigmodel";
+      providerFamily: ModelProviderFamilyId;
       targetType: "TEAM";
       organizationId: string;
       projectId: string;

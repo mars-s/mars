@@ -14,6 +14,7 @@ import {
   type UsageMcpQuotaScope,
   type UsageMcpQuotaSnapshot,
   type UsageQuotaLimit,
+  type ModelProviderFamilyId,
 } from "@zcode/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import {
@@ -65,7 +66,7 @@ const mcpUsageEnvelopeSchema = z.object({
 
 /** 本次 entitlement 查询的连接归属，用于和凭证归属比对。 */
 interface McpQuotaRequestScope {
-  providerFamily: "zai" | "bigmodel";
+  providerFamily: ModelProviderFamilyId;
   organizationId?: string | null;
   projectId?: string | null;
 }

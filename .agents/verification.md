@@ -12,6 +12,43 @@ one to run.
 Also note `pnpm typecheck` **excludes `apps/zcode-cli`**. Green typecheck does
 not mean the CLI compiles.
 
+## `pnpm typecheck` covers less than it looks like it covers
+
+Measured while widening the provider family unions. The root script builds ten
+projects, but the tree has far more. Two whole regions are invisible to it, and
+one of them has pre-existing errors in it.
+
+| Region | Covered by root `pnpm typecheck`? | How to check it |
+| --- | --- | --- |
+| `apps/zcode-cli` (25 packages) | **No** | `cd apps/zcode-cli && npx turbo run typecheck` |
+| `packages/desktop` main / preload / renderer / scheduler | **No**, only `tsconfig.host.json` is built | `pnpm exec tsc -b packages/desktop/tsconfig.<project>.json` |
+
+`tsc -b` is incremental, so a clean run may print nothing and exit 0 without
+having recompiled anything. Use `--force` when you are establishing a baseline.
+
+### Pre-existing desktop type errors
+
+Running the four desktop projects that root typecheck skips produces errors on
+the pristine tree. They are upstream's, not ours, and they are not a gate.
+
+| Project | Pre-existing errors |
+| --- | --- |
+| `tsconfig.main.json` | 82 |
+| `tsconfig.preload.json` | 3 |
+| `tsconfig.renderer.json` | 123 |
+| `tsconfig.scheduler.json` | 1 |
+
+The preload 3 are missing exports (`DesktopZoomState`,
+`WindowControlsOverlayMetrics`, `WindowControlsOverlayReadyPayload`).
+
+**The rule:** if a change touches one of these regions, diff the error count
+against this table. Same count means you introduced nothing. A different count
+means you did, and the delta is yours to fix.
+
+Get a baseline with `git stash -u` first. Beware that `tsc -b` writes `.d.ts` and
+`.js` artifacts into `packages/desktop/src/scheduler/`, which then collide with
+`git stash pop`. Delete those four generated files before popping.
+
 ## Baseline commands
 
 Measured on commit `3f9f09c`, the pristine reverted tree, before any wave 1 work.

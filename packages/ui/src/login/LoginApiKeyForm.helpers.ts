@@ -3,11 +3,12 @@ import {
   type AppSettings,
   type Locale,
   type ProviderFamilyDomain,
+  type ModelProviderFamilyId,
 } from "@zcode/shared";
 import type { ModelSelectionView } from "@zcode/services";
 import { encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 
-export type ApiKeyProviderChoice = "zai" | "bigmodel";
+export type ApiKeyProviderChoice = ModelProviderFamilyId;
 
 export function resolveLoginApiKeyDefaultProvider(locale: Locale): ApiKeyProviderChoice {
   return locale === "zh-CN" ? "bigmodel" : "zai";

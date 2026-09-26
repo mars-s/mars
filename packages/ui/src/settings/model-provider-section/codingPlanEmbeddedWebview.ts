@@ -6,12 +6,13 @@ import {
   isZaiCodingPlanProviderId,
   normalizeZCodeEndpointOrigin,
   ZAI_PROVIDER_ID,
+  type ModelProviderFamilyId,
 } from "@zcode/shared";
 import type { CodingPlanWebviewLocale } from "@zcode/shared";
 import type { CodingPlanFunnelContext } from "@/lib/codingPlanFunnelTelemetry.js";
 import type { CodingPlanProviderId } from "@/settings/model-provider-section/constants.js";
 
-type CodingPlanWebsiteProvider = "zai" | "bigmodel";
+type CodingPlanWebsiteProvider = ModelProviderFamilyId;
 export type CodingPlanPurchaseAudience = "personal" | "team";
 
 export interface CodingPlanEmbeddedCredentials {

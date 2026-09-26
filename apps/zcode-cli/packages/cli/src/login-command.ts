@@ -1,4 +1,5 @@
 import { formatJson } from "@zcode/core";
+import type { ModelProviderFamilyId } from "@zcode/shared";
 import type { GlobalOptions, RunContext } from "@zcode/shared-types";
 import { loadBootstrapModule } from "./bootstrap-loader.js";
 import { loadCliDotenv } from "./env.js";
@@ -135,7 +136,7 @@ function writeAuthorizeUrl(
   options: GlobalOptions,
   authorizeUrl: string,
   noBrowser: boolean,
-  providerId: "zai" | "bigmodel",
+  providerId: ModelProviderFamilyId,
 ): void {
   const target = options.json ? ctx.stderr : ctx.stdout;
   if (noBrowser) {
