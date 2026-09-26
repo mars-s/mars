@@ -8,27 +8,36 @@ import {
 /**
  * ZaiCodingPlanSubscriptionProvider
  *
- * 历史上 Team Plan 企业定价只在 bigmodel family 上落地，service 层把所有
- * enterprise 读请求直接打到 BigModelCodingPlanSubscriptionProvider，硬编码 bigmodel
- * 域名 + bigmodelCodingPlan providerId + bigmodel OAuth token。zai family 即使生成
- * 了 team plan 连接键，也无独立的定价数据来源（死代码）。
+ * Team Plan enterprise pricing was only ever implemented on the bigmodel family, so the
+ * service layer sent every enterprise read straight to BigModelCodingPlanSubscriptionProvider
+ * with a hardcoded vendor domain, providerId and OAuth token. The zai family had no
+ * independent pricing source even when it produced a team plan connection key.
  *
- * zai 与 bigmodel Team Plan 全链路对称化：
- * 本类继承 BigModelCodingPlanSubscriptionProvider，仅覆盖 enterprise 读路径的 family 维度：
- *   - providerId  → zaiCodingPlan
- *   - 业务域名   → resolveZaiCodingPlanHost()（测试 配置的 ZAI Business origin / 线上 api.z.ai）
- *   - OAuth token → loadZaiAuthorization()（oauth:zai:access_token，复用父类）
- *   - 鉴权头     → createZaiLoginAuthHeaders()
+ * The zai family is now symmetric with the bigmodel family: this class extends
+ * BigModelCodingPlanSubscriptionProvider and overrides only the family dimension of the
+ * enterprise read path:
+ *   - providerId    -> zaiCodingPlan
+ *   - business host -> resolveZaiCodingPlanHost()
+ *   - OAuth token   -> loadZaiAuthorization() (oauth:zai:access_token, reused from the parent)
+ *   - auth headers  -> createZaiLoginAuthHeaders()
  *
- * 覆盖范围：仅 getEnterprisePricing + enrichEnterprisePricingTeamProjects 相关的
- * family 维度（通过 protected 虚方法）。企业购买闭环（balance/order/pending/cancel/
- * continue/status）仍由父类走 bigmodel 域，符合 zai Team Plan "仅读定价+团队上下文" 的产品边界。
+ * No vendor host is hardcoded in this file. The business host is exactly what
+ * resolveZaiBusinessBaseUrl(process.env) returns, that is the ZAI_BUSINESS_BASE_URL the
+ * operator configured. Nothing in this class invents a fallback host, so an operator without
+ * a configured business origin gets a loud failure from the resolver instead of a silent
+ * request to a vendor endpoint.
  *
- * 其余方法（batchPreview/preview/productInfo/checkPayment/checkPendingOrders/
- * Stripe/PayPal/createSign/updateSign/staticConfigs）全部复用父类：
- *   - 购买类已通过 request.providerId 在父类 resolveEndpointConfig 内动态路由
- *     （zai 走 /api/pay + zai host + zai token，bigmodel 走 /api/biz + bigmodel host + bigmodel token）。
- *   - staticConfigs 是平台级 client/configs，与 family 无关。
+ * Overridden scope: only the family dimension of getEnterprisePricing and
+ * enrichEnterprisePricingTeamProjects, through protected virtual methods. The purchase loop
+ * (balance/order/pending/cancel/continue/status) still runs through the parent on the
+ * bigmodel domain, matching the "pricing reads plus team context only" product boundary.
+ *
+ * Everything else (batchPreview/preview/productInfo/checkPayment/checkPendingOrders/
+ * Stripe/PayPal/createSign/updateSign/staticConfigs) is inherited from the parent: purchase
+ * calls already route on request.providerId inside the parent resolveEndpointConfig, so zai
+ * goes to /api/pay with the zai host and zai token while bigmodel goes to /api/biz with the
+ * bigmodel host and bigmodel token. staticConfigs is a platform level client/configs payload
+ * that is not family specific.
  */
 export class ZaiCodingPlanSubscriptionProvider extends BigModelCodingPlanSubscriptionProvider {
   protected codingPlanProviderId(): CodingPlanSubscriptionProviderId {
@@ -50,9 +59,10 @@ export class ZaiCodingPlanSubscriptionProvider extends BigModelCodingPlanSubscri
 }
 
 /**
- * zai 业务域名（/api/biz 与 /api/pay）。
- * 与父类 file-scoped 的 resolveZaiCodingPlanHost 等价；这里独立保留是因为父类该函数未 export。
- * 必须与父类实现保持一致：跟随产品环境（测试 配置的 ZAI Business origin / 线上 api.z.ai）。
+ * Business host for the zai /api/biz and /api/pay endpoints.
+ * Kept file scoped because the parent copy is not exported. Must stay equivalent to the
+ * parent implementation: it follows the Z.ai business origin the operator configured, with no
+ * built-in vendor default in this file.
  */
 function resolveZaiCodingPlanHost(): string {
   return resolveZaiBusinessBaseUrl(process.env);

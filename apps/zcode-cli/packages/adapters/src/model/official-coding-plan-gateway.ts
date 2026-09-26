@@ -2,33 +2,27 @@ import { resolveRuntimeZCodeEndpointOrigin } from "@zcode/shared";
 import type { EnvRecord } from "./model-execution.js";
 
 /**
- * 官方 Coding Plan 的模型请求经 ZCode 平台网关发送。
+ * Rewrites the official coding plan model endpoint onto a ZCode platform gateway path.
  *
- * Z.ai / BigModel Coding Plan 是 ZCode 的官方订阅套餐，模型请求统一发往 ZCode 平台网关，
- * 由平台完成套餐权益校验等平台侧处理后转发到对应的模型服务。客户端这里只做一件事：
- * 把官方模型端点替换为对应的网关端点，请求方法、请求体、鉴权头与响应均原样透传。
+ * The table ships empty on purpose. Every entry used to name a specific vendor host, and a
+ * lookup is a rewrite rule, not a source of endpoints: leaving an entry in place would keep
+ * sending that vendor's model traffic to a ZCode platform gateway, and dropping the host from
+ * the entry would silently repoint operator configured traffic back at the vendor. Emptying
+ * the table is the only option that neither pins a vendor host nor guesses a replacement.
  *
- * 只对下表中的官方端点生效，按协议、主机、端口、路径精确匹配，用户自建 provider 与
- * 第三方模型服务不受影响。网关 origin 跟随 ZCODE_BASE_URL / ZCODE_ENDPOINT_ORIGIN，
- * 缺省为线上 https://zcode.z.ai。
+ * With no entries the map is empty, resolveOfficialCodingPlanGatewayUrl always reports
+ * viaGateway false and returns the request URL unchanged, and the fetch wrapper passes every
+ * request through to the lower fetch. The gateway origin still follows
+ * ZCODE_BASE_URL / ZCODE_ENDPOINT_ORIGIN, and is only resolved on an actual match.
  */
 export interface OfficialCodingPlanGatewayRoute {
-  /** 官方模型端点（含路径），仅 https。 */
+  /** Official model endpoint including its path, https only. */
   readonly providerEndpoint: string;
-  /** 对应的网关端点路径，相对 ZCode 平台 origin。 */
+  /** Gateway endpoint path, relative to the ZCode platform origin. */
   readonly gatewayPath: string;
 }
 
-export const OFFICIAL_CODING_PLAN_GATEWAY_ROUTES: readonly OfficialCodingPlanGatewayRoute[] = [
-  {
-    providerEndpoint: "https://open.bigmodel.cn/api/anthropic/v1/messages",
-    gatewayPath: "/api/v1/ultra/anthropic/v1/messages",
-  },
-  {
-    providerEndpoint: "https://api.z.ai/api/anthropic/v1/messages",
-    gatewayPath: "/api/v1/ultra-zai/anthropic/v1/messages",
-  },
-];
+export const OFFICIAL_CODING_PLAN_GATEWAY_ROUTES: readonly OfficialCodingPlanGatewayRoute[] = [];
 
 export interface OfficialCodingPlanGatewayDecision {
   /** 是否命中官方端点并改为经网关发送。 */

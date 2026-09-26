@@ -2,11 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import {
-  BUILTIN_MODEL_PROVIDER_IDS,
-  resolveBigModelApiOrigin,
-  resolveRuntimeZCodeEnv,
-} from "@zcode/shared";
+import { BUILTIN_MODEL_PROVIDER_IDS, resolveBigModelApiOrigin } from "@zcode/shared";
 import {
   createModelProviderModelConfig,
   getDefaultModelSupportedFormatsFromApiFormat,
@@ -61,34 +57,33 @@ function isLegacyPresetGlmProviderId(providerId: string): boolean {
   return LEGACY_PRESET_GLM_PROVIDER_IDS.has(providerId);
 }
 
-const BIGMODEL_CODING_PLAN_ANTHROPIC_BASE_URL = "https://open.bigmodel.cn/api/anthropic";
+const BIGMODEL_CODING_PLAN_ANTHROPIC_PATH = "/api/anthropic";
 
+/**
+ * Resolve the anthropic base URL for a BigModel Coding Plan entry read from config.json.
+ *
+ * No vendor domain is built in here. A base URL already stored in config.json wins. When the
+ * entry carries none, the base URL is derived from the operator configured BigModel origin
+ * (BIGMODEL_API_BASE_URL). With neither input this returns an empty string, so the provider
+ * is stored without endpoints instead of silently pointing at a vendor host.
+ */
 function normalizeBigModelCodingPlanAnthropicBaseUrlForEnv(
   baseUrl: string | undefined,
   env: Record<string, string | undefined> = process.env,
 ): string {
-  const fallbackBaseUrl =
-    resolveRuntimeZCodeEnv(env) === "production"
-      ? BIGMODEL_CODING_PLAN_ANTHROPIC_BASE_URL
-      : `${resolveBigModelApiOrigin(env)}/api/anthropic`;
-  const normalizedBaseUrl = normalizeModelProviderBaseUrlForKind(
-    baseUrl ?? fallbackBaseUrl,
+  const configuredBaseUrl = baseUrl?.trim();
+  if (configuredBaseUrl) {
+    return normalizeModelProviderBaseUrlForKind(configuredBaseUrl, "anthropic");
+  }
+  // Only an explicit operator override may produce a fallback. resolveBigModelApiOrigin still
+  // carries a vendor default, so it must not be consulted while BIGMODEL_API_BASE_URL is unset.
+  if (!env.BIGMODEL_API_BASE_URL?.trim()) {
+    return "";
+  }
+  return normalizeModelProviderBaseUrlForKind(
+    `${resolveBigModelApiOrigin(env)}${BIGMODEL_CODING_PLAN_ANTHROPIC_PATH}`,
     "anthropic",
   );
-  if (resolveRuntimeZCodeEnv(env) === "production") {
-    return normalizedBaseUrl || fallbackBaseUrl;
-  }
-
-  try {
-    const parsed = new URL(normalizedBaseUrl || fallbackBaseUrl);
-    const productionParsed = new URL(BIGMODEL_CODING_PLAN_ANTHROPIC_BASE_URL);
-    // 旧配置可能保存生产域名；测试环境的 Team Plan Key 无法调用生产网关。
-    return parsed.origin === productionParsed.origin
-      ? fallbackBaseUrl
-      : normalizedBaseUrl || fallbackBaseUrl;
-  } catch {
-    return fallbackBaseUrl;
-  }
 }
 
 function getZCodeConfigFilePath(): string {
