@@ -13,6 +13,14 @@ packages/desktop/bundled-agents/
 packages/desktop/bundled-tools/
 packages/desktop/mock-cdn/
 *.tsbuildinfo
+# packages/desktop/src is TypeScript-only (all 1386 tracked files are .ts/.tsx).
+# Every desktop tsconfig sets outDir, so any .js/.d.ts showing up there is a stray
+# emit from a tsc invoked without -p; keep it out of git so generated JS never
+# reaches app.asar. Scoped deliberately: packages/zcode-cua tracks hand-written .js.
+packages/desktop/src/**/*.js
+packages/desktop/src/**/*.js.map
+packages/desktop/src/**/*.d.ts
+packages/desktop/src/**/*.d.ts.map
 .DS_Store
 coverage/
 .env.local

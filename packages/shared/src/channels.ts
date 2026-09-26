@@ -11,9 +11,7 @@ import type { OAuthStateRegistration } from "./oauth.js";
 import type { ModelProviderFamilyId } from "./model-provider-family.js";
 import type { AppSettings, Locale } from "./protocol.js";
 import type { StorageCleanRequest, StorageCleanResult, StorageUsageSnapshot } from "./storage.js";
-import type {
-  RendererTelemetryEventPayload,
-} from "./telemetry.js";
+import type { RendererTelemetryEventPayload } from "./telemetry.js";
 import type {
   RendererActionTraceBatchV1,
   RendererActionTraceConfigV1,
