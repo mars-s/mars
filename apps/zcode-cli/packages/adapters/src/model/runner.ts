@@ -181,6 +181,11 @@ export class AiSdkModelAdapter {
           ? {
               refreshRuntimeHeadersBeforeAttempt: composeRequestAuthRefresh({
                 ...(hostRefresh ? { hostRefresh } : {}),
+                // The destination every request from this bound model is built
+                // from. The host's answer is checked against it, so a credential
+                // it released for somewhere else is refused rather than sent
+                // here.
+                requestBaseUrl: String(boundResolution.resolved.baseURL),
                 ...(requestAuthDependency.source ? { source: requestAuthDependency.source } : {}),
               }),
             }

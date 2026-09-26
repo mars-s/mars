@@ -24,8 +24,19 @@
  * back, so a replay can never submit an already-spent refresh token. Exactly one
  * replay happens per request because the replay flag is local to this closure; a
  * second 401 is returned to the caller.
+ *
+ * WHY THE REPLAY RE-RUNS THE DESTINATION CHECK
+ *
+ * The replay asks the host for a fresh credential and attaches it to a URL that
+ * was already chosen, so it needs the same guarantee as the first attempt: the
+ * host must have verified the destination the bytes actually go to. Activation
+ * already keys off the frozen base URL, which makes a mismatch unreachable with
+ * today's wiring, but "unreachable because of how it happens to be wired" is not
+ * a property worth leaving implicit. See `request-auth-endpoint.ts`.
  */
 import { getCurrentModelInvocationContext, type ModelRequestAuth } from "@zcode/contracts";
+import { CHATGPT_CODEX_BASE_URL, normalizeProviderBaseUrl } from "@zcode/shared";
+import { assertCredentialEndpointApproved } from "./request-auth-endpoint.js";
 
 type ProviderFetch = typeof globalThis.fetch;
 
@@ -38,30 +49,19 @@ const JSON_CONTENT_TYPE = "application/json";
  * out of the effective provider config and `accessType` out of the effective
  * access shape. Activation therefore cannot be triggered by anything the caller
  * sends, only by what the registry resolved.
+ *
+ * The comparison runs the same normalizer the host does, out of the same shared
+ * constant, so "is this the Codex endpoint" cannot mean one thing here and
+ * another there.
  */
 export function isChatGptCodexBackend(input: {
   accessType: string | null | undefined;
   baseUrl: string | null | undefined;
 }): boolean {
-  return input.accessType === "oauth" && normalizeBaseUrl(input.baseUrl) === CODEX_BASE_URL;
-}
-
-const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
-
-function normalizeBaseUrl(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return null;
-  }
-  try {
-    const url = new URL(trimmed);
-    url.pathname = url.pathname.replace(/\/+$/u, "");
-    url.hash = "";
-    url.search = "";
-    return url.toString().toLowerCase();
-  } catch {
-    return trimmed.replace(/\/+$/u, "").toLowerCase();
-  }
+  return (
+    input.accessType === "oauth" &&
+    normalizeProviderBaseUrl(input.baseUrl) === normalizeProviderBaseUrl(CHATGPT_CODEX_BASE_URL)
+  );
 }
 
 /**
@@ -72,10 +72,16 @@ function normalizeBaseUrl(value: string | null | undefined): string | null {
  * the host looks the credential's provider identity up by id in its own registry
  * and refuses anything it does not recognise. A replay that sent an empty id
  * would therefore be refused and the 401 would surface unrotated.
+ *
+ * `requestBaseUrl` is the base URL of the model this wrapper was built for, which
+ * is the destination of both the original attempt and the replay. The host's
+ * verified destination is checked against it before the rotated credential is
+ * attached, and a mismatch refuses instead of replaying.
  */
 export function createChatGptCodexResponsesFetch(baseFetch: ProviderFetch, identity: {
   readonly modelId: string;
   readonly providerId: string;
+  readonly requestBaseUrl: string;
 }): ProviderFetch {
   let replayed = false;
   return async (input, init) => {
@@ -107,6 +113,11 @@ export function createChatGptCodexResponsesFetch(baseFetch: ProviderFetch, ident
     if (!rotated.headersApplied || !rotated.requestAuth) {
       return response;
     }
+    assertCredentialEndpointApproved({
+      approvedBaseUrl: rotated.approvedBaseUrl,
+      providerId: identity.providerId,
+      requestBaseUrl: identity.requestBaseUrl,
+    });
 
     // The body of the rejected attempt is never read, so it is released before the
     // replay: an unread SSE body would hold the connection open.

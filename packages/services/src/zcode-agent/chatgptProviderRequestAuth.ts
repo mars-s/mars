@@ -34,10 +34,22 @@
  * A caller can put any string it likes in the `providerId` field of the request.
  * That string is only ever a LOOKUP KEY into the host's registry. It becomes a
  * credential-bearing identity only if the registry itself holds a provider under
- * that id whose effective config satisfies all three checks, which means the
- * destination is `https://chatgpt.com/backend-api/codex` by registry fact and not
- * by assertion. Anything else is refused, and a refusal is indistinguishable
- * from "not signed in" on the wire.
+ * that id whose effective config satisfies all three checks.
+ *
+ * WHAT THE VERIFICATION DOES AND DOES NOT COVER
+ *
+ * The registry is read fresh per request, so the identity is a fact about the
+ * host's LIVE view at the moment of the request. The agent, by contrast, freezes
+ * the provider config when the model is bound and builds every later request URL
+ * from that frozen copy, so the destination this handler verified is not by
+ * itself the destination the bytes go to. Rather than treat the two as one, the
+ * handler now hands the verified destination back as `approvedBaseUrl` and the
+ * agent refuses the credential unless its own frozen base URL normalizes equal
+ * to it, using the one shared normalizer in `@zcode/shared`. So the end-to-end
+ * claim is the honest one: the host and the agent agree on the destination before
+ * the token exists, and any disagreement is a refusal rather than a request.
+ *
+ * A refusal is indistinguishable from "not signed in" on the wire.
  */
 import {
   CHATGPT_ACCOUNT_ID_HEADER,
@@ -45,6 +57,7 @@ import {
 } from "#src/oauth/providers/chatgpt/chatgptOAuthConfig.js";
 import { isAccessTokenKnownExpired } from "#src/oauth/providers/chatgpt/chatgptAccessTokenClaims.js";
 import { buildCodexRequestHeaders } from "#src/oauth/providers/chatgpt/chatgptCodexRequest.js";
+import { CHATGPT_CODEX_BASE_URL, normalizeProviderBaseUrl } from "@zcode/shared";
 import type {
   ProviderRequestAuthGrant,
   ProviderRequestAuthGrantStore,
@@ -64,15 +77,11 @@ const log = createServiceLogger("chatgptProviderRequestAuth");
 export const CHATGPT_SUBSCRIPTION_TEMPLATE_ID = "chatgpt-subscription";
 
 /**
- * The Codex responses PARENT, not `CHATGPT_CODEX_RESPONSES_URL`.
- *
- * The AI SDK's OpenAI responses model calls `url({ path: "/responses" })` and
- * `createOpenAI` defines that as `` `${baseURL}${path}` ``, so the configured
- * base URL must be the parent and the SDK appends `/responses` itself. Both
- * constants are compared here, the parent, because that is the value the
- * registry holds.
+ * The Codex responses base URL. Re-exported from the one shared definition so
+ * host and agent cannot drift onto two different constants, and so the value the
+ * host verifies is byte-for-byte the value the agent compares against.
  */
-export const CHATGPT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
+export { CHATGPT_CODEX_BASE_URL };
 
 /** Why the host is being asked for a credential. */
 export type ChatGptCredentialReason = "model-request" | "unauthorized";
@@ -128,7 +137,7 @@ export function isRegistryVerifiedChatGptProvider(identity: ChatGptRegistryIdent
     identity.templateId === CHATGPT_SUBSCRIPTION_TEMPLATE_ID &&
     identity.accessType === "oauth" &&
     identity.apiType === "openai-responses" &&
-    normalizeBaseUrl(identity.baseUrl) === normalizeBaseUrl(CHATGPT_CODEX_BASE_URL)
+    normalizeProviderBaseUrl(identity.baseUrl) === normalizeProviderBaseUrl(CHATGPT_CODEX_BASE_URL)
   );
 }
 
@@ -172,24 +181,6 @@ export function resolveChatGptRegistryIdentity(input: {
     baseUrl: provider.config?.api?.baseUrl ?? null,
     templateId: provider.templateId ?? null,
   };
-}
-
-function normalizeBaseUrl(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return null;
-  }
-  try {
-    const url = new URL(trimmed);
-    // A trailing slash is not a different host and must not fail the check, but
-    // anything else about the URL is compared verbatim, including the path.
-    url.pathname = url.pathname.replace(/\/+$/u, "");
-    url.hash = "";
-    url.search = "";
-    return url.toString().toLowerCase();
-  } catch {
-    return trimmed.replace(/\/+$/u, "").toLowerCase();
-  }
 }
 
 /**
@@ -316,6 +307,12 @@ export type ChatGptProviderRequestAuthResponse =
   | {
       readonly headersApplied: true;
       readonly requestAuth: { readonly apiKey: string; readonly headers: Record<string, string> };
+      /**
+       * The destination this handler verified, in the one shared normalized form,
+       * so the agent can compare it against the base URL it froze at bind time and
+       * refuse the credential when the two disagree.
+       */
+      readonly approvedBaseUrl: string;
     }
   | { readonly headersApplied: false; readonly errorMessage: string };
 
@@ -323,10 +320,14 @@ export type ChatGptProviderRequestAuthResponse =
  * The whole `interaction/requestProviderRuntimeHeaders` credential decision.
  *
  * Extracted from the protocol handler so every branch is testable without
- * standing up an agent process. The ORDER is the security property: the registry
- * identity is resolved FIRST, and the grant store is only touched once an
- * identity exists. Reading the grant and then deciding not to use it would pull a
- * live subscription secret into memory on behalf of any caller.
+ * standing up an agent process. The ORDER is the security property, and it is
+ * enforced here by construction rather than by the shape of the current call
+ * graph: `resolveGrantStore` is not reached until the identity has been resolved
+ * AND verified. Reading the grant and only then deciding not to use it would pull
+ * a live subscription secret into memory on behalf of any caller, and that must
+ * not depend on `resolveGrantStore` happening to ignore its `identity` argument
+ * today. The one `read()` that can touch a secret is therefore unreachable unless
+ * the verification above has already passed.
  *
  * Every refusal below returns the SAME payload, because "this identity is not
  * ChatGPT" and "you are not signed in" must not be distinguishable on the wire.
@@ -367,6 +368,28 @@ export async function answerProviderRequestAuthRequest(input: {
     return refuse("registry-identity-absent");
   }
 
+  // The gate, at the TOP of everything that can reach a secret. It is here and
+  // not inside `resolveChatGptProviderRequestAuth` alone because
+  // `port.resolveGrantStore(identity)` sits between the two, and the first time
+  // that resolver becomes identity-dependent (keying a store path off the
+  // identity, say) the pre-verification read this ordering forbids reappears.
+  if (!isRegistryVerifiedChatGptProvider(identity)) {
+    // Nothing about the request reached this line except a lookup that already
+    // failed, so there is nothing sensitive to log and nothing to redact.
+    log.warn(undefined, "refused a provider request credential for a non-ChatGPT identity", {
+      reason: "registry-identity-rejected",
+    });
+    return refuse("registry-identity-rejected");
+  }
+  // Re-derived rather than read off the identity, so the value that goes on the
+  // wire is the one this function actually compared, in the form the agent will
+  // compare it in. A verified identity always normalizes to something non-null;
+  // the second refusal is the belt to that braces, and it still consults nothing.
+  const approvedBaseUrl = normalizeProviderBaseUrl(identity.baseUrl);
+  if (!approvedBaseUrl) {
+    return refuse("registry-identity-rejected");
+  }
+
   let grantStore: ProviderRequestAuthGrantStore | null;
   try {
     grantStore = port.resolveGrantStore(identity);
@@ -394,5 +417,5 @@ export async function answerProviderRequestAuthRequest(input: {
     return refuse(result.detail);
   }
 
-  return { headersApplied: true, requestAuth: result.requestAuth };
+  return { approvedBaseUrl, headersApplied: true, requestAuth: result.requestAuth };
 }

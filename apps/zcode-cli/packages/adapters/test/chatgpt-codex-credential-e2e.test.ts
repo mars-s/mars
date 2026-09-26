@@ -17,7 +17,12 @@ import { AiSdkModelExecution } from "../src/model/model-execution.js";
 
 const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const PROVIDER_CONFIG: RegistryProviderConfig = {
-  access: { type: "oauth", apiKey: "" },
+  // No `apiKey` beside `type: "oauth"`. `validateComplete` rejects that pair: the
+  // grant IS the credential, so a key there is a second, unmanaged copy of a live
+  // subscription secret. This fixture builds `RegistryProviderConfig` directly and
+  // therefore bypasses validation, which is exactly why it has to carry the shape
+  // the real config has rather than one the validator would refuse.
+  access: { type: "oauth" },
   api: { type: "openai-responses", baseUrl: CODEX_BASE_URL },
   group: "standard-personal",
   logo: { type: "builtin", key: "openai" },

@@ -2360,6 +2360,15 @@ export const zcodeProviderRuntimeHeadersResponseSchema = z.discriminatedUnion("h
           headers: z.record(nonEmptyString, nonEmptyString).optional(),
         })
         .strict(),
+      // The destination the host itself verified, not an intermediate value it
+      // compared internally. The agent's own frozen baseURL has to normalize
+      // equal to this or it refuses to attach the credential: the host checks a
+      // LIVE registry view while the agent builds the request URL from the copy
+      // frozen at model-bind time, and those two copies can disagree.
+      // Required rather than optional on purpose. Omitting it would let an
+      // agent silently skip the comparison, so the fail-closed arm has to be
+      // explicit on the wire.
+      approvedBaseUrl: nonEmptyString,
       errorMessage: nonEmptyString.optional(),
     })
     .strict(),

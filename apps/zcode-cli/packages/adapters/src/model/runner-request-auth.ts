@@ -24,6 +24,15 @@
  * signed in" or "refused", which must fail loudly rather than go out as an
  * anonymous request. The scoped source is only the fallback for hosts that do
  * not provide a port at all.
+ *
+ * WHY THE HOST ANSWER IS NOT ENOUGH ON ITS OWN
+ *
+ * The host verified a destination, but the request URL is built from the config
+ * the runner FROZE at bind time, and those are two different snapshots of one
+ * config. So the host sends back the destination it verified, and this refuses
+ * the credential unless it matches the destination of the request about to be
+ * built. That is what makes "the checked value is the used value" true rather
+ * than merely likely. See `request-auth-endpoint.ts`.
  */
 import {
   ModelErrorCode,
@@ -33,6 +42,7 @@ import {
   type ModelRequestCredentialReason,
   type TraceContext,
 } from "@zcode/contracts";
+import { assertCredentialEndpointApproved } from "./request-auth-endpoint.js";
 
 export type RequestAuthRefresh = (input: {
   attempt: number;
@@ -41,15 +51,29 @@ export type RequestAuthRefresh = (input: {
   providerId: string;
   modelId: string;
   traceContext?: TraceContext;
-}) => Promise<{ headersApplied: boolean; requestAuth?: ModelRequestAuth }>;
+}) => Promise<{ headersApplied: boolean; requestAuth?: ModelRequestAuth; approvedBaseUrl?: string }>;
 
 export function composeRequestAuthRefresh(input: {
   hostRefresh?: RequestAuthRefresh;
+  /**
+   * The base URL the bound model is frozen at, which is the destination of every
+   * request this refresh feeds. It is compared against the host's
+   * `approvedBaseUrl` before any credential is handed back.
+   */
+  requestBaseUrl: string;
   source?: ModelRequestAuthSource;
 }): RequestAuthRefresh {
   return async (params) => {
     if (input.hostRefresh) {
-      return input.hostRefresh(params);
+      const refreshed = await input.hostRefresh(params);
+      if (refreshed.headersApplied) {
+        assertCredentialEndpointApproved({
+          approvedBaseUrl: refreshed.approvedBaseUrl,
+          providerId: params.providerId,
+          requestBaseUrl: input.requestBaseUrl,
+        });
+      }
+      return refreshed;
     }
     if (!input.source) {
       // The dependency declared "this model needs request-level auth" but nothing
@@ -66,6 +90,10 @@ export function composeRequestAuthRefresh(input: {
     if (!requestAuth) {
       throw authMissing("the bound request auth source produced no credential");
     }
+    // No `approvedBaseUrl` here on purpose. This credential came from the bound
+    // scope, not from a host that verified a registry destination, so there is no
+    // registry destination to attest to. The host branch above is the one that
+    // closes the frozen-snapshot gap.
     return { headersApplied: true, requestAuth };
   };
 }

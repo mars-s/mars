@@ -1867,8 +1867,14 @@ export function createLocalServices(options: {
         const view = await providerRuntime.modelSelection.getView();
         return resolveChatGptRegistryIdentity({ ...input, providers: view.providers });
       },
-      // 只有注册表身份已经是 ChatGPT 订阅模板时才会走到这里，因此模板到 OAuth
-      // provider 的映射是 host 侧常量决策，不是调用方能选的分支。
+      // Note what this DOES NOT establish: it is not only reached once the
+      // registry identity has been verified as the ChatGPT subscription
+      // template. `answerProviderRequestAuthRequest` is what enforces that, and
+      // it does so before it calls this at all, so the mapping below is a host
+      // side constant decision rather than a branch the caller can pick. Do not
+      // move the call earlier: this resolver is the first thing in the chain that
+      // could become a pre-verification secret read the moment it starts caring
+      // about its `identity` argument.
       resolveGrantStore: () =>
         oauthServiceForProviderRequestAuth?.providerRequestAuthGrantStore(
           CHATGPT_OAUTH_PROVIDER_ID,

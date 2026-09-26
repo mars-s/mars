@@ -407,6 +407,10 @@ export interface ProviderRuntimeHeadersPort {
   }): Promise<{
     headersApplied: boolean;
     requestAuth?: ModelRequestAuth;
+    // The destination the host verified before releasing the credential. The
+    // agent compares it against the base URL it froze at bind time and refuses
+    // the credential when they disagree, so it has to survive the whole hop.
+    approvedBaseUrl?: string;
   }>;
 }
 

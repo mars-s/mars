@@ -12,7 +12,11 @@ import {
 } from "../src/model/chatgpt-codex-responses-fetch.js";
 
 const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
-const IDENTITY = { modelId: "gpt-5.6-luna", providerId: "account:chatgpt" };
+const IDENTITY = {
+  modelId: "gpt-5.6-luna",
+  providerId: "account:chatgpt",
+  requestBaseUrl: CODEX_BASE_URL,
+};
 
 interface Attempt {
   readonly body: unknown;
@@ -45,8 +49,14 @@ function fakeTransport(statuses: readonly number[]) {
   return { attempts, fetchImpl: fetchImpl as unknown as typeof globalThis.fetch };
 }
 
-/** A host that answers the rotation request, recording what it was asked. */
-function fakeHost(requestAuth: ModelRequestAuth | undefined) {
+/**
+ * A host that answers the rotation request, recording what it was asked.
+ *
+ * `approvedBaseUrl` is what a real host sends: the destination it verified. It
+ * defaults to the Codex endpoint, which is the only destination the host will
+ * ever attest to.
+ */
+function fakeHost(requestAuth: ModelRequestAuth | undefined, approvedBaseUrl: string = CODEX_BASE_URL) {
   const calls: { attempt: number; reason?: string; providerId: string; modelId: string }[] = [];
   return {
     calls,
@@ -58,7 +68,9 @@ function fakeHost(requestAuth: ModelRequestAuth | undefined) {
         modelId: string;
       }) => {
         calls.push(input);
-        return requestAuth ? { headersApplied: true, requestAuth } : { headersApplied: false };
+        return requestAuth
+          ? { approvedBaseUrl, headersApplied: true, requestAuth }
+          : { headersApplied: false };
       },
     },
   };
@@ -199,4 +211,24 @@ test("with no host on the other end the 401 reaches the caller", async () => {
   const response = await wrapped(`${CODEX_BASE_URL}/responses`, jsonRequest({ model: "m" }));
   assert.equal(response.status, 401);
   assert.equal(transport.attempts.length, 1);
+});
+
+test("a rotated credential verified for another destination is not replayed", async () => {
+  // The replay attaches a host-issued credential to a URL that was already
+  // chosen, so it needs the same destination check the first attempt gets. A
+  // host that verified somewhere else than this model is frozen at must not get
+  // its token onto this request, however plausible the 401 looked.
+  const transport = fakeTransport([401, 200]);
+  const host = fakeHost({ apiKey: "rot-tok-2" }, "https://attacker.example/backend-api/codex");
+  const wrapped = createChatGptCodexResponsesFetch(transport.fetchImpl, IDENTITY);
+
+  await assert.rejects(
+    () =>
+      runWithModelInvocationContext(host.context, () =>
+        wrapped(`${CODEX_BASE_URL}/responses`, jsonRequest({ model: "gpt-5.6-luna" })),
+      ),
+    /different destination/u,
+  );
+  assert.equal(transport.attempts.length, 1, "the replay was refused, so nothing else went out");
+  assert.equal(host.calls.length, 1, "the host was asked, its answer was just not usable here");
 });
