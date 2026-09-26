@@ -20,7 +20,6 @@ import type {
   WorkspaceHookBundleSnapshot,
   WorkspaceId,
 } from "@zcode/contracts";
-import type { ZCodeProviderAccountAccess } from "@zcode/shared";
 import type { EffectiveModelSelectionResult } from "@zcode/shared/model-selection";
 import type { RuntimeMessageEntry } from "../agent/message-history.js";
 import type {
@@ -395,7 +394,6 @@ export type RuntimeModelFactory = (input: RuntimeModelFactoryInput) => Model;
 export interface ProviderRuntimeHeadersPort {
   shouldRefreshBeforeModelRequest?(input: { providerId: string; modelId: string }): boolean;
   refreshBeforeModelRequest(input: {
-    accountAccess?: ZCodeProviderAccountAccess;
     abortSignal?: AbortSignal;
     modelId: string;
     providerId: string;

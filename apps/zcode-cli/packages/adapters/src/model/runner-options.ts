@@ -18,9 +18,11 @@ type ExperimentalIncludeWithResponseBody = {
 
 /** zcode-plan 业务码常只出现在 finish chunk 的 response.body，流式路径需显式开启。 */
 function shouldIncludeStreamResponseBody(resolved: ResolvedAiSdkModel): boolean {
-  return (
-    resolved.providerKind === "openai-compatible" && resolved.accountAccess?.mode === "start-plan"
-  );
+  // The account access modes this keyed on (start plan, off-peak) no longer exist, so
+  // the predicate has no remaining input. It is kept as a named seam rather than
+  // inlined so the call site still reads as a decision.
+  void resolved;
+  return false;
 }
 
 function mergeRequestHeaders(
