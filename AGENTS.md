@@ -1,3 +1,21 @@
+# Shared agent context (read this first)
+
+Two agents work on this repo and neither owns it. Before changing anything, read
+these. They record the current state and the decisions already made.
+
+- `.agents/CONTEXT.md` — current state, standing rules, what is in flight
+- `.agents/ROADMAP.md` — stage plan, issue index, wave status
+- `.agents/DECISIONS.md` — decisions already taken. Do not relitigate them.
+- `.agents/verification.md` — the commands that prove a change works
+- `.agents/pstack-models.md` — per-role model pins
+
+Append to `.agents/CHANGELOG.md` in the same commit as any change. A change with
+no changelog entry counts as not done. Never silently revert another agent's
+work; read its changelog entry first. Do not put secrets in `.agents/`, it is
+committed.
+
+The rest of this file is the upstream ZCode contributor guide.
+
 ## 核心原则
 
 - 新增或修改行为前，先更新对应 spec；目录不存在时按需创建。先明确产品规则、状态所有者、接口和验收场景，再实现代码。
