@@ -1,87 +1,24 @@
 /* eslint-disable max-lines -- 模型供应商 schema、迁移和运行时投影 helper 需要共享同一套类型边界，暂时集中在单文件避免契约分散。 */
 
 /**
- * Pay-per-token template IDs that were deleted from the built-in catalog. Kept
- * only so one-way legacy migration can still recognise the historical ids;
- * `zai-api` and `bigmodel-api` are no longer templates, and resolving either one
- * now yields a `missing-template` issue. The export survives because the login
- * screen and the migration importers still read it; drop it only after those
- * call sites are gone.
+ * Pay-per-token template IDs deleted from the built-in catalog. The table is
+ * empty: the two legacy ids are gone, resolving either one now yields a
+ * `missing-template` issue, and no replacement template is introduced.
  */
-export const BUILTIN_PROVIDER_TEMPLATE_IDS = {
-  zai: "zai-api",
-  bigmodel: "bigmodel-api",
-} as const;
+export const BUILTIN_PROVIDER_TEMPLATE_IDS = {} as const;
 
 /**
- * Account provider ids. The catalog no longer declares any of them, so every
- * runtime lookup of these ids misses. The table stays so that legacy migration
- * and telemetry identity mapping still recognise the historical ids; it cannot
- * put them back into the model picker.
+ * Account provider ids. The account-provider subsystem is deleted, so the table
+ * is empty and every derived type below is an empty union. No substitute id is
+ * introduced.
  */
-export const BUILTIN_MODEL_PROVIDER_IDS = {
-  zaiIndividualCodingPlan: "account:zai-individual-coding-plan",
-  zaiTeamCodingPlan: "account:zai-team-coding-plan",
-  zaiStartPlan: "account:zai-start-plan",
-  bigmodelIndividualCodingPlan: "account:bigmodel-individual-coding-plan",
-  bigmodelTeamCodingPlan: "account:bigmodel-team-coding-plan",
-  bigmodelStartPlan: "account:bigmodel-start-plan",
-} as const;
+export const BUILTIN_MODEL_PROVIDER_IDS = {} as const;
 
+/** Empty union: no built-in account provider id exists any more. */
 export type BuiltinOAuthProviderId = keyof typeof BUILTIN_MODEL_PROVIDER_IDS;
 
+/** Empty union: no built-in account provider id exists any more. */
 export type BuiltinModelProviderId = (typeof BUILTIN_MODEL_PROVIDER_IDS)[BuiltinOAuthProviderId];
-
-export function isBuiltinModelProviderId(id: string): id is BuiltinModelProviderId {
-  return (
-    id === BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.zaiTeamCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan
-  );
-}
-
-export function isZaiCodingPlanProviderId(id: string): boolean {
-  return (
-    id === BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.zaiTeamCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan
-  );
-}
-
-export function isBigModelStartPlanProviderId(id: string): boolean {
-  return id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan;
-}
-
-export function isStartPlanModelProviderId(id: string): boolean {
-  return (
-    id === BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan
-  );
-}
-
-/**
- * 个人版 Coding Plan（不含 Start Plan 与 Team Plan）。
- * Start Plan 用 disconnected 展示领取/付费卡，Team Plan 有独立文案，
- * "服务端明确无权益"只对个人版需要区分成"未开通"。
- */
-export function isIndividualCodingPlanModelProviderId(id: string): boolean {
-  return (
-    id === BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan
-  );
-}
-
-export function isCodingPlanModelProviderId(id: string): boolean {
-  return (
-    isZaiCodingPlanProviderId(id) ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan ||
-    id === BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan
-  );
-}
 
 /** 一个正式 Model 的连通性测试结果。 */
 export type ModelConnectivityResult =

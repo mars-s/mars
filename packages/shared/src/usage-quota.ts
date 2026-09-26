@@ -1,14 +1,13 @@
 /**
  * Pure type definitions for usage-quota snapshots reported by a quota service.
  *
- * The shapes are vendor-neutral: nothing here names a plan product, and the only
- * external reference is the provider family id used to scope a snapshot. Keep it
- * that way, so a new quota source is a new interface here rather than a vendor
- * branch inside an existing one.
+ * The shapes are vendor-neutral: nothing here names a plan product, and a
+ * snapshot is scoped by an opaque provider-scope id rather than by a family id.
+ * Keep it that way, so a new quota source is a new interface here rather than a
+ * vendor branch inside an existing one.
  *
  * 这里只依赖自身，不构成循环依赖；对外由 index.ts 直接 re-export。
  */
-import type { ModelProviderFamilyId } from "./model-provider-family.js";
 
 export interface UsageQuotaSnapshot {
   level: string | null;
@@ -55,11 +54,13 @@ export const MCP_USAGE_QUOTA_LIMIT_TYPE = "MCP_USAGE_LIMIT" as const;
 /** Which connection an MCP quota snapshot was read from, so a consumer can tell whether it belongs under the current provider tab. */
 export type UsageMcpQuotaScope =
   | {
-      providerFamily: ModelProviderFamilyId;
+      /** Opaque provider-scope id the snapshot was read from. */
+      providerFamily: string;
       targetType: "PERSONAL";
     }
   | {
-      providerFamily: ModelProviderFamilyId;
+      /** Opaque provider-scope id the snapshot was read from. */
+      providerFamily: string;
       targetType: "TEAM";
       organizationId: string;
       projectId: string;

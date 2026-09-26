@@ -54,8 +54,6 @@ export const integratedTerminalShellSelectionSchema = z.discriminatedUnion("mode
     path: nonEmptyStringSchema,
   }),
 ]);
-const providerFamilyDomainSchema = z.enum(["zai", "bigmodel"]);
-
 export const postUpdateReleaseNotesPayloadSchema = z.object({
   version: nonEmptyStringSchema,
   title: nonEmptyStringSchema,
@@ -454,9 +452,6 @@ const appSettingsObjectSchema = z.object({
   askUserQuestionAutoResolutionEnabled: z.boolean().default(true),
   modelIoFullRetentionEnabled: z.boolean().default(false),
   providerFamilyConnectionSelections: providerFamilyConnectionSelectionSettingsSchema.default({}),
-  providerFamilyDomain: providerFamilyDomainSchema.optional(),
-  providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
-  providerFamilyDomainMigrated: z.boolean().default(false),
   nativeSearchEnhancementsEnabled: z.boolean().default(true),
   onboardingOccupation: appSettingsOccupationSchema.nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
@@ -521,9 +516,6 @@ export const appSettingsPatchSchema = z.object({
   askUserQuestionAutoResolutionEnabled: z.boolean().optional(),
   modelIoFullRetentionEnabled: z.boolean().optional(),
   providerFamilyConnectionSelections: providerFamilyConnectionSelectionSettingsSchema.optional(),
-  providerFamilyDomain: z.union([providerFamilyDomainSchema, z.literal("")]).optional(),
-  providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
-  providerFamilyDomainMigrated: z.boolean().optional(),
   nativeSearchEnhancementsEnabled: z.boolean().optional(),
   onboardingOccupation: z
     .enum([

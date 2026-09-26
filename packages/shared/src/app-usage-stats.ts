@@ -2,7 +2,6 @@
 // Everything here is aggregated from local sessions; no remote plan, quota or
 // entitlement provider takes part in it.
 import { z } from "zod";
-import type { ZCodeAccountAccess, ZCodeProviderAccountAccess } from "./zcode-protocol/index.js";
 
 export type UsageStatsRange = "all" | "7d" | "30d";
 
@@ -12,8 +11,6 @@ export interface UsageStatsRequest {
   dataSource?: "local" | "monitor";
   /** The settings page can pass the currently selected provider so that when more than one is configured it does not implicitly read the first one. */
   preferredProviderId?: string;
-  /** Registry static access category, or the dynamic account access context resolved at the call boundary. */
-  accountAccess?: ZCodeProviderAccountAccess | ZCodeAccountAccess;
   /** A scenario that names a source must match preferredProviderId; falling back to another provider or to local aggregation is not allowed. */
   requirePreferredProvider?: boolean;
   /** Whether host environment variables may override the provider key. Allowed by default, can be turned off for explicit provider scenarios. */

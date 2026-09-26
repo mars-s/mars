@@ -8,7 +8,6 @@ import type {
   SaveCliMcpToUserDirectoryRequest,
 } from "./index.js";
 import type { OAuthStateRegistration } from "./oauth.js";
-import type { ModelProviderFamilyId } from "./model-provider-family.js";
 import type { AppSettings, Locale } from "./protocol.js";
 import type { StorageCleanRequest, StorageCleanResult, StorageUsageSnapshot } from "./storage.js";
 import type { RendererTelemetryEventPayload } from "./telemetry.js";
@@ -445,7 +444,7 @@ export const CodingPlanWebviewChannels = {
 
 /** 购买完成回传 payload。provider 与官网 CodingPlanProvider / auth-ready 事件 detail.provider 同构。 */
 export interface CodingPlanPurchaseCompletePayload {
-  provider: ModelProviderFamilyId;
+  provider: string;
   /** 客户端时间戳，用于 App 侧去重/日志，不参与判等。 */
   timestamp: number;
 }
