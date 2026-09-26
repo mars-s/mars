@@ -182,7 +182,13 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
   private readonly options: ManifestUpdateProviderOptions;
   private readonly releasePlatform: string;
   private readonly linuxExtensions: readonly string[] | null;
-  private resolveBaseUrl = new URL(DEFAULT_ZCODE_ENDPOINT_ORIGIN);
+  // Assigned lazily, never in the constructor. This fork ships no built-in vendor
+  // origin, so building the URL here would throw a bare "Invalid URL" TypeError
+  // from a field initialiser the moment an unconfigured build constructed this
+  // class. It was also dead: getLatestVersion overwrites it with the manifest URL
+  // before anything reads it. The real failure belongs in resolveEndpointOrigin,
+  // which can name the env var to set.
+  private resolveBaseUrl: URL | null = null;
 
   constructor(
     options: ManifestUpdateProviderOptions,
@@ -193,9 +199,6 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
     this.options = options;
     this.linuxExtensions = getLinuxUpdateExtensions(updater);
     this.releasePlatform = options.releasePlatform?.trim() || getElectronReleasePlatform();
-    this.resolveBaseUrl = new URL(
-      normalizeZCodeEndpointOrigin(options.endpointOrigin ?? DEFAULT_ZCODE_ENDPOINT_ORIGIN),
-    );
   }
 
   override get isUseMultipleRangeRequest(): boolean {
@@ -240,6 +243,14 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
   }
 
   override resolveFiles(updateInfo: UpdateInfo): ResolvedUpdateFileInfo[] {
+    // Set by getLatestVersion from the manifest URL it just fetched. Null means
+    // resolveFiles ran without a successful fetch, so there is no base to resolve
+    // relative paths against. Fail with the reason rather than a null dereference.
+    if (!this.resolveBaseUrl) {
+      throw new Error(
+        "Cannot resolve update files before a release manifest has been fetched.",
+      );
+    }
     return resolveManifestFiles(updateInfo, this.resolveBaseUrl, this.linuxExtensions);
   }
 
@@ -248,6 +259,16 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
       (await this.options.resolveEndpointOrigin?.()) ??
       this.options.endpointOrigin ??
       DEFAULT_ZCODE_ENDPOINT_ORIGIN;
+    if (!resolved.trim()) {
+      // This is the intended unconfigured state, not a bug: there is no built-in
+      // origin to fall back to, so fail here with something the operator can act
+      // on rather than surfacing an opaque URL parse error.
+      throw new Error(
+        "No endpoint origin is configured, so the update manifest cannot be " +
+          "fetched. Set ZCODE_BASE_URL (or ZCODE_ENDPOINT_ORIGIN) to your own " +
+          "deployment, or set a release manifest URL directly.",
+      );
+    }
     return normalizeZCodeEndpointOrigin(resolved);
   }
 
