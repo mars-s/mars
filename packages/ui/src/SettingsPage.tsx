@@ -16,7 +16,12 @@ import type {
   UserInfo,
   ZCodeInteractionBehavior,
 } from "@zcode/shared";
-import { TID_SETTINGS_BACK_BUTTON, TID_SETTINGS_PAGE, TID_SETTINGS_SECTION_NAV } from "@zcode/shared";
+import {
+  TID_SETTINGS_BACK_BUTTON,
+  TID_SETTINGS_PAGE,
+  TID_SETTINGS_SECTION_NAV,
+  testId,
+} from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { DesktopWindowFrame } from "@/DesktopWindowFrame.js";
@@ -228,6 +233,12 @@ export function SettingsPage({
   const notificationSoundEnabled = useZCodeStore((state) => state.notificationSoundEnabled);
   const setNotificationSoundEnabled = useZCodeStore((state) => state.setNotificationSoundEnabled);
   const [initialModelProviderTarget] = useState(() => consumePendingSettingsModelProviderTarget());
+  // Deep link intent: open a specific model provider detail once this section renders.
+  // Producer is the pending-section listener below (quickpick / OAuth entry points);
+  // the target is consumed by ModelProviderSection as soon as it is applied.
+  const [pendingModelProviderTarget, setPendingModelProviderTarget] = useState<
+    SettingsModelProviderTarget | undefined
+  >(() => initialModelProviderTarget);
   const setNewUserOnboardingOpen = useZCodeStore((state) => state.setNewUserOnboardingOpen);
   const requestOnboardingDialog = () => setNewUserOnboardingOpen(true);
   const setActiveSettingsSection = useCallback(
