@@ -1,50 +1,41 @@
-import {
-  BUILTIN_PROVIDER_TEMPLATE_IDS,
-  type AppSettings,
-  type Locale,
-  type ProviderFamilyDomain,
-  type ModelProviderFamilyId,
-} from "@zcode/shared";
-import type { ModelSelectionView } from "@zcode/services";
+import { isApiKeyAccess, resolveProviderTemplateName } from "@zcode/provider";
+import { type AppSettings, type Locale } from "@zcode/shared";
+import type { ModelSelectionView, ProviderSettingsView } from "@zcode/services";
 import { encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 
-export type ApiKeyProviderChoice = ModelProviderFamilyId;
+type ProviderTemplateView = ProviderSettingsView["providerTemplates"][number];
 
-export function resolveLoginApiKeyDefaultProvider(locale: Locale): ApiKeyProviderChoice {
-  return locale === "zh-CN" ? "bigmodel" : "zai";
+/** The choice is the built-in template id: the pasted key becomes a Personal Provider of it. */
+export type ApiKeyProviderChoice = string;
+
+export interface LoginApiKeyProviderOption {
+  readonly templateId: string;
+  readonly label: string;
+  readonly apiKeyUrl: string | undefined;
+  readonly logo: ProviderTemplateView["config"]["logo"];
 }
 
-export function resolveLoginApiKeyTemplateId(
-  choice: ApiKeyProviderChoice,
-): "zai-api" | "bigmodel-api" {
-  return choice === "zai"
-    ? BUILTIN_PROVIDER_TEMPLATE_IDS.zai
-    : BUILTIN_PROVIDER_TEMPLATE_IDS.bigmodel;
-}
-
-export function resolveLoginApiKeyProviderLabel(choice: ApiKeyProviderChoice): string {
-  // Welcome Screen API Key 错误提示需要使用 BigModel 品牌固定写法。
-  return choice === "zai" ? "Z.ai" : "BigModel";
-}
-
-function resolveLoginApiKeyProviderFamilyDomain(
-  choice: ApiKeyProviderChoice,
-): ProviderFamilyDomain {
-  return choice;
-}
-
-export function buildLoginApiKeySkipSettings(
-  choice: ApiKeyProviderChoice,
-  now: number,
-): Pick<
-  AppSettings,
-  "providerFamilyDomain" | "providerFamilyDomainUpdatedAt" | "providerFamilyDomainMigrated"
-> {
-  return {
-    providerFamilyDomain: resolveLoginApiKeyProviderFamilyDomain(choice),
-    providerFamilyDomainUpdatedAt: now,
-    providerFamilyDomainMigrated: true,
-  };
+/**
+ * The offer list comes from the built-in catalog alone, so no vendor is hard-coded
+ * on the login screen. Every template that declares pay-per-token API key access is
+ * offered, and the key the user pastes lands as that template's Personal Provider.
+ */
+export function resolveLoginApiKeyProviderOptions(
+  templates: readonly ProviderTemplateView[],
+  locale: Locale,
+): readonly LoginApiKeyProviderOption[] {
+  const options: LoginApiKeyProviderOption[] = [];
+  for (const template of templates) {
+    const access = template.config.access;
+    if (!isApiKeyAccess(access)) continue;
+    options.push({
+      templateId: template.templateId,
+      label: resolveProviderTemplateName(template.templateId, template, locale),
+      apiKeyUrl: access.apiKeyManagementUrl ?? undefined,
+      logo: template.config.logo,
+    });
+  }
+  return Object.freeze(options);
 }
 
 export function shouldShowLoginApiKeyLink(
@@ -52,6 +43,19 @@ export function shouldShowLoginApiKeyLink(
   apiKeyUrl: string | undefined,
 ): boolean {
   return Boolean(apiKeyUrl) && apiKeyValue.trim().length === 0;
+}
+
+export function buildLoginApiKeySkipSettings(
+  now: number,
+): Pick<AppSettings, "providerFamilyDomainUpdatedAt" | "providerFamilyDomainMigrated"> {
+  // Skip only means the user declined to enter a key for now. The API key entry is no
+  // longer tied to a vendor family, so nothing is written to providerFamilyDomain here:
+  // leaving it untouched keeps every family visible in the model picker instead of
+  // pinning the user to a family the catalog no longer ships.
+  return {
+    providerFamilyDomainUpdatedAt: now,
+    providerFamilyDomainMigrated: true,
+  };
 }
 
 export function buildLoginApiKeyDefaultModelPreferenceFromSelection(

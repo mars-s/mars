@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { BUILTIN_PROVIDER_TEMPLATE_IDS } from "@zcode/shared";
 import { getDefaultConfigPath } from "@zcode/adapters/config";
 import {
   parseLegacyCliModelConfig,
@@ -64,26 +63,10 @@ function importLegacyCliPersonalProviderConfig(
     const providerId = rawProviderId.trim();
     if (!providerId) continue;
     // Standalone 也会读取旧 Desktop 写出的 builtin:* / source=custom。
-    // 与 Desktop 导入一致：旧内置静态配置和账号凭据不迁，按量 API 只留下 Key。
-    const templateId =
-      providerId === "builtin:bigmodel"
-        ? BUILTIN_PROVIDER_TEMPLATE_IDS.bigmodel
-        : providerId === "builtin:zai"
-          ? BUILTIN_PROVIDER_TEMPLATE_IDS.zai
-          : undefined;
-    if (templateId) {
-      const apiKey = provider.options?.apiKey?.trim();
-      if (apiKey)
-        providers = providers.setRule({
-          providerId: templateId,
-          templateId,
-          config: new ProviderConfig({
-            group: "standard-personal",
-            access: new ApiKeyAccessConfig({ apiKey }),
-          }),
-        });
-      continue;
-    }
+    // 与 Desktop 导入一致：旧内置静态配置和账号凭据不迁。
+    // The two retired Z.ai / BigModel builtin ids used to keep only their pay-per-token
+    // API key here. Those templates are gone from the catalog, so writing the rule would
+    // only leave a dangling one: both ids are dropped like any other builtin:*/account:*.
     if (providerId.startsWith("builtin:") || providerId.startsWith("account:")) continue;
     if (provider.source !== undefined && provider.source !== "custom") continue;
     if (requiresUnsupportedNoAuthentication(provider)) {
