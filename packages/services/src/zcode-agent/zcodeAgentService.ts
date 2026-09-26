@@ -16,8 +16,6 @@ import type {
   ModelSelectionView,
   ProviderSource,
 } from "@zcode/provider";
-import { completeNewModelSelection } from "@zcode/provider";
-import type { OffPeakClientConfig } from "#src/coding-plan-subscription/codingPlanSubscription.js";
 import {
   ZCODE_SESSION_RUNTIME_PREFERENCES_REQUEST_TIMEOUT_MS,
   formatLogPrefix,
@@ -63,7 +61,6 @@ import {
   zcodeAutomationUpdateParamsSchema,
   zcodeOffPeakCreateParamsSchema,
   zcodeOffPeakListParamsSchema,
-  OFF_PEAK_PROVIDER_IDS,
   zcodeComputerUseOperationEventSchema,
   zcodeProviderRuntimeHeadersCancelledSchema,
   zcodeProviderRuntimeHeadersRequestParamsSchema,
@@ -879,21 +876,21 @@ interface CreateZCodeAgentServiceOptions extends Omit<
     run: ZCodeAutomationRun;
   }) => Promise<void>;
   /**
-   * Off-Peak 会话内创建。config 同时承担曝光门（enabled && Selection View 非空 →
-   * session create/resume 下发 offPeakToolEnabled）与缺省解析（model=白名单末位 /
-   * thoughtLevel=最高档）；service 供 offPeak/create、offPeak/list 协议 handler 调用。
-   * 两者任一缺省即整体关闭（纯 CLI / desktop-attached-remote 装配不传）。
-   */
-  resolveOffPeakClientConfig?: () => Promise<OffPeakClientConfig | undefined>;
-  /**
    * 动态工作流灰度快照。Host 是唯一裁决者：
    * 结果既作为 workspace 级事实下发给 CLI，也决定 session create/resume/v4 是否带
    * dynamicWorkflowEnabled。缺省不传（纯 CLI 装配）= 永远关闭，与 CLI 缺省一致。
    */
   resolveDynamicWorkflowClientConfig?: () => Promise<DynamicWorkflowClientConfig | undefined>;
-  resolveOffPeakTaskService?: () =>
-    | Pick<IOffPeakTaskService, "createTask" | "list" | "getCodingPlanSupport">
-    | undefined;
+  /**
+   * Off-Peak 任务存储。service 供 offPeak/list 协议 handler 调用，
+   * 缺省即整体关闭（纯 CLI / desktop-attached-remote 装配不传）。
+   *
+   * The sibling gray-config option that used to sit here is gone: Off-Peak is a Z.ai
+   * discount-window concept and its config shipped with the deleted coding-plan
+   * subscription service, so no host can ever reach the allowlist that gate produced.
+   * `offPeakCreate` therefore always answers `offpeak_disabled` and no longer needs it.
+   */
+  resolveOffPeakTaskService?: () => Pick<IOffPeakTaskService, "list"> | undefined;
   /**
    * browser-use 执行桥：把 agent 的 interaction/browserExecute 反向请求转发到 main
    * （WebContentsView+CDP）。desktop host 装配时注入；缺省（纯 CLI/远控无 main）则
@@ -1011,48 +1008,6 @@ async function respondOffPeakInternalError(
     message: OFF_PEAK_INTERNAL_ERROR_MESSAGE,
     data: { errorCode: OFF_PEAK_INTERNAL_ERROR_CODE },
   });
-}
-
-/** 只有灰度有效开启且白名单非空才算"可创建"；其余一律视为关闭（空数组）。 */
-function resolveOffPeakAllowedModels(
-  grayConfig: OffPeakClientConfig | undefined,
-  providerId?: string,
-): readonly string[] {
-  if (grayConfig?.enabled !== true) return [];
-  return grayConfig.modelSelectionView.providers
-    .filter((provider) => providerId === undefined || provider.providerId === providerId)
-    .flatMap((provider) => provider.models.map((model) => model.modelId));
-}
-
-/**
- * model 解析：省略 → 白名单末位（服务端顺序末位≈最新最强）；显式 → trim + 大小写不敏感匹配，
- * 命中返回白名单原写法，未命中返回 null（调用方回 model_not_allowed）。
- */
-function resolveOffPeakCreateModel(
-  allowedModels: readonly string[],
-  requested: string | undefined,
-): string | null {
-  const wanted = requested?.trim();
-  if (!wanted) return allowedModels[allowedModels.length - 1] ?? null;
-  const lower = wanted.toLowerCase();
-  return allowedModels.find((model) => model.trim().toLowerCase() === lower) ?? null;
-}
-
-/**
- * 新工具任务复用公共最高档补全；旧 metadata/型号特判会偏离 values 的语义顺序。
- * 显式档位留给 createTask 的现有校验，不在入口擅自换档。
- */
-function resolveOffPeakToolSelection(
-  view: ModelSelectionView,
-  providerId: string,
-  modelId: string,
-  thoughtLevel?: string,
-): ModelSelection | undefined {
-  const selection = completeNewModelSelection(view, { providerId, modelId });
-  if (!selection) return undefined;
-  return thoughtLevel === undefined
-    ? selection
-    : { ...selection, options: { reasoningLevel: thoughtLevel } };
 }
 export function createZCodeAgentService(
   options?: CreateZCodeAgentServiceOptions,
@@ -2559,105 +2514,18 @@ export function createZCodeAgentService(
             });
             return;
           }
-          void (async () => {
-            try {
-              const offPeakTaskService = options?.resolveOffPeakTaskService?.();
-              if (!offPeakTaskService) {
-                await client.respondError(request.id, {
-                  code: -32601,
-                  message: "Off-peak task service is unavailable on this host",
-                });
-                return;
-              }
-              const grayConfig = await options
-                ?.resolveOffPeakClientConfig?.()
-                .catch(() => undefined);
-              // 工具注册后灰度被关闭/配置解析失败时，不能继续走"白名单为空"的推导
-              // （显式 model 会误报 model_not_allowed，省略 model 会以空模型落库）；直接返回稳定分类。
-              // 模型视图可同时包含两个域；必须用已有支持快照确认归属，不能从首个 Provider 猜。
-              const support =
-                resolveOffPeakAllowedModels(grayConfig).length > 0
-                  ? await offPeakTaskService.getCodingPlanSupport()
-                  : undefined;
-              const providerId = support?.supported
-                ? OFF_PEAK_PROVIDER_IDS[support.providerFamily]
-                : undefined;
-              const allowedModels = providerId
-                ? resolveOffPeakAllowedModels(grayConfig, providerId)
-                : [];
-              if (allowedModels.length === 0) {
-                await client.respond(request.id, {
-                  ok: false,
-                  failureStage: "client_validation",
-                  errorCategory: "client_validation",
-                  errorCode: "offpeak_disabled",
-                });
-                return;
-              }
-              // model 白名单预校：显式入参不在白名单返回稳定分类，
-              // 复用 client_validation 分类 + 专用 errorCode，不扩分类枚举。
-              // 匹配与 thoughtLevel/UI 同语义（trim + 大小写不敏感），命中后回写白名单原写法。
-              const model = resolveOffPeakCreateModel(allowedModels, parsed.data.model);
-              if (model === null) {
-                await client.respond(request.id, {
-                  ok: false,
-                  failureStage: "client_validation",
-                  errorCategory: "client_validation",
-                  errorCode: "model_not_allowed",
-                });
-                return;
-              }
-              const modelSelection =
-                grayConfig && providerId
-                  ? resolveOffPeakToolSelection(
-                      grayConfig.modelSelectionView,
-                      providerId,
-                      model,
-                      parsed.data.thoughtLevel,
-                    )
-                  : undefined;
-              if (!modelSelection) {
-                await client.respond(request.id, {
-                  ok: false,
-                  failureStage: "client_validation",
-                  errorCategory: "client_validation",
-                  errorCode: "model_not_allowed",
-                });
-                return;
-              }
-              const result = await offPeakTaskService.createTask({
-                title: parsed.data.title,
-                prompt: parsed.data.prompt,
-                permissionMode: parsed.data.permissionMode ?? "yolo",
-                modelSelection,
-                // 会话内创建绑定当前会话，派发时 resume 该会话执行。
-                ...(parsed.data.boundSessionId
-                  ? { boundSessionId: parsed.data.boundSessionId }
-                  : {}),
-                // workspace 由 host 从当前 session 注入（对称 automation/create），不进协议参数。
-                workspacePath: workspace.workspacePath,
-                ...(workspace.workspaceIdentity
-                  ? { workspaceIdentity: workspace.workspaceIdentity }
-                  : {}),
-              });
-              if (!result.ok) {
-                // 失败分类原样过协议（不 respondError），供 CLI handler 翻译为稳定错误。
-                await client.respond(request.id, {
-                  ok: false,
-                  failureStage: result.failureStage,
-                  errorCategory: result.errorCategory,
-                  errorCode: result.errorCode,
-                });
-                return;
-              }
-              await client.respond(request.id, {
-                ok: true,
-                task: toProtocolOffPeakTaskSnapshot(result.task),
-              });
-            } catch (error) {
-              await respondOffPeakInternalError(client, request, workspace, error);
-            }
-          })();
+          // Off-Peak is a Z.ai discount-window concept; its gray config and the
+          // model allowlist that config produced died with the coding-plan subscription
+          // service, so no host can ever create an off-peak task. The handler stays
+          // wired because the CLI still ships the OffPeakCreate tool and sends this
+          // method, so answer with the protocol's own stable "disabled" classification
+          // rather than method-not-found.
+          void client.respond(request.id, {
+            ok: false,
+            failureStage: "client_validation",
+            errorCategory: "client_validation",
+            errorCode: "offpeak_disabled",
+          });
           return;
         }
 
@@ -3242,12 +3110,15 @@ export function createZCodeAgentService(
   }
 
   // 3.12.2：远端灰度读取不能放进客户端就绪与创建命令：失败时串行重试会阻塞普通聊天。
-  // 注册只判断本地支持能力；灰度、套餐与模型准入仍由 offPeak/create handler 在取号前校验。
+  // Registration only reflects local capability. The gray-config term is gone with that
+  // deleted option, so this no longer gates on a remote read; the CLI still gets the tool
+  // surface on hosts that own an off-peak task store, and `offPeakCreate` answers
+  // `offpeak_disabled` for every such call.
   function isOffPeakToolSupported(params: {
     workspaceIdentity?: string;
     remoteSessionId?: string;
   }): boolean {
-    if (!options?.resolveOffPeakClientConfig || !options.resolveOffPeakTaskService) return false;
+    if (!options?.resolveOffPeakTaskService) return false;
     if (params.remoteSessionId) return false;
     return !params.workspaceIdentity || !isRemoteWorkspaceIdentity(params.workspaceIdentity);
   }
