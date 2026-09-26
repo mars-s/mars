@@ -11,8 +11,6 @@ import {
   resolveAutomaticModelProviderFamilyConnectionSelection,
 } from "@/lib/modelProviderFamilyConnectionSelection.js";
 
-import { getEnterprisePricingProductsOrEmpty } from "@/root/oauthTeamPricing.js";
-
 function resolveModelProviderFamilySpecFromOAuth(
   provider: OAuthProviderId | string,
 ): ReturnType<typeof getModelProviderFamilySpec> | null {
@@ -88,14 +86,12 @@ export async function refreshLatestModelProviderFamilySelectionAfterLogin(params
   )
     return null;
 
-  // 个人连接是否可用只认 Account View 的 availability 事实，不再叠加权益快照兜底。
-  const teamProducts = await getEnterprisePricingProductsOrEmpty(params.services, domain);
   // 旧 Start 连接只保留读取，不以权益失效为由删除或自动替换成付费连接。
   const savedSelection = currentSettings.providerFamilyConnectionSelections?.[domain];
   if (savedSelection?.kind === "start-plan") return savedSelection;
+  // 个人连接是否可用只认 Account View 的 availability 事实，不再叠加权益快照兜底。
   const selection = resolveAutomaticModelProviderFamilyConnectionSelection({
     providerFamilyDomain: domain,
-    teamProducts,
     codingPlanAvailable: states.has(codingPlanProviderId)
       ? states.get(codingPlanProviderId)!.availability === "available"
       : undefined,
