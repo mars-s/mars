@@ -1,5 +1,4 @@
 import type { ZCodeTaskMode } from "./zcode-task-types-core.js";
-import type { ModelProviderFamilyId } from "./model-provider-family.js";
 import type { ModelSelection } from "./model-selection.js";
 
 // ---- 闲时任务(Off-Peak Task)领域类型 ----
@@ -38,17 +37,10 @@ export function isOffPeakTerminalStatus(
  */
 export const OFF_PEAK_TICKET_EXPIRED_MARKER = "off-peak-ticket-expired";
 
-/** Off-Peak Provider 与当前账号 Family 同身份；任务保存精确选择，不跨 Family 静默迁移。 */
-export const OFF_PEAK_PROVIDER_IDS = {
-  zai: "account:zai-offpeak-idle-plan",
-  bigmodel: "account:bigmodel-offpeak-idle-plan",
-} as const;
-
-export function resolveOffPeakProviderId(
-  family: ModelProviderFamilyId,
-): (typeof OFF_PEAK_PROVIDER_IDS)[typeof family] {
-  return OFF_PEAK_PROVIDER_IDS[family];
-}
+// OFF_PEAK_PROVIDER_IDS and resolveOffPeakProviderId were removed with the
+// family table: they were a per-family lookup of hard-coded account provider
+// ids. Off-peak tasks save an exact ModelSelection, so nothing resolves a
+// provider id from a family any more.
 
 /** 当前 selected connection 可供 Off-Peak 使用的真实 Coding Plan 形态。 */
 // zai/bigmodel Team Plan 对称化，新增 zai-team kind。
@@ -77,7 +69,8 @@ export type OffPeakCodingPlanSupport =
   | {
       supported: true;
       kind: OffPeakCodingPlanKind;
-      providerFamily: ModelProviderFamilyId;
+      /** Opaque provider-scope id the entitlement was resolved for. */
+      providerFamily: string;
       providerId: string;
     }
   | {

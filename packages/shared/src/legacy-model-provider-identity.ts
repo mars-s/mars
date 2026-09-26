@@ -1,4 +1,3 @@
-import { BUILTIN_MODEL_PROVIDER_IDS } from "./model-provider-types.js";
 import { normalizeOfficialGlmModelId } from "./official-glm-model-id.js";
 
 // 不凭用户自定义 Provider 的名字猜所属站点；闲时 Ticket 的绑定身份也不能改。
@@ -17,23 +16,12 @@ export function migrateLegacyOfficialGlmModelId(providerId: string, modelId: str
  * 迁移不查模型/档位是否可用；普通未知 ID 不构成旧格式证据。
  *
  * The old `builtin:zai` / `builtin:bigmodel` ids used to name built-in
- * pay-per-token templates. Both templates were deleted from the catalog, so
- * rewriting them to the same-shaped template id would only produce a dangling
- * id. They now fall through to the `default` branch together with every other
+ * pay-per-token templates. Every template they could migrate to has been
+ * deleted from the catalog, so there is nothing left to rewrite them to: they
+ * all fall through to the `default` branch together with every other
  * unrecognised `builtin:` id, which migrates the row to "no provider" and leaves
- * it to valid-selection resolution.
+ * it to valid-selection resolution. Do not add a replacement target here.
  */
 export function migrateLegacyModelProviderId(providerId: string): string | undefined {
-  switch (providerId) {
-    case "builtin:bigmodel-start-plan":
-      return BUILTIN_MODEL_PROVIDER_IDS.bigmodelStartPlan;
-    case "builtin:zai-start-plan":
-      return BUILTIN_MODEL_PROVIDER_IDS.zaiStartPlan;
-    case "builtin:bigmodel-coding-plan":
-      return BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan;
-    case "builtin:zai-coding-plan":
-      return BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan;
-    default:
-      return providerId.startsWith("builtin:") ? undefined : providerId;
-  }
+  return providerId.startsWith("builtin:") ? undefined : providerId;
 }

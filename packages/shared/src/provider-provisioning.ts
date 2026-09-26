@@ -48,9 +48,11 @@ export type ProviderProvisioningPersonalConfig = z.infer<
   typeof providerProvisioningPersonalConfigSchema
 >;
 
+// `providerFamilyDomain` was removed here: the persisted key carried a live
+// Z.ai string in a validated settings object, and the concept is dead. The
+// object is `.strict()`, so producers must stop sending the key.
 export const providerProvisioningAccountSettingsSchema = z
   .object({
-    providerFamilyDomain: z.enum(["zai", "bigmodel"]).nullable(),
     providerFamilyConnectionSelections: providerFamilyConnectionSelectionSettingsSchema,
   })
   .strict();

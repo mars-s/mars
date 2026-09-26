@@ -809,44 +809,10 @@ export const zcodeModelOptionSchema = z
   .strict();
 export type ZCodeModelOption = z.infer<typeof zcodeModelOptionSchema>;
 
-export const zcodeAccountAccessSchema = z.discriminatedUnion("planKind", [
-  z
-    .object({
-      type: z.literal("zhipu-account"),
-      family: z.enum(["zai", "bigmodel"]),
-      planKind: z.literal("start-plan"),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("zhipu-account"),
-      family: z.enum(["zai", "bigmodel"]),
-      planKind: z.literal("individual-coding-plan"),
-    })
-    .strict(),
-  z
-    .object({
-      type: z.literal("zhipu-account"),
-      family: z.enum(["zai", "bigmodel"]),
-      planKind: z.literal("team-coding-plan"),
-      productId: nonEmptyString,
-      organizationId: nonEmptyString,
-      projectId: nonEmptyString,
-    })
-    .strict(),
-]);
-export type ZCodeAccountAccess = z.infer<typeof zcodeAccountAccessSchema>;
-
-/** Active Model 固定的账号访问类别；当前商品和 Team scope 由账号服务在请求期解析。 */
-export const zcodeProviderAccountAccessSchema = z
-  .object({
-    type: z.literal("zhipu-account"),
-    accountType: z.enum(["zai", "bigmodel"]),
-    mode: z.enum(["start-plan", "individual-coding-plan", "team-coding-plan", "off-peak"]),
-    entitled: z.boolean(),
-  })
-  .strict();
-export type ZCodeProviderAccountAccess = z.infer<typeof zcodeProviderAccountAccessSchema>;
+// zcodeAccountAccessSchema / zcodeProviderAccountAccessSchema were removed with
+// the account-provider subsystem. Every member of both unions was a
+// `zhipu-account` access descriptor carrying a `zai` / `bigmodel` discriminator,
+// so neither union has a surviving member and no placeholder variant is added.
 
 export type ZCodeSessionMode = z.infer<typeof zcodeSessionModeSchema>;
 export type ZCodeSessionKind = z.infer<typeof zcodeSessionKindSchema>;
@@ -2387,7 +2353,6 @@ export const zcodeProviderRuntimeHeadersRequestParamsSchema = z
     workspace: zcodeWorkspaceRefSchema,
     modelSelection: modelSelectionSchema,
     providerId: nonEmptyString,
-    accountAccess: zcodeProviderAccountAccessSchema.optional(),
     reason: zcodeProviderRuntimeHeadersRequestReasonSchema,
   })
   .strict();

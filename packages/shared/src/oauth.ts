@@ -5,16 +5,6 @@
  * 只允许放在 services 的 provider 模块中，不能放 shared 层。
  */
 
-/**
- * 已下线 provider 的 id 常量。
- *
- * 仅供仍在读取历史凭据的调用方做向后兼容判断，不再参与 OAuthProviderId 的类型定义。
- */
-export const BIGMODEL_PROVIDER_ID = "bigmodel" as const;
-
-/** @see BIGMODEL_PROVIDER_ID */
-export const ZAI_PROVIDER_ID = "zai" as const;
-
 /** 凭据解密失败错误前缀 */
 export const CREDENTIAL_DECRYPT_ERROR_PREFIX = "凭据解密失败：" as const;
 
