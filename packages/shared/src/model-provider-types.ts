@@ -1,9 +1,24 @@
 /* eslint-disable max-lines -- 模型供应商 schema、迁移和运行时投影 helper 需要共享同一套类型边界，暂时集中在单文件避免契约分散。 */
+
+/**
+ * Pay-per-token template IDs that were deleted from the built-in catalog. Kept
+ * only so one-way legacy migration can still recognise the historical ids;
+ * `zai-api` and `bigmodel-api` are no longer templates, and resolving either one
+ * now yields a `missing-template` issue. The export survives because the login
+ * screen and the migration importers still read it; drop it only after those
+ * call sites are gone.
+ */
 export const BUILTIN_PROVIDER_TEMPLATE_IDS = {
   zai: "zai-api",
   bigmodel: "bigmodel-api",
 } as const;
 
+/**
+ * Account provider ids. The catalog no longer declares any of them, so every
+ * runtime lookup of these ids misses. The table stays so that legacy migration
+ * and telemetry identity mapping still recognise the historical ids; it cannot
+ * put them back into the model picker.
+ */
 export const BUILTIN_MODEL_PROVIDER_IDS = {
   zaiIndividualCodingPlan: "account:zai-individual-coding-plan",
   zaiTeamCodingPlan: "account:zai-team-coding-plan",
