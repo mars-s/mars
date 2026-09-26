@@ -217,7 +217,11 @@ const NOOP_CALL: ModelCallSpanWriter = {
   startAttempt: () => NOOP_ATTEMPT,
 };
 
-const NOOP_AGENT_EXECUTION_TELEMETRY: AgentExecutionTelemetryPort = {
+/**
+ * 无上报实现：所有 span writer 都是空壳，只保证调用方的控制流不受影响。
+ * 遥测能力被移除后，runtime 仍按同一组端口调用，只是没有任何出网写入。
+ */
+export const NOOP_AGENT_EXECUTION_TELEMETRY: AgentExecutionTelemetryPort = {
   abandonSession() {},
   captureCausation() {
     return undefined;

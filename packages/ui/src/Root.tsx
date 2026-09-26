@@ -22,8 +22,6 @@ import { SettingsPage } from "@/SettingsPage.js";
 import { CodingPlanUpgradeDialogProvider } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { WelcomeScreen, type LoginCompleteReason } from "@/WelcomeScreen.js";
 import { setDefaultFileDisplayBasePath } from "@/lib/fileDisplay.js";
-import { readRendererLaunchTimings, shouldReportLaunchToInput } from "@/lib/launchToInputReport.js";
-import { reportUiLaunchToInput } from "@/lib/uiPerfArmsTelemetry.js";
 import { countAllUnreadTasks } from "@/lib/unreadTaskCount.js";
 import {
   isProviderStartupSyncPending,
@@ -69,9 +67,6 @@ import {
   markCodeCommentRemoved,
 } from "@/lib/codeCommentContext.js";
 import { useCodeCommentPreviewStore } from "@/store/codeCommentPreviewStore.js";
-import { setUiPerfArmsReporter } from "@/lib/uiPerfArmsTelemetry.js";
-import { setSessionOpenArmsReporter } from "@/lib/sessionOpenArmsTelemetry.js";
-import { setSendFunnelArmsReporter } from "@/lib/sendFunnelArmsTelemetry.js";
 import { RootStartupLoading } from "@/root/RootStartupLoading.js";
 import { resolveProviderAvailabilityState } from "@/lib/modelProviderAvailability.js";
 import { useProviderAvailabilityLoginEntryGuard } from "@/root/useProviderAvailabilityLoginEntryGuard.js";
@@ -162,18 +157,10 @@ function RootInner({
 }: RootProps) {
   useEffect(() => {
     setMcpStorePlatform(platform);
-    // 对话 UI perf 只属于 desktop-continuous；Web/mobile 即使能看到权威状态也不装 reporter。
-    setUiPerfArmsReporter(isDesktop ? platform : null);
-    setSessionOpenArmsReporter(isDesktop ? platform : null);
-    // 发送漏斗同理：只在 Electron 桌面端上报，Web/mobile 的 reportArmsCustomEvent 是空实现。
-    setSendFunnelArmsReporter(isDesktop ? platform : null);
     return () => {
       setMcpStorePlatform(null);
-      setUiPerfArmsReporter(null);
-      setSessionOpenArmsReporter(null);
-      setSendFunnelArmsReporter(null);
     };
-  }, [isDesktop, platform]);
+  }, [platform]);
 
   useEffect(
     () => () => {
@@ -616,31 +603,6 @@ function RootInner({
     isRestoring,
     isBootstrappingInitialWorkspace: isBootstrappingInitialWorkspace || isCreatingFallbackWorkspace,
   });
-
-  const launchReportedRef = useRef(false);
-  useEffect(() => {
-    if (
-      !shouldReportLaunchToInput({
-        isStartupRenderBlocked,
-        welcomeScreenOpen: Boolean(welcomeScreenOpenReason),
-        alreadyReported: launchReportedRef.current,
-      })
-    ) {
-      return;
-    }
-    launchReportedRef.current = true;
-    const timings = readRendererLaunchTimings();
-    if (!timings || !timings.marks) {
-      return; // 锚点缺失(非桌面/未注入 marks),整批跳过
-    }
-    reportUiLaunchToInput({
-      marks: timings.marks,
-      rendererStart: timings.rendererStart,
-      reactCommit: timings.reactCommit,
-      inputReady: Date.now(), // T6
-      sessionId: `launch-${timings.marks.createdAt}`,
-    });
-  }, [isStartupRenderBlocked, welcomeScreenOpenReason]);
 
   useRootPlatformEffects({
     initialWorkspaceAbsPath,

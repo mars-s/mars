@@ -262,7 +262,6 @@ function createWebPlatform(): IPlatformService {
     onShareImport: () => () => {},
     notifyRendererReady: () => {},
     reportTelemetryEvent: async () => {},
-    reportArmsCustomEvent: () => Promise.resolve(),
     showTaskNotification: (payload) => {
       if (document.hasFocus()) {
         return;

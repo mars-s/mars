@@ -353,20 +353,6 @@ export interface ModelExecutionTelemetryPort {
   startCall(input: ModelCallTraceStart): ModelCallSpanWriter;
 }
 
-/**
- * App 注入和 Standalone 初始化共用的进程级 Owner。一个 CLI 进程只能创建一个 Owner。
- */
-export interface AgentTelemetryRuntimeOwner {
-  readonly agentExecution: AgentExecutionTelemetryPort;
-  readonly enabled: boolean;
-  readonly modelExecution: ModelExecutionTelemetryPort;
-  readonly statusSink?: import("../model/index.js").ModelStatusSink;
-  abandonSession(sessionId: string): void;
-  flush(options?: { timeoutMs?: number }): Promise<void>;
-  shutdown(options?: { timeoutMs?: number }): Promise<void>;
-  updateIdentity(snapshot: TelemetryIdentitySnapshot): void;
-}
-
 export interface ModelApiCallDescriptor {
   observation: Required<
     Pick<ModelApiCallObservation, "operation" | "actorKind" | "logicalCallId">

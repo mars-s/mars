@@ -132,6 +132,7 @@ export type { PermissionConfig } from "./permission/index.js";
 export { AgentRuntime } from "./runtime.js";
 export { createExternalTurnFaultError } from "./runtime/helpers/turn-errors.js";
 export { repairPersistedRemoteSessionPaths } from "./runtime/helpers/persisted-remote-session-path-repair.js";
+export { NOOP_AGENT_EXECUTION_TELEMETRY } from "./telemetry/runtime-telemetry.js";
 // 「按值把一段转录复制进另一个会话」的克隆器。fork 之外的第二个消费者是 dwf 的 amend-resume
 // 转录截断（bootstrap 的 workflow-actor-transcript.ts）：同一个动作——新会话用本地 id 续写，
 // parentID / part 内嵌锚点随之重映射。导出而不是让它再写一份，是因为漏掉任何一处重映射的症状

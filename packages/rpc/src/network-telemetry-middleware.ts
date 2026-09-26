@@ -1,5 +1,5 @@
 /**
- * RPC 调用网络遥测：记录 channel.command 级成功率与耗时，供桌面主进程聚合上报 ARMS。
+ * RPC 调用网络遥测：记录 channel.command 级成功率与耗时，供桌面主进程聚合。
  */
 import type { IChannelServer, IChannelClient, IChannel, IServerChannel } from "./channels.js";
 import type { CancellationToken } from "./foundation.js";

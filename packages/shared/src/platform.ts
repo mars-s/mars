@@ -14,7 +14,7 @@ import type {
 } from "./mcp.js";
 import type { OAuthStateRegistration } from "./oauth.js";
 import type { AppSettings, Locale } from "./protocol.js";
-import type { ArmsCustomEventPayload, RendererTelemetryEventPayload } from "./telemetry.js";
+import type { RendererTelemetryEventPayload } from "./telemetry.js";
 import type {
   RendererActionTraceBatchV1,
   RendererActionTraceConfigV1,
@@ -698,9 +698,6 @@ export interface IPlatformService {
 
   /** 通过宿主环境统一上报 UI 侧 telemetry 事件 */
   reportTelemetryEvent(payload: RendererTelemetryEventPayload): Promise<void>;
-
-  /** 通过宿主环境上报 ARMS 自定义事件；Web 端当前为空实现 */
-  reportArmsCustomEvent(payload: ArmsCustomEventPayload): Promise<void>;
 
   /** 读取 Desktop Renderer 用户操作 Trace 的当前灰度配置；Web/手机不实现。 */
   getRendererActionTraceConfig?(): Promise<RendererActionTraceConfigV1>;

@@ -150,15 +150,6 @@ export const rendererTelemetryEventPayloadSchema = z.object({
   messageId: z.string().optional(),
 });
 
-export const armsCustomEventPayloadSchema = z.object({
-  name: nonEmptyStringSchema,
-  group: nonEmptyStringSchema,
-  value: z.number().finite().optional(),
-  properties: z
-    .record(z.string(), z.union([z.string(), z.number().finite(), z.boolean(), z.undefined()]))
-    .optional(),
-});
-
 export const broadcastMessageSchema = z.object({
   channel: nonEmptyStringSchema,
   payload: z.unknown(),
