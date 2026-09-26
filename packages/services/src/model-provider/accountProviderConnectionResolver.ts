@@ -6,24 +6,15 @@ import type {
   AccountProviderConnectionResult,
   ProviderConfigSnapshot,
   ProviderSource,
+  ZhipuAccountMode,
 } from "@zcode/provider";
 import { AccountProviderService, createAccountProviderConfigResolver } from "@zcode/provider";
 import {
-  type ApiClient,
   type ProviderFamilyConnectionSelectionSettings,
   type ProviderFamilyDomain,
   type ZCodeAccountAccess,
   type ZCodeProviderAccountAccess,
 } from "@zcode/shared";
-import type {
-  CodingPlanAvailabilityProvider,
-  CodingPlanAvailabilityResult,
-  CodingPlanUnavailableReason,
-} from "#src/model-provider/codingPlanProviderAvailability.js";
-import {
-  validateBigModelAccountProviderAvailability,
-  validateZaiAccountProviderAvailability,
-} from "#src/model-provider/codingPlanProviderAvailability.js";
 
 export interface AccountProviderConnectionSettings {
   readonly providerFamilyDomain: ProviderFamilyDomain | null;
@@ -32,33 +23,21 @@ export interface AccountProviderConnectionSettings {
   readonly unresolvedFamilies?: readonly ProviderFamilyDomain[];
 }
 
-export interface AccountProviderFamilyAvailabilityInput {
-  readonly family: ProviderFamilyDomain;
-  readonly providers: readonly CodingPlanAvailabilityProvider[];
-  readonly selections: ProviderFamilyConnectionSelectionSettings;
-}
-
-export type AccountProviderFamilyAvailabilityResolver = (
-  input: AccountProviderFamilyAvailabilityInput,
-) => Promise<Partial<Record<string, CodingPlanAvailabilityResult>>>;
+/**
+ * Connection facts this layer can still prove for one configured account
+ * provider. The Z.ai / BigModel coding-plan entitlement APIs were deleted with
+ * the catalog entries, so no subscription can be queried here any more and the
+ * only remaining local facts are the logged-in account and the plan mode
+ * itself. Every branch below is fail-closed.
+ */
+type AccountPlanConnectionAvailability =
+  | { readonly kind: "available" }
+  | { readonly kind: "unavailable"; readonly reason: AccountProviderUnavailableReason }
+  | { readonly kind: "unknown" };
 
 export interface AccountProviderConnectionResolverOptions {
   readonly readSettings: () => Promise<AccountProviderConnectionSettings>;
-  readonly loadCodingPlanApiKey: (
-    providerId: string,
-    family: ProviderFamilyDomain,
-    accountIdentity: string,
-    forceRefresh: boolean,
-  ) => Promise<string | null>;
   readonly loadAccountIdentity: (family: ProviderFamilyDomain) => Promise<string | null>;
-  readonly resolveFamilyAvailability: AccountProviderFamilyAvailabilityResolver;
-}
-
-export interface CodingPlanFamilyAvailabilityResolverOptions {
-  readonly apiClient: ApiClient;
-  readonly credentialService?: {
-    load(key: string): Promise<string | null>;
-  };
 }
 
 export interface AccountProviderConfigSourceOptions extends AccountProviderConnectionResolverOptions {
@@ -66,18 +45,20 @@ export interface AccountProviderConfigSourceOptions extends AccountProviderConne
 }
 
 /**
- * 把现有账号域、连接模式和套餐权益统一投影为领域层 Connection Result。
+ * Projects the configured account families, connection modes and plan
+ * entitlements into the domain Connection Result.
  *
- * 该适配器不保存凭据。Personal Coding Plan Key 的物理来源由注入端决定；
- * Start/Team 的动态凭据继续由现有 availability 依赖按请求读取。
+ * This adapter holds no credentials. The Personal Coding Plan Key had its
+ * physical source injected here, and the Start/Team entitlement query that
+ * backed Start/Team is gone with the provider catalog, so a connection is now
+ * decided from the logged-in account and the plan mode alone.
  */
 export function createAccountProviderConnectionResolver(
   options: AccountProviderConnectionResolverOptions,
 ): AccountProviderConnectionResolver {
   let previousScopes = new Map<string, string>();
-  return async ({ configuredProviders, reasons = [] }) => {
+  return async ({ configuredProviders }) => {
     const settings = structuredClone(await options.readSettings());
-    const forceCredentialRefresh = reasons.some(isCredentialRefreshReason);
     const accountIdentityByFamily = new Map<ProviderFamilyDomain, Promise<string | null>>();
     const loadAccountIdentity = (family: ProviderFamilyDomain) => {
       const existing = accountIdentityByFamily.get(family);
@@ -89,7 +70,7 @@ export function createAccountProviderConnectionResolver(
       accountIdentityByFamily.set(family, pending);
       return pending;
     };
-    const availabilityByProviderId = new Map<string, CodingPlanAvailabilityResult>();
+    const availabilityByProviderId = new Map<string, AccountPlanConnectionAvailability>();
 
     for (const family of ["zai", "bigmodel"] as const) {
       const configured = configuredProviders
@@ -115,36 +96,11 @@ export function createAccountProviderConnectionResolver(
       if (queryable.length === 0) continue;
 
       const accountIdentity = await loadAccountIdentity(family);
-      if (!accountIdentity) {
-        for (const { providerId } of queryable) {
-          availabilityByProviderId.set(providerId, {
-            kind: "unavailable",
-            reason: "coding_plan_not_connected",
-          });
-        }
-        continue;
-      }
-
-      const availabilityProviders = await Promise.all(
-        queryable.map(async ({ providerId, planKind }) => ({
+      for (const { providerId, planKind } of queryable) {
+        availabilityByProviderId.set(
           providerId,
-          family,
-          planKind,
-          apiKey:
-            planKind !== "team-coding-plan"
-              ? await options
-                  .loadCodingPlanApiKey(providerId, family, accountIdentity, forceCredentialRefresh)
-                  .catch(() => null)
-              : null,
-        })),
-      );
-      const resolved = await options.resolveFamilyAvailability({
-        family,
-        providers: availabilityProviders,
-        selections: settings.selections,
-      });
-      for (const { providerId } of queryable) {
-        availabilityByProviderId.set(providerId, resolved[providerId] ?? { kind: "unknown" });
+          resolvePlanConnectionAvailability(planKind, Boolean(accountIdentity)),
+        );
       }
     }
 
@@ -169,24 +125,11 @@ export function createAccountProviderConnectionResolver(
       const resetPrevious =
         previousScopes.has(providerId) && previousScopes.get(providerId) !== scope;
       if (access.mode === "off-peak") {
-        const selectedPlanKind = selection?.kind;
-        const matchingPlanAvailable =
-          settings.providerFamilyDomain === access.accountType &&
-          (selectedPlanKind === "individual-coding-plan" ||
-            selectedPlanKind === "team-coding-plan") &&
-          configuredProviders
-            .entries()
-            .some(
-              ([candidateId, candidate]) =>
-                candidate.access?.type === "zhipu-account" &&
-                candidate.access.accountType === access.accountType &&
-                candidate.access.mode === selectedPlanKind &&
-                availabilityByProviderId.get(candidateId)?.kind === "available",
-            );
-        connections.push({
-          providerId,
-          status: matchingPlanAvailable ? "available" : "unavailable",
-        });
+        // Off-peak quota is produced by an entitled Coding Plan, and the
+        // entitlement query that could confirm one is gone. No Coding Plan can
+        // resolve to `available` any more, so Off-peak is reported unavailable
+        // instead of being carried forward from a previous snapshot.
+        connections.push({ providerId, status: "unavailable", unavailableReason: "not-entitled" });
         continue;
       }
       const availability = availabilityByProviderId.get(providerId) ?? {
@@ -197,11 +140,7 @@ export function createAccountProviderConnectionResolver(
         status: availability.kind,
         // 原因必须随连接结果一起发布。UI 拿不到原因时只能把"已登录但无套餐"
         // 也显示成"未连接"。
-        ...(availability.kind === "unavailable"
-          ? {
-              unavailableReason: resolveAccountUnavailableReason(availability.reason),
-            }
-          : {}),
+        ...(availability.kind === "unavailable" ? { unavailableReason: availability.reason } : {}),
         // Start 跟随登录身份，付费套餐跟随连接选择；两者可同时 current，不改写权益或配置。
         current:
           settings.providerFamilyDomain === access.accountType &&
@@ -219,14 +158,16 @@ export function createAccountProviderConnectionResolver(
             ]),
           )
           .digest("hex"),
-        ...("models" in availability ? { models: availability.models } : {}),
-        ...("effectiveAt" in availability ? { effectiveAt: availability.effectiveAt } : {}),
         ...(resetPrevious ? { resetPrevious: true } : {}),
       });
     }
-    // 权益查询可能跨越切账号/套餐，旧设置与新身份会被拼成可发布结果。
-    // 发布前核对本轮作用域；失败时也不能推进 previousScopes，否则下一轮会把
-    // 未发布的账号误认作 last-known-good。重试继续由现有刷新事件驱动。
+    // The round still awaits the account identity, so a login or a plan switch
+    // can land halfway through. Re-check this round's identity and settings
+    // before publishing: a result assembled from a stale snapshot must be
+    // dropped, not merged with the new one. A failed check must not advance
+    // previousScopes either, or the next round would accept the unpublished
+    // account as last-known-good. Retries stay driven by the existing refresh
+    // events.
     const identitiesUnchanged = await Promise.all(
       [...accountIdentityByFamily].map(
         async ([family, captured]) =>
@@ -244,32 +185,29 @@ export function createAccountProviderConnectionResolver(
   };
 }
 
-function isCredentialRefreshReason(reason: string): boolean {
-  // ProviderSettingsFacade 会给登录刷新原因添加 settings: 前缀；漏匹配会在
-  // 同账号重新登录后继续复用失效 Key。按原因末段精确匹配，普通刷新仍复用缓存。
-  return (
-    reason.includes("oauth-callback") || reason.split(":").at(-1) === "oauth-login-entitlement"
-  );
-}
-
 /**
- * 把 Coding Plan 可用性原因投影为账号域原因。
- * Account State 是跨 family 的通用事实，不直接沿用 Coding Plan 内部枚举；
- * UI 只依赖这里的稳定语义，不认识套餐查询实现。
+ * Decide one account provider's connection from local facts only.
+ *
+ * A missing account identity is still a hard rejection, exactly as before: a
+ * signed-out account can never resolve to an available connection. What changed
+ * is the positive case. The subscription entitlement query is gone, so a
+ * configured individual or team Coding Plan has no entitlement source left and
+ * is reported as not-entitled instead of being assumed. That is what keeps the
+ * Team plan branch from selecting a connection on nothing but a stored setting.
+ * Start Plan is not a subscription: it follows the logged-in account, so the
+ * account identity is its whole gate, which is also the gate
+ * `resolveCurrentAccountAccess` applies on the request path.
  */
-function resolveAccountUnavailableReason(
-  reason: CodingPlanUnavailableReason,
-): AccountProviderUnavailableReason {
-  switch (reason) {
-    case "coding_plan_not_authenticated":
-      return "not-authenticated";
-    case "coding_plan_not_connected":
-      return "not-connected";
-    case "coding_plan_auth_failed":
-      return "credential-failed";
-    case "coding_plan_not_entitled":
-      return "not-entitled";
+function resolvePlanConnectionAvailability(
+  planKind: ZhipuAccountMode,
+  connected: boolean,
+): AccountPlanConnectionAvailability {
+  if (!connected) return { kind: "unavailable", reason: "not-connected" };
+  if (planKind === "start-plan") return { kind: "available" };
+  if (planKind === "individual-coding-plan" || planKind === "team-coding-plan") {
+    return { kind: "unavailable", reason: "not-entitled" };
   }
+  return { kind: "unknown" };
 }
 
 /** 组装 Config、账号连接解析与第三层 Account Provider Config Source。 */
@@ -280,22 +218,6 @@ export function createAccountProviderConfigSource(
     configSource: options.configSource,
     resolve: createAccountProviderConfigResolver(createAccountProviderConnectionResolver(options)),
   });
-}
-
-/** 用当前稳定的 Plan 查询实现生产 Family Availability Port。 */
-export function createCodingPlanFamilyAvailabilityResolver(
-  options: CodingPlanFamilyAvailabilityResolverOptions,
-): AccountProviderFamilyAvailabilityResolver {
-  return ({ family, providers, selections }) => {
-    const context = {
-      apiClient: options.apiClient,
-      credentialService: options.credentialService,
-      providerFamilyConnectionSelections: selections,
-    };
-    return family === "zai"
-      ? validateZaiAccountProviderAvailability(providers, context)
-      : validateBigModelAccountProviderAvailability(providers, context);
-  };
 }
 
 /**
