@@ -1,4 +1,5 @@
 import type { TuiSubmitPrompt } from "@zcode/tui";
+import { isCliOAuthProviderId } from "@zcode/adapters";
 import {
   formatAvailableCommandNames,
   listCustomCommandsForHelp,
@@ -28,8 +29,6 @@ import {
   buildLoginSelection,
   emitLoginAuthorizeMessage,
   formatLoginResult,
-  loginProviderIds,
-  loginProviderLabel,
   loginSetupResponse,
 } from "./login-flow.js";
 import { loginRequiredResponse } from "../tui-login-state.js";
@@ -91,11 +90,13 @@ export function createCommandCenter(deps: CommandCenterDeps): TuiSubmitPrompt {
             selection: buildLoginSelection(deps.getLocale?.()),
           };
         }
-        const providerIds = loginProviderIds();
-        if (!providerIds.includes(command.args)) {
+        // No shipped provider catalog, so the namespace is checked by shape only.
+        // A well-formed unknown namespace is the backend's call to accept or reject,
+        // not a reason for the CLI to hide it.
+        if (!isCliOAuthProviderId(command.args)) {
           return {
             mode: deps.getMode?.(),
-            response: `Usage: /login <${providerIds.join("|") || "provider"}>`,
+            response: "Usage: /login <provider>",
           };
         }
         if (!deps.login) {
@@ -115,7 +116,7 @@ export function createCommandCenter(deps: CommandCenterDeps): TuiSubmitPrompt {
                 await emitLoginAuthorizeMessage(
                   options,
                   data.authorize_url,
-                  loginProviderLabel(command.args),
+                  command.args,
                   await deps.getApp(),
                 );
               },

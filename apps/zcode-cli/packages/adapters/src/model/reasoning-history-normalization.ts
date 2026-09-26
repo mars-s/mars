@@ -6,27 +6,10 @@ import type {
   ModelId,
   ModelProviderId,
 } from "@zcode/contracts";
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
 import { getStatusCode, unwrapRetryError } from "./failure-inspection.js";
 
 const EMPTY_ASSISTANT_CONTENT_FALLBACK = "(no content)";
 const REJECTED_REASONING_FALLBACK = "[Thinking removed]";
-
-// 旧历史保留 builtin 身份，当前选型已迁到 account 身份；Individual/Team
-// 也会使用不同 ID。只在 reasoning 回放时识别同服务的这些明确身份，不改变选型或鉴权。
-// 不能复用套餐展示分组：Start/Off-Peak/API 接入不在这份签名兼容范围内。
-const REASONING_PROVIDER_GROUPS: readonly (readonly string[])[] = [
-  [
-    "builtin:zai-coding-plan",
-    BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan,
-    BUILTIN_MODEL_PROVIDER_IDS.zaiTeamCodingPlan,
-  ],
-  [
-    "builtin:bigmodel-coding-plan",
-    BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan,
-    BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan,
-  ],
-];
 
 export function normalizeReasoningHistory(
   messages: ModelInputMessage[],
@@ -99,24 +82,15 @@ function removeCrossModelReasoning(
 
   return filterReasoningBlocks(messages, (block, message) => {
     if (!message.providerId || !message.modelId) return false;
-    if (
-      message.modelId === targetModel.modelId &&
-      areReasoningProvidersCompatible(message.providerId, targetModel.providerId)
-    ) {
+    // A signed thinking block is only replayable against the exact provider that
+    // minted it. Historical aliases used to be grouped so a retired builtin id
+    // and its replacement account id shared a signature; those ids are gone, so
+    // anything but an identical provider id is stripped instead of replayed.
+    if (message.modelId === targetModel.modelId && message.providerId === targetModel.providerId) {
       return false;
     }
     return isSignedOrRedactedReasoning(block);
   });
-}
-
-function areReasoningProvidersCompatible(
-  source: ModelProviderId,
-  target: ModelProviderId,
-): boolean {
-  return (
-    source === target ||
-    REASONING_PROVIDER_GROUPS.some((group) => group.includes(source) && group.includes(target))
-  );
 }
 
 function filterReasoningBlocks(

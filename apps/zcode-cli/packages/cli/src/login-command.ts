@@ -1,14 +1,9 @@
 import { formatJson } from "@zcode/core";
-import { MODEL_PROVIDER_FAMILY_SPECS } from "@zcode/shared";
+import { isCliOAuthProviderId } from "@zcode/adapters";
 import type { GlobalOptions, RunContext } from "@zcode/shared-types";
 import { loadBootstrapModule } from "./bootstrap-loader.js";
 import { loadCliDotenv } from "./env.js";
 import type { RunDependencies } from "./cli-types.js";
-
-/** The provider namespaces the operator's ZCode backend can sign a user into. */
-function loginProviderIds(): readonly string[] {
-  return MODEL_PROVIDER_FAMILY_SPECS.map((spec) => spec.id);
-}
 
 export async function runLoginCommand(
   ctx: RunContext,
@@ -18,10 +13,13 @@ export async function runLoginCommand(
   args: readonly string[] = [],
 ): Promise<number> {
   try {
-    const providerIds = loginProviderIds();
+    // The fork ships no provider catalog, so there is no in-tree allowlist of
+    // sign-in namespaces to check the argument against. The operator's backend
+    // owns that vocabulary and rejects an unknown namespace; the CLI only
+    // enforces the shape the OAuth client can round-trip.
     const providerId = args[0];
-    if (args.length > 1 || !providerId || !providerIds.includes(providerId)) {
-      throw new Error(`Usage: zcode login <${providerIds.join("|") || "provider"}> [--no-browser]`);
+    if (args.length > 1 || !isCliOAuthProviderId(providerId)) {
+      throw new Error("Usage: zcode login <provider> [--no-browser]");
     }
     const env = deps.env ?? process.env;
     const workingDirectory = (deps.cwd ?? process.cwd)();

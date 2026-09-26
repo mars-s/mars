@@ -351,10 +351,12 @@ function toAiSdkProviderConfig(
   providerId: string,
   config: RegistryProviderConfig,
 ): AiSdkProviderConfig {
+  // Narrow on the field that carries the static key rather than on an access
+  // type discriminant: a request-level auth source owns the credential for any
+  // other access shape, and no such shape ships here.
+  const staticApiKey = "apiKey" in config.access ? config.access.apiKey : undefined;
   const common = {
-    ...(config.access.type !== "zhipu-account" && config.access.apiKey
-      ? { apiKey: config.access.apiKey }
-      : {}),
+    ...(staticApiKey ? { apiKey: staticApiKey } : {}),
     baseURL: config.api.baseUrl,
     ...(config.api.headers ? { headers: { ...config.api.headers } } : {}),
     providerOptions: { apiFormat: config.api.type },

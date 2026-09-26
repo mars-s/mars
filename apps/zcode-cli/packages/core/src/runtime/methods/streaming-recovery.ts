@@ -14,6 +14,12 @@ import { recordModelHistoryRound, type RegularTurnLoopState } from "./turn-loop-
 const STREAM_RECOVERY_MAX_RETRIES = 10;
 const PREVIOUS_MESSAGE_ANCHOR_SUFFIX = "previous-message-anchor";
 const START_PLAN_BUSY_PROVIDER_CODES = new Set(["3008", "3009", "3010"]);
+// One-way historical allowlist. The account-provider catalog and its Start Plan
+// access type are gone, so no live provider id can match and the busy-retry
+// below is inert. Kept rather than deleted: it is a closed set of past ids that
+// gates a retry, not an origin the app can reach, and removing it would change
+// the shape of the recovery contract for a behaviour that can no longer fire.
+// One-way list: add on removal, never remove on addition.
 const START_PLAN_BUSY_RETRY_PROVIDER_IDS = new Set([
   "account:bigmodel-start-plan",
   "account:zai-start-plan",

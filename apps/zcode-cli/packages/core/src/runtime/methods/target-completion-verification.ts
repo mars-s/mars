@@ -33,6 +33,12 @@ export interface TargetCompletionVerificationResult {
 }
 
 const TARGET_VERIFIER_START_PLAN_BUSY_RETRY_DELAYS_MS = [1_000, 2_000] as const;
+// One-way historical allowlist, same reasoning as the sibling list in
+// streaming-recovery.ts: the account-provider catalog is gone, so no live
+// provider id matches and the verifier retry below is inert. Deleting it would
+// turn "retry a busy admission" into "propagate the first error" for a path
+// that can no longer be reached, which is a behaviour change with no upside.
+// One-way list: add on removal, never remove on addition.
 const START_PLAN_TARGET_VERIFIER_RETRY_PROVIDER_IDS = new Set([
   "account:bigmodel-start-plan",
   "account:zai-start-plan",

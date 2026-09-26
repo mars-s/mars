@@ -64,7 +64,7 @@ function importLegacyCliPersonalProviderConfig(
     if (!providerId) continue;
     // Standalone 也会读取旧 Desktop 写出的 builtin:* / source=custom。
     // 与 Desktop 导入一致：旧内置静态配置和账号凭据不迁。
-    // The two retired Z.ai / BigModel builtin ids used to keep only their pay-per-token
+    // The two retired coding-plan builtin ids used to keep only their pay-per-token
     // API key here. Those templates are gone from the catalog, so writing the rule would
     // only leave a dangling one: both ids are dropped like any other builtin:*/account:*.
     if (providerId.startsWith("builtin:") || providerId.startsWith("account:")) continue;

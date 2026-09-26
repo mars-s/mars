@@ -145,12 +145,27 @@ function normalizeBaseUrl(baseUrl: string): string {
 
 // The id travels in a JSON body and comes back as a response object key, so
 // reject anything that could not round-trip as either.
+const PROVIDER_ID_UNSAFE_PATTERN = /[\s"'\\]/u;
+
+/**
+ * Shape check for a provider namespace. Exported so CLI argument validation is
+ * exactly the set the client accepts, instead of a second copy that can drift.
+ * The backend still owns the namespace: an id that passes this only has to be
+ * well formed, not known to any catalog the fork ships.
+ */
+export function isCliOAuthProviderId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    !PROVIDER_ID_UNSAFE_PATTERN.test(value.trim())
+  );
+}
+
 function normalizeProviderId(providerId: string): string {
-  const trimmed = providerId.trim();
-  if (!trimmed || /[\s"'\\]/u.test(trimmed)) {
+  if (!isCliOAuthProviderId(providerId)) {
     throw new CliOAuthError(`Invalid OAuth provider id: ${providerId}`);
   }
-  return trimmed;
+  return providerId.trim();
 }
 
 async function requestJsonEnvelope(
