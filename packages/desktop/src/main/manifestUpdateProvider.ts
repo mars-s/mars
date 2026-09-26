@@ -247,9 +247,7 @@ export class ManifestUpdateProvider extends Provider<UpdateInfo> {
     // resolveFiles ran without a successful fetch, so there is no base to resolve
     // relative paths against. Fail with the reason rather than a null dereference.
     if (!this.resolveBaseUrl) {
-      throw new Error(
-        "Cannot resolve update files before a release manifest has been fetched.",
-      );
+      throw new Error("Cannot resolve update files before a release manifest has been fetched.");
     }
     return resolveManifestFiles(updateInfo, this.resolveBaseUrl, this.linuxExtensions);
   }

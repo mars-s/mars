@@ -13,6 +13,10 @@ packages/desktop/bundled-agents/
 packages/desktop/bundled-tools/
 packages/desktop/mock-cdn/
 *.tsbuildinfo
+# ZCode writes this at runtime: it is the workspace file-search ignore file, whose
+# top section is synced from .gitignore and whose remainder is app defaults. It is
+# a local artifact, not source.
+.zcodeignore
 # packages/desktop/src is TypeScript-only (all 1386 tracked files are .ts/.tsx).
 # Every desktop tsconfig sets outDir, so any .js/.d.ts showing up there is a stray
 # emit from a tsc invoked without -p; keep it out of git so generated JS never
