@@ -47,6 +47,16 @@ export interface ModelInvocationContext {
   }) => Promise<{
     headersApplied: boolean;
     requestAuth?: ModelRequestAuth;
+    /**
+     * The destination the host verified before it released the credential.
+     *
+     * The agent refuses to attach a host-issued credential unless this
+     * normalizes equal to the base URL frozen at bind time, because the two are
+     * read from different snapshots of the same config and can disagree. It is
+     * optional on the type only because a UI-supplied scoped source has no
+     * registry destination to attest to; the host protocol requires it.
+     */
+    approvedBaseUrl?: string;
   }>;
 }
 

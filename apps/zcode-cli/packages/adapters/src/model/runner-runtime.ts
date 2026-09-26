@@ -34,6 +34,7 @@ export interface AiSdkModelTextRequest extends ModelTextRequest {
   }) => Promise<{
     headersApplied: boolean;
     requestAuth?: ModelRequestAuth;
+    approvedBaseUrl?: string;
   }>;
   // adapter 测试和开发态常直接使用源文件；这里显式接住 core recovery 透传的 SSE idle timeout 递增序号。
   streamIdleTimeoutRetryNumber?: number;

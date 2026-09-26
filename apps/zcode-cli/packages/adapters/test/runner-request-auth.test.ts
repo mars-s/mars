@@ -11,10 +11,16 @@ import { composeRequestAuthRefresh } from "../src/model/runner-request-auth.js";
 
 const PARAMS = { attempt: 1, providerId: "account:chatgpt", modelId: "gpt-5.6-luna" };
 
+// The destination the bound model is frozen at, and therefore the destination of
+// every request this refresh feeds. A host that attests a different one is
+// refused; `chatgpt-credential-destination.test.ts` covers that end to end.
+const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
+
 test("a host refusal is final and is never retried against the scoped source", async () => {
   let sourceCalls = 0;
   const refresh = composeRequestAuthRefresh({
     hostRefresh: async () => ({ headersApplied: false }),
+    requestBaseUrl: CODEX_BASE_URL,
     source: {
       resolve: async () => {
         sourceCalls += 1;
@@ -33,7 +39,12 @@ test("a host credential is returned verbatim, headers and api key", async () => 
     headers: { "ChatGPT-Account-Id": "fake-account", originator: "zcode" },
   };
   const refresh = composeRequestAuthRefresh({
-    hostRefresh: async () => ({ headersApplied: true, requestAuth }),
+    hostRefresh: async () => ({
+      approvedBaseUrl: CODEX_BASE_URL,
+      headersApplied: true,
+      requestAuth,
+    }),
+    requestBaseUrl: CODEX_BASE_URL,
   });
   const result = await refresh(PARAMS);
   assert.equal(result.headersApplied, true);
@@ -45,8 +56,13 @@ test("the 401 reason reaches the host unchanged", async () => {
   const refresh = composeRequestAuthRefresh({
     hostRefresh: async (input) => {
       reasons.push(input.reason);
-      return { headersApplied: true, requestAuth: { apiKey: "rotated" } };
+      return {
+        approvedBaseUrl: CODEX_BASE_URL,
+        headersApplied: true,
+        requestAuth: { apiKey: "rotated" },
+      };
     },
+    requestBaseUrl: CODEX_BASE_URL,
   });
 
   await refresh({ ...PARAMS, attempt: 2, reason: "unauthorized" });
@@ -54,9 +70,34 @@ test("the 401 reason reaches the host unchanged", async () => {
   assert.deepEqual(reasons, ["unauthorized", undefined], "a plain refresh has no reason");
 });
 
+test("a host credential verified for another destination is refused", async () => {
+  // The host checked a live registry view; this model is frozen at a different
+  // one. Refusing is the only safe answer, and it has to be a refusal rather
+  // than a quiet fallback, because the fallback would still put the body on the
+  // wire at the wrong host.
+  const refresh = composeRequestAuthRefresh({
+    hostRefresh: async () => ({
+      approvedBaseUrl: "https://attacker.example/backend-api/codex",
+      headersApplied: true,
+      requestAuth: { apiKey: "host-token" },
+    }),
+    requestBaseUrl: CODEX_BASE_URL,
+  });
+  await assert.rejects(
+    () => refresh(PARAMS),
+    (error: unknown) => {
+      assert.ok(error instanceof ModelProtocolError);
+      assert.equal(error.code, ModelErrorCode.ModelRequestAuthMissing);
+      assert.equal(error.context?.detail, "approved-base-url-mismatch");
+      return true;
+    },
+  );
+});
+
 test("without a host the scoped source is resolved per attempt", async () => {
   const seen: unknown[] = [];
   const refresh = composeRequestAuthRefresh({
+    requestBaseUrl: CODEX_BASE_URL,
     source: {
       resolve: async (input) => {
         seen.push(input);
@@ -73,7 +114,7 @@ test("without a host the scoped source is resolved per attempt", async () => {
 });
 
 test("a declared dependency with no source at all fails closed", async () => {
-  const refresh = composeRequestAuthRefresh({});
+  const refresh = composeRequestAuthRefresh({ requestBaseUrl: CODEX_BASE_URL });
   await assert.rejects(
     () => refresh(PARAMS),
     (error: unknown) => {
@@ -85,7 +126,10 @@ test("a declared dependency with no source at all fails closed", async () => {
 });
 
 test("a source that produces no credential fails closed", async () => {
-  const refresh = composeRequestAuthRefresh({ source: { resolve: async () => undefined } });
+  const refresh = composeRequestAuthRefresh({
+    requestBaseUrl: CODEX_BASE_URL,
+    source: { resolve: async () => undefined },
+  });
   await assert.rejects(
     () => refresh(PARAMS),
     (error: unknown) => {
@@ -98,6 +142,7 @@ test("a source that produces no credential fails closed", async () => {
 
 test("a source that throws is surfaced rather than downgraded to anonymous", async () => {
   const refresh = composeRequestAuthRefresh({
+    requestBaseUrl: CODEX_BASE_URL,
     source: {
       resolve: async () => {
         throw new Error("grant store is locked by another process");

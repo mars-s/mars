@@ -18,6 +18,7 @@ export function createRefreshRuntimeHeadersBeforeModelAttempt(
     }) => Promise<{
       headersApplied: boolean;
       requestAuth?: ModelRequestAuth;
+      approvedBaseUrl?: string;
     }>)
   | undefined {
   const runtimeHeadersPort = runtime.providerRuntimeHeadersPort;

@@ -111,6 +111,7 @@ import {
   answerProviderRequestAuthRequest,
   type ChatGptRegistryIdentity as ProviderRequestAuthIdentity,
 } from "#src/zcode-agent/chatgptProviderRequestAuth.js";
+import { forgetSettledRequest } from "#src/zcode-agent/settledRequestLedger.js";
 import type { ProviderRequestAuthGrantStore } from "#src/oauth/providers/providerAdapter.js";
 import {
   mergeAutomationMutationToolDenylist,
@@ -2109,11 +2110,15 @@ export function createZCodeAgentService(
             workspaceKey: resolveWorkspaceKey(workspace),
             workspacePath: workspace.workspacePath,
           });
-          // 动态凭据的唯一合法流程，且判定全在 answerProviderRequestAuthRequest 内：
-          // 先解析**注册表身份**，命中才读 grant store。顺序不能反：先读 grant 再判
-          // 身份，等于把订阅密钥读进内存再决定不用它。任何一步拿不到（未注入、查不到、
-          // 模板/baseUrl/访问形态不匹配、没登录、轮换失败）都 fail closed，并且这个
-          // 拒绝在线路上与"没登录"不可区分。
+          // The only legal path for a dynamic credential, and every decision is
+          // inside answerProviderRequestAuthRequest: the registry identity is
+          // resolved AND verified before the grant store is touched at all. The
+          // order is not reversible, because reading the grant and only then
+          // deciding not to use it would pull a subscription secret into memory
+          // on behalf of any caller. Anything missing (not injected, not found,
+          // template/baseUrl/access shape mismatch, not signed in, rotation
+          // failed) fails closed, and that refusal is indistinguishable from "not
+          // signed in" on the wire.
           void answerProviderRequestAuthRequest({
             port: options?.providerRequestAuth,
             providerId: parsed.data.providerId,
@@ -2128,19 +2133,31 @@ export function createZCodeAgentService(
                 sessionId: parsed.data.sessionId,
               });
             },
-          }).then((response) => {
-            if (response.headersApplied) {
-              // 成功路径也只记 header 名，绝不记值（header 值就是订阅凭据本身）。
-              logger.info(request.trace?.traceId, "provider 请求凭据：已附上本次请求的鉴权材料", {
-                apiKeyPresent: Boolean(response.requestAuth.apiKey),
-                headerNames: Object.keys(response.requestAuth.headers ?? {}).sort(),
-                providerId: parsed.data.providerId,
-                reason: parsed.data.reason,
-                requestId: parsed.data.requestId,
-              });
-            }
-            return client.respond(request.id, response);
-          });
+          })
+            .then((response) => {
+              if (response.headersApplied) {
+                // 成功路径也只记 header 名，绝不记值（header 值就是订阅凭据本身）。
+                logger.info(request.trace?.traceId, "provider 请求凭据：已附上本次请求的鉴权材料", {
+                  apiKeyPresent: Boolean(response.requestAuth.apiKey),
+                  headerNames: Object.keys(response.requestAuth.headers ?? {}).sort(),
+                  providerId: parsed.data.providerId,
+                  reason: parsed.data.reason,
+                  requestId: parsed.data.requestId,
+                });
+              }
+              return client.respond(request.id, response);
+            })
+            .finally(() => {
+              // Once this request has been answered there is nothing left to
+              // cancel, so the pending entry goes away on BOTH outcomes. The map
+              // exists so an explicit cancel or a client disposal can find a
+              // credential resolution that is still in flight; leaving an answered
+              // request in it means one entry per physical model request for the
+              // life of a long lived desktop session, and a cancel notification
+              // that arrives after the answer logs a "cancelled" line for a
+              // request that was already answered.
+              forgetSettledRequest(pendingProviderRuntimeHeaders, pendingKey, pending);
+            });
           return;
         }
 

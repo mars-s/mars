@@ -296,7 +296,10 @@ export class AiSdkModelExecution {
         })
           ? createChatGptCodexResponsesFetch(
               createOpenAIResponsesJsonCompatFetch(optionFetch),
-              { modelId, providerId },
+              // The frozen base URL of the bound model, which is where both the
+              // first attempt and the 401 replay go. The wrapper compares it with
+              // the destination the host verified before attaching anything.
+              { modelId, providerId, requestBaseUrl: providerConfig.baseURL },
             )
           : createOpenAIResponsesJsonCompatFetch(optionFetch);
         const provider = createOpenAI({

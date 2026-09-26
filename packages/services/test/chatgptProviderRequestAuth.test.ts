@@ -12,6 +12,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { zcodeProviderRuntimeHeadersResponseSchema } from "@zcode/shared";
 import {
   answerProviderRequestAuthRequest,
   isRegistryVerifiedChatGptProvider,
@@ -459,6 +460,7 @@ function handlerPort(
   } = {},
 ) {
   let storeReads = 0;
+  let storeResolutions = 0;
   const wrapped: ProviderRequestAuthGrantStore = {
     read: async () => {
       storeReads += 1;
@@ -468,6 +470,7 @@ function handlerPort(
   };
   const port = {
     resolveGrantStore: () => {
+      storeResolutions += 1;
       if (overrides.storeError) throw overrides.storeError;
       return overrides.store === undefined ? wrapped : overrides.store;
     },
@@ -476,7 +479,11 @@ function handlerPort(
       return overrides.identity === undefined ? IDENTITY : overrides.identity;
     },
   };
-  return { port, storeReads: () => storeReads };
+  // `storeResolutions` is the stronger assertion than `storeReads`: reading is
+  // what pulls a secret into memory, but RESOLVING the store is the call the
+  // ordering forbids, because the moment that resolver starts caring about its
+  // `identity` argument it becomes a secret read in its own right.
+  return { port, storeReads: () => storeReads, storeResolutions: () => storeResolutions };
 }
 
 const REQUEST = {
@@ -487,13 +494,109 @@ const REQUEST = {
 };
 
 test("the handler attaches the credential for the verified identity", async () => {
-  const { port } = handlerPort();
+  const { port, storeResolutions } = handlerPort();
   const response = await answerProviderRequestAuthRequest({ ...REQUEST, port });
   assert.equal(response.headersApplied, true);
   if (!response.headersApplied) return;
   assert.equal(response.requestAuth.apiKey, VALID_TOKEN);
   assert.equal(response.requestAuth.headers[CHATGPT_ACCOUNT_ID_HEADER], "acct-fake-0001");
   assert.equal(response.requestAuth.headers.authorization, undefined, "the SDK owns the bearer");
+  // The destination the host verified goes back with the credential, in the one
+  // form the agent compares in, so it can prove its own destination is the same
+  // one before it attaches anything.
+  assert.equal(response.approvedBaseUrl, "https://chatgpt.com/backend-api/codex");
+  assert.equal(storeResolutions(), 1, "a verified identity does reach the store");
+});
+
+test("a trailing slash in the registry base URL is normalized out of the attestation", async () => {
+  const { port } = handlerPort({ identity: { ...IDENTITY, baseUrl: `${CODEX_BASE_URL}/` } });
+  const response = await answerProviderRequestAuthRequest({ ...REQUEST, port });
+  assert.equal(response.headersApplied, true);
+  if (!response.headersApplied) return;
+  assert.equal(response.approvedBaseUrl, "https://chatgpt.com/backend-api/codex");
+});
+
+test("the verified destination is what the protocol schema actually accepts", async () => {
+  // The attestation is load-bearing, so it has to survive the wire schema rather
+  // than be stripped by it. A `headersApplied: true` answer without it is
+  // rejected, which is what makes "the host forgot to attest" a hard failure
+  // instead of a silent pass.
+  const { port } = handlerPort();
+  const response = await answerProviderRequestAuthRequest({ ...REQUEST, port });
+  assert.equal(zcodeProviderRuntimeHeadersResponseSchema.safeParse(response).success, true);
+  const { approvedBaseUrl: _omitted, ...withoutAttestation } = response as {
+    approvedBaseUrl: string;
+  };
+  assert.equal(
+    zcodeProviderRuntimeHeadersResponseSchema.safeParse(withoutAttestation).success,
+    false,
+    "an unattested success must not validate",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The grant store is never resolved, let alone read, before the identity has been
+// VERIFIED. This is not an incidental property of the current call graph: the
+// order is the security property, and it has to hold for a `resolveGrantStore`
+// that starts depending on its `identity` argument tomorrow.
+// ---------------------------------------------------------------------------
+
+test("the grant store is never resolved for a non-ChatGPT identity", async () => {
+  // Each of these is a registry hit that does not verify. Resolving the store for
+  // any of them would be a secret read on behalf of a provider that is not the
+  // ChatGPT subscription one.
+  const cases: [string, ChatGptRegistryIdentity][] = [
+    ["wrong template", { ...IDENTITY, templateId: "openai" }],
+    ["no template", { ...IDENTITY, templateId: null }],
+    ["static key access", { ...IDENTITY, accessType: "api-key" }],
+    ["wrong api type", { ...IDENTITY, apiType: "anthropic" }],
+    ["attacker host", { ...IDENTITY, baseUrl: "https://attacker.example/v1" }],
+    ["nothing at all", { accessType: null, apiType: null, baseUrl: null, templateId: null }],
+  ];
+  for (const [name, identity] of cases) {
+    const { port, storeReads, storeResolutions } = handlerPort({ identity });
+    const reasons: string[] = [];
+    const response = await answerProviderRequestAuthRequest({
+      ...REQUEST,
+      port,
+      onRefusal: (detail) => reasons.push(detail),
+    });
+    assert.deepEqual(response, REFUSAL, name);
+    assert.deepEqual(reasons, ["registry-identity-rejected"], name);
+    assert.equal(storeResolutions(), 0, `${name}: the store must not even be resolved`);
+    assert.equal(storeReads(), 0, name);
+  }
+});
+
+test("a missing identity never reaches the grant store", async () => {
+  const { port, storeReads, storeResolutions } = handlerPort({ identity: null });
+  const response = await answerProviderRequestAuthRequest({ ...REQUEST, port });
+  assert.deepEqual(response, REFUSAL);
+  assert.equal(storeResolutions(), 0);
+  assert.equal(storeReads(), 0);
+});
+
+test("a throwing identity resolver never reaches the grant store", async () => {
+  // A lookup failure is untrusted input, so it is a refusal rather than a pass,
+  // and a refusal that happens before the store is resolved.
+  const { port, storeReads, storeResolutions } = handlerPort({
+    identityError: new Error("registry offline"),
+  });
+  const response = await answerProviderRequestAuthRequest({ ...REQUEST, port });
+  assert.deepEqual(response, REFUSAL);
+  assert.equal(storeResolutions(), 0);
+  assert.equal(storeReads(), 0);
+});
+
+test("an absent host never reaches a grant store", async () => {
+  // The port is built and then deliberately not passed, so the only way its
+  // store could be consulted is if some fallback reached past the missing port
+  // and resolved one anyway. Nothing does.
+  const { storeReads, storeResolutions } = handlerPort();
+  const response = await answerProviderRequestAuthRequest({ ...REQUEST, port: undefined });
+  assert.deepEqual(response, REFUSAL);
+  assert.equal(storeResolutions(), 0);
+  assert.equal(storeReads(), 0);
 });
 
 test("no host port is a refusal, not an anonymous request", async () => {
@@ -516,11 +619,12 @@ test("a throwing identity resolver is treated as untrusted", async () => {
 });
 
 test("a non-ChatGPT identity is refused before the store is consulted", async () => {
-  const { port, storeReads } = handlerPort({
+  const { port, storeReads, storeResolutions } = handlerPort({
     identity: { ...IDENTITY, templateId: "openai" },
   });
   const response = await answerProviderRequestAuthRequest({ ...REQUEST, port });
   assert.deepEqual(response, REFUSAL);
+  assert.equal(storeResolutions(), 0, "an unverified identity must not reach the store at all");
   assert.equal(storeReads(), 0);
 });
 
