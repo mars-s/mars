@@ -41,8 +41,14 @@ test("an unconfigured control plane is a valid state, not an error", () => {
 });
 
 test("a non-empty origin is still validated and normalised", () => {
-  assert.equal(normalizeZCodeBuiltinEndpointOrigin("https://example.com/v1"), "https://example.com");
-  assert.equal(normalizeZCodeBuiltinEndpointOrigin("http://127.0.0.1:8317/v1"), "http://127.0.0.1:8317");
+  assert.equal(
+    normalizeZCodeBuiltinEndpointOrigin("https://example.com/v1"),
+    "https://example.com",
+  );
+  assert.equal(
+    normalizeZCodeBuiltinEndpointOrigin("http://127.0.0.1:8317/v1"),
+    "http://127.0.0.1:8317",
+  );
   // These are genuine mistakes and must keep failing loudly.
   assert.throws(() => normalizeZCodeBuiltinEndpointOrigin("ftp://example.com"));
   assert.throws(() => normalizeZCodeBuiltinEndpointOrigin("not-a-url"));
@@ -67,7 +73,10 @@ test("the no-control-plane key cannot collide with a vendor cache directory", ()
 
 test("whitespace-only and unconfigured origins agree, and distinct origins stay distinct", () => {
   assert.equal(createZCodeBuiltinEndpointKey("   "), createZCodeBuiltinEndpointKey(""));
-  assert.notEqual(createZCodeBuiltinEndpointKey("https://a.example"), createZCodeBuiltinEndpointKey("https://b.example"));
+  assert.notEqual(
+    createZCodeBuiltinEndpointKey("https://a.example"),
+    createZCodeBuiltinEndpointKey("https://b.example"),
+  );
   // Same origin through different spellings must land on the same cache.
   assert.equal(
     createZCodeBuiltinEndpointKey("https://a.example/v1"),
