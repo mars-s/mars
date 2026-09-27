@@ -16,6 +16,7 @@ import {
   ICuaPermissionService,
   IConversationShareService,
   IBotsService,
+  IPhoneRemoteService,
   IFileWatcherService,
   IOAuthService,
   IModelSelectionService,
@@ -88,6 +89,8 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly settingsSyncService: ISettingsSyncService;
   readonly feedbackService: IFeedbackService;
   readonly promptAttachmentTransferService: IPromptAttachmentTransferService;
+  /** 桌面 host 才注册；其它 host 上调用会失败，UI 需按"不可用"处理。 */
+  readonly phoneRemoteService: IPhoneRemoteService;
 
   constructor(channelClient: IChannelClient) {
     this.fileService = ProxyChannel.toService<IFileService>(
@@ -208,6 +211,11 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.promptAttachmentTransferService = ProxyChannel.toService<IPromptAttachmentTransferService>(
       channelClient.getChannel(IPromptAttachmentTransferService.channelName),
+    );
+    // 手机直连只由桌面 host 注册。远端／bots host 没有可配对地址，通道不存在时
+    // 调用会在 RPC 层报 Unknown channel，所以这里只建代理、不假设它一定可用。
+    this.phoneRemoteService = ProxyChannel.toService<IPhoneRemoteService>(
+      channelClient.getChannel(IPhoneRemoteService.channelName),
     );
   }
 }

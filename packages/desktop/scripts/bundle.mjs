@@ -26,6 +26,26 @@ import { resolveIntranetDepsBaseUrl } from "../../../scripts/intranetDefaults.mj
 
 const desktopRoot = resolve(import.meta.dirname, "..");
 const workspaceRoot = resolve(desktopRoot, "../..");
+// Packaging half of the phone remote control contract, kept identical to the
+// extraResources entry in electron-builder.config.js. Development points staticRoot
+// straight at packages/web/dist, so the packaged app must stage the same bytes under
+// resources/web. electron-builder only warns when an extraResources `from` is missing
+// and then copies nothing, which would ship an installer with no web client at all and
+// a phone remote control that 404s on every asset. Assert before packaging instead.
+const webClientDistDir = resolve(workspaceRoot, "packages/web/dist");
+const webClientEntryFile = "index.html";
+
+function assertWebClientBuildOutput() {
+  const entryFilePath = join(webClientDistDir, webClientEntryFile);
+  if (existsSync(entryFilePath)) {
+    return;
+  }
+  throw new Error(
+    `Web client build output is missing: ${entryFilePath}. ` +
+      "packages/web/dist is gitignored, so a fresh checkout never has it. " +
+      "Build it before packaging: pnpm --filter @zcode/web build",
+  );
+}
 const requireFromBundle = createRequire(import.meta.url);
 const asarCliPath = resolve(
   dirname(requireFromBundle.resolve("@electron/asar/package.json")),
@@ -729,6 +749,8 @@ async function main() {
   if (!skipBuild) {
     run(pnpmCommand, ["build"], buildEnv);
   }
+
+  runTimedSync("bundle:assertWebClientBuildOutput", () => assertWebClientBuildOutput());
 
   await runTimedAsync("bundle:electron-builder", () =>
     runElectronBuilderWithRetry(buildArgs, buildEnv),

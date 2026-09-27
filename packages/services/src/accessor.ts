@@ -13,6 +13,7 @@ import type { IZCodeAgentService } from "./zcode-agent/zcodeAgent.js";
 import type { IZCodeSessionService } from "./zcode-session/zcodeSession.js";
 import type { ICuaPermissionService } from "./cua-permission-broker/cuaPermissionService.js";
 import type { IBotsService } from "./bots/bots.js";
+import type { IPhoneRemoteService } from "./phoneRemote/phoneRemote.js";
 import type { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
 import type { IOAuthService } from "./oauth/oauth.js";
 import type {
@@ -60,6 +61,11 @@ export interface IServiceAccessor {
   readonly cuaPermissionService?: ICuaPermissionService;
   readonly conversationShareService: IConversationShareService;
   readonly botsService: IBotsService;
+  /**
+   * 手机浏览器直连。仅桌面 host 注册：它要在本机开监听端口，远端／bots host
+   * 没有可配对的地址，所以是可选的，UI 拿不到时按"不可用"渲染而不是报错。
+   */
+  readonly phoneRemoteService?: IPhoneRemoteService;
   readonly fileWatcherService: IFileWatcherService;
   readonly oauthService: IOAuthService;
   /** 当前 Environment 的 Provider 配置与设置视图。 */

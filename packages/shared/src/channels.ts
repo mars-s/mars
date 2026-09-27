@@ -133,6 +133,11 @@ export const ServiceChannels = {
   SettingsSync: "settings-sync",
   /** Bots 远程聊天控制服务 */
   Bots: "bots",
+  /**
+   * 手机浏览器直连服务：桌面端在本机开一个带配对 token 的 HTTP 监听，手机扫码
+   * 后直接连到这里，不经过任何厂商中继。
+   */
+  PhoneRemote: "phone-remote",
   /** 用户反馈工单服务 */
   Feedback: "feedback",
   /** Composer 附件在 host-local 与 remote runtime 之间的预传服务 */

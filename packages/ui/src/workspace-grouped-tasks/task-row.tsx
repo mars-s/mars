@@ -37,6 +37,7 @@ import {
 } from "@/workspace-grouped-tasks/types.js";
 import { TaskWorkflowRunLines } from "@/components/workflow-run-line/TaskWorkflowRunLines.js";
 import { useTaskInteractionAutoResolutionSnooze } from "@/hooks/useTaskInteractionAutoResolutionSnooze.js";
+import { useIsPhoneDrivenTask } from "@/hooks/usePhoneDrivenTaskIds.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceReadOnly } from "@/store/tabStore.js";
 import { TaskTitleOverflowText } from "@/components/TaskTitleOverflowText.js";
@@ -134,7 +135,10 @@ function GroupedTaskRowComponent({
   const isActive =
     buildTaskWorkspaceKey(activeWorkspacePath, activeWorkspaceIdentity) === workspaceKey &&
     activeTaskId === task.taskId;
-  const isMobileActive = false;
+  // A row is mounted once per task, so it reads the boolean selector rather than
+  // the whole id set: the polling itself is shared window-wide by the store
+  // behind the hook, and only a row whose own task changed re-renders here.
+  const isMobileActive = useIsPhoneDrivenTask(task.taskId);
   const statusDotClassName =
     leadingIndicator === "error"
       ? "bg-destructive"

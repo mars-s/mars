@@ -93,6 +93,32 @@ const runtimeModuleLookupRoots = [
   resolve(workspaceRoot, "node_modules", ".pnpm", "node_modules"),
 ];
 const desktopDistDir = process.env.ZCODE_DESKTOP_DIST_DIR || "dist";
+// Phone remote control: the desktop app serves the built web client over a local
+// HTTP server so a phone browser can drive it. This file owns the packaging half of
+// that contract, so both halves of the path live here as named constants: the build
+// output we read from, and the directory it lands in inside the bundle. The runtime
+// resolver must join `packagedWebResourcesDirName` onto process.resourcesPath, and
+// nothing else.
+const packagedWebResourcesDirName = "web";
+const webClientDistDir = resolve(workspaceRoot, "packages/web/dist");
+const webClientEntryFile = "index.html";
+
+// electron-builder's fileMatcher only logs a warning when an extraResources `from`
+// cannot be stat'ed, and then copies nothing. A checkout that never built the web
+// client would therefore produce an installer that ships no web client at all, and the
+// phone remote control 404s on every asset at runtime. Fail the packaging run here
+// instead, naming the command that regenerates the missing input.
+export function assertWebClientBuildOutput(distDir = webClientDistDir) {
+  const entryFilePath = join(distDir, webClientEntryFile);
+  if (existsSync(entryFilePath)) {
+    return;
+  }
+  throw new Error(
+    `Web client build output is missing: ${entryFilePath}. ` +
+      "packages/web/dist is gitignored, so a fresh checkout never has it. " +
+      "Build it before packaging: pnpm --filter @zcode/web build",
+  );
+}
 const DEFAULT_ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/";
 // `pnpm exec asar` 依赖 `.bin/asar`，但 @electron/asar 仅是 electron-builder 传递依赖时，
 // Linux CI（pnpm hoisted）往往解析不到该二进制，`asar list` 未运行即 exit 1。
@@ -451,6 +477,23 @@ function assertPackagedNodePtyPrebuild(context) {
     throw new Error(`node-pty 预编译产物缺失: ${targetBinaryPath}`);
 }
 
+// Proves the extraResources entry actually landed under the path the runtime
+// resolver reads. Guards against a silently dropped copy step, which is the exact
+// failure mode the phone remote control cannot recover from at runtime.
+function assertPackagedWebClient(context) {
+  const packagedEntryFilePath = resolve(
+    resolvePackagedResourcesDir(context),
+    packagedWebResourcesDirName,
+    webClientEntryFile,
+  );
+  if (!existsSync(packagedEntryFilePath)) {
+    throw new Error(
+      `Packaged build is missing the web client entry file: ${packagedEntryFilePath}. ` +
+        `Runtime resolves the staged web root as path.join(process.resourcesPath, "${packagedWebResourcesDirName}").`,
+    );
+  }
+}
+
 /** @type {import("electron-builder").Configuration} */
 export default {
   appId: desktopProductIdentity.appId,
@@ -503,6 +546,9 @@ export default {
     `node_modules/node-pty/prebuilds/${targetPlatform.key}/**`,
   ],
   beforePack: async (context) => {
+    // Run before any platform specific work so a missing web build fails with the
+    // actionable message rather than 15 minutes later inside a target specific hook.
+    runTimedSync("beforePack:assertWebClientBuildOutput", () => assertWebClientBuildOutput());
     runTimedSync("beforePack:restoreTargetNodePtyPrebuild", () =>
       restoreTargetNodePtyPrebuild({ desktopPackageRoot, targetPlatform }),
     );
@@ -562,6 +608,7 @@ export default {
     runTimedSync("afterPack:assertPackagedNodePtyPrebuild", () =>
       assertPackagedNodePtyPrebuild(context),
     );
+    runTimedSync("afterPack:assertPackagedWebClient", () => assertPackagedWebClient(context));
     if (actualWindowsTarget) {
       await runTimedAsync("afterPack:writeWindowsInstallManifest", () =>
         writeWindowsInstallManifest(context),
@@ -622,6 +669,16 @@ export default {
           },
         ]
       : []),
+    {
+      // Phone remote control web client. Development points staticRoot straight at
+      // packages/web/dist in the repo, so the packaged app needs the same bytes
+      // inside the bundle. `to` is the runtime contract and must stay exactly "web":
+      // the main process joins this directory name onto process.resourcesPath.
+      // extraResources (not `files`) is required so the content stays a real
+      // directory outside app.asar, which is what the HTTP server has to serve from.
+      from: webClientDistDir,
+      to: packagedWebResourcesDirName,
+    },
     {
       // agent 运行时资产，打包到 resources/glm。
       // 桌面端内置的是 agent 的 JS bundle（glm/zcode.cjs，由 prepare:agent-bundle 生成），

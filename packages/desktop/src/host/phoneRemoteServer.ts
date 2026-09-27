@@ -1,5 +1,5 @@
 import { createHttpServer } from "@zcode/server";
-import type { ServiceCollection } from "@zcode/services";
+import type { PhoneRemotePairing, ServiceCollection } from "@zcode/services";
 import type { AddressInfo } from "node:net";
 import {
   buildPhoneRemoteUrl,
@@ -8,11 +8,7 @@ import {
   type PhoneRemoteCandidate,
 } from "./phoneRemoteNetwork.js";
 
-export interface PhoneRemotePairing {
-  readonly address: string;
-  readonly reach: "tailnet" | "lan" | "routable";
-  readonly url: string;
-}
+export type { PhoneRemotePairing };
 
 export interface PhoneRemoteServerHandle {
   /** The best pairing URL, for callers that only render one QR. */
@@ -37,6 +33,11 @@ export interface StartPhoneRemoteServerOptions {
   readonly resolveCandidates?: () => PhoneRemoteCandidate[];
   /** Test seam. Defaults to port 0 so a second window can never collide. */
   readonly port?: number;
+  /**
+   * Channel replacements applied only to paired phone connections, used to see
+   * which task the phone is driving without touching the shared collection.
+   */
+  readonly serviceOverrides?: ReadonlyMap<string, unknown>;
 }
 
 /**
@@ -66,6 +67,7 @@ export async function startPhoneRemoteServer(
     staticRoot: options.staticRoot,
     spaFallback: true,
     name: "phone-remote",
+    serviceOverrides: options.serviceOverrides,
   });
 
   const port = await resolveListeningPort(server);

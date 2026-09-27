@@ -9,6 +9,68 @@ Format: `- **<what changed>** — <agent> — <issue or reason>`
 
 ## Unreleased
 
+- **The "Phone is using this task" badge is live again (ui agent).** The vendor build
+  stripped phone remote control and left three hardcoded stubs behind, so
+  `TaskList.tsx`, `workspace-grouped-tasks/task-row.tsx` and
+  `WorkspaceArchivedTasksFlatSection.tsx` all passed `isMobileActive = false` and the
+  badge could never light up, even though `phoneRemoteHost` already recorded the task ids
+  a phone drives and `TaskListItem` already rendered them. New hook
+  `packages/ui/src/hooks/usePhoneDrivenTaskIds.ts` reads `phoneRemoteService.listActiveTaskIds()`
+  and exposes both the full `Set<string>` and a per-task boolean selector. Polling lives
+  in one refcounted store per window (3s interval, one RPC regardless of row count) so a
+  per-row consumer cannot turn into a timer and a call per row. Every degraded path
+  reads as "the phone is driving nothing": no service on the host, no ServiceProvider,
+  a rejected or synchronously throwing RPC, and a response that lands after the last
+  subscriber unmounted. Covered by `packages/ui/test/phoneDrivenTaskStore.test.ts`
+  (run it from `packages/ui` with `pnpm exec tsx --test test/phoneDrivenTaskStore.test.ts`,
+  the `@/` alias only resolves from that directory).
+
+- **The build no longer reads the vendor app's provider catalog.** The vendor build at
+  `/Applications/ZCode.app` exports `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`,
+  `ZCODE_BASE_URL` and the rest of its block into any shell it launches. `loadEndpointEnv`
+  merged `{...fileValues, ...env}`, so that ambient block silently beat `.env` and the
+  build read the vendor catalog instead of
+  `config/provider/zcode-builtin.json`, then died at `Invalid Built-in Provider config
+  (test)` with no hint about the cause. `scripts/load-endpoint-env.mjs` now classifies
+  leaked values by two signals, the vendor host or runtime cache path, and the
+  `__CFBundleIdentifier` launch marker that macOS sets for any app-bundle launch and that
+  nothing in this repo touches, drops them before the merge, and prints a
+  `[vendor-env] WARNING` naming the variable, the value and the scrub command. New
+  precedence: non-leaked ambient beats `.env.local` beats `.env` beats the default, so a
+  `.env` value now survives a contaminated shell while a deliberate `VAR=1 pnpm build`
+  still wins. `ZCODE_ENV` is warned about but never dropped, because
+  `scripts/dev-desktop-env.mjs` sets it in tree.
+  `scripts/builtin-provider-config.mjs` additionally hard-errors when the config path
+  resolves outside the repository root (escape hatch
+  `ZCODE_ALLOW_EXTERNAL_BUILTIN_PROVIDER_CONFIG=1`) and when the catalog carries
+  `zhipu` / `bigmodel` / `z.ai` / `off-peak` provider rules, which is the one failure mode
+  here that would not have announced itself. The scan is scoped to
+  `config.providerConfigRules` on purpose: the repository's own `modelConfigRules` already
+  carries `providerSiteRules` base URL patterns for `bigmodel.cn` and `zcode.z.ai`, and
+  those only recognise a site a user typed. Tests in
+  `scripts/vendor-env-guard.test.mjs`; the copy-pasteable scrub lives in
+  `.agents/vendor-env-scrub.md`. (agent: vendor-env) the build was reading
+  `/Applications/ZCode.app`'s provider catalog through the ambient environment.
+  `scripts/load-endpoint-env.mjs`, `scripts/builtin-provider-config.mjs`,
+  `scripts/vendor-env-guard.test.mjs`, `.agents/vendor-env-scrub.md`.
+
+- **The packaged app now ships `packages/web/dist` as `resources/web`.** Phone
+  remote control serves the web client over a local HTTP server, and in a
+  packaged build the static root did not exist inside the bundle, so the phone
+  got a 404 for every asset. Dev worked only because the path pointed straight
+  at `packages/web/dist` in the repo. `electron-builder.config.js` gained an
+  `extraResources` entry (`to: "web"`, the exact directory name the runtime
+  joins onto `process.resourcesPath`), a `beforePack` preflight and an
+  `afterPack` assertion, plus the same preflight in `scripts/bundle.mjs`
+  immediately before it spawns electron-builder. Both preflights throw with the
+  path and the `pnpm --filter @zcode/web build` command; this matters because
+  electron-builder only logs a warning when an `extraResources` `from` is
+  missing and then copies nothing, so without the assertion a fresh checkout
+  ships a silently broken installer. `packages/web/dist` is gitignored via
+  `.gitignore:2` (`dist/`), so CI and any packaging job must build the web
+  package first; no build ordering was changed here. Test:
+  `packages/desktop/test/phoneRemotePackagedWebAssets.test.ts`. packaging/phone-remote
+
 - **Removed every `cdn-zcode.z.ai` origin from shipped source.** Remote release
   assets, the official marketplace catalog, official plugin store icons and the
   suggested-prompt icons no longer have a built-in vendor host; each is now

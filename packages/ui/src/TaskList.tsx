@@ -15,6 +15,7 @@ import { TaskListLoadingHint } from "@/TaskListLoadingHint.js";
 import { TaskRenameDialog } from "@/TaskRenameDialog.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { compareZCodeTaskListItems } from "@/lib/taskListOrdering.js";
+import { usePhoneDrivenTaskIds } from "@/hooks/usePhoneDrivenTaskIds.js";
 import { logger } from "@/logger.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 
@@ -70,6 +71,9 @@ export const TaskList = memo(function TaskList({
   readOnlyReason?: string;
 }) {
   const { intl } = useZCodeIntl();
+  // One poll per window backs the whole set, so a list can read it directly
+  // instead of every row subscribing on its own.
+  const phoneDrivenTaskIds = usePhoneDrivenTaskIds();
   const pinnedTaskIdSet = useMemo(
     () => new Set(pinnedTasks.map((task) => task.taskId)),
     [pinnedTasks],
@@ -362,7 +366,7 @@ export const TaskList = memo(function TaskList({
         task={task}
         isPinned={isPinned}
         isActive={isWorkspaceActive && task.taskId === activeTaskId}
-        isMobileActive={false}
+        isMobileActive={phoneDrivenTaskIds.has(task.taskId)}
         onSelectTask={handleSelectTaskItem}
         onArchiveTaskInline={handleArchiveTaskFromInline}
         onCancelArchiveConfirm={handleCancelArchiveConfirm}

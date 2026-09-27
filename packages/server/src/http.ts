@@ -87,6 +87,7 @@ function setupChannelServer(
   ws: WebSocket,
   services: ServiceCollection,
   clientMode: "desktop-continuous" | "web-remote-replayable",
+  callerOverrides?: ReadonlyMap<string, unknown>,
 ) {
   const socket = wrapWebSocket(ws);
   const protocol = new SocketProtocol(socket);
@@ -101,7 +102,10 @@ function setupChannelServer(
         role: clientMode === "desktop-continuous" ? "trusted-host-relay" : "terminal-client",
       })
     : undefined;
-  const overrides = new Map<string, unknown>();
+  // 调用方的 override 先落地，下面的安全相关 override 再覆盖它：这个 server 上
+  // 每个持 token 的连接都是配对过的手机，但 agent scope 和 provisioning 白名单
+  // 仍然由 server 自己说了算。
+  const overrides = new Map<string, unknown>(callerOverrides);
   if (connectionScope) {
     overrides.set(IZCodeAgentService.channelName, connectionScope.service);
   }
@@ -140,6 +144,11 @@ interface HttpServerOptions {
   spaFallback?: boolean;
   staticRoot?: string;
   workspaces?: ServerRemoteWorkspaceInfo[];
+  /**
+   * 仅作用于普通 `/ws`（也就是配对手机）通道的频道替换。用来在这个 server 上
+   * 观察手机在驱动哪个任务，而不去改共享的 ServiceCollection。
+   */
+  serviceOverrides?: ReadonlyMap<string, unknown>;
 }
 
 function readTrimmedEnv(name: string): string | undefined {
@@ -326,7 +335,7 @@ export function createHttpServer(
     "/ws",
     upgradeWebSocket(() => ({
       onOpen(_event, ws) {
-        setupChannelServer(ws.raw as WebSocket, services, "web-remote-replayable");
+        setupChannelServer(ws.raw as WebSocket, services, "web-remote-replayable", options.serviceOverrides);
       },
     })),
   );

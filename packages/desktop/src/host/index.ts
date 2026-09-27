@@ -28,6 +28,7 @@ import { registerHostServiceResourceTelemetry } from "./hostServiceResourceTelem
 import { resolveResourceTelemetryEnvironmentKey } from "./hostResourceTelemetryEnvironment.js";
 import { reportHostSessionCreate } from "./hostSessionCreateTelemetry.js";
 import { createBrowserControlMainBridge } from "./browserControlMainBridge.js";
+import { registerPhoneRemoteService } from "./phoneRemoteHost.js";
 import { materializeBrowserRecordingArtifact } from "./browserRecordingArtifactMaterializer.js";
 import {
   ServiceCollection,
@@ -43,6 +44,7 @@ import {
   IZCodeAgentService,
   IZCodeTaskService,
   IZCodeSessionService,
+  IPhoneRemoteService,
   ICuaPipSessionService,
   createZCodeAgentConnectionScope,
   type ZCodeAgentV4ClientMode,
@@ -1587,6 +1589,11 @@ let databaseStartup: ReturnType<typeof createHostDatabaseStartup> | undefined;
 const pendingStartupAttachments = new Map<string, () => void>();
 let activeServices: ServiceCollection | null = null;
 let activeHostApiNetworkTransport: HostApiNetworkTransport | null = null;
+/**
+ * 本窗口的手机直连服务。懒启动，所以持有它不代表有端口在监听。
+ * 每个 host 进程一个，因此每个窗口的二维码携带的是各自真正能通的端口。
+ */
+let phoneRemoteService: IPhoneRemoteService | null = null;
 /** 本地 host services 的资源遥测订阅；远端连接的订阅由各自的 connection handle 持有。 */
 let activeLocalResourceTelemetry: IDisposable | null = null;
 // 资源管理器采样只在 main 请求时执行一次，Host 不维护任何周期定时器。
@@ -2225,6 +2232,14 @@ function disposeHostResourcesBestEffort(reason: string): void {
   disposeOffPeakRuntime();
   offPeakTaskRepo.close();
   void windowRemoteConnectionRegistry.dispose();
+
+  if (phoneRemoteService) {
+    const running = phoneRemoteService;
+    phoneRemoteService = null;
+    void running.stop().catch((error: unknown) => {
+      logger.warn("failed to stop phone remote control:", error);
+    });
+  }
 
   if (activeServices) {
     try {
@@ -2891,6 +2906,11 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
           services.register(IZCodeTaskService, reportingZCodeTaskService);
         }
         wireLocalResourceTelemetry(services);
+        // 手机浏览器直连按需启动：注册本身不开端口，只有用户打开远控面板才会监听。
+        phoneRemoteService = registerPhoneRemoteService({
+          services,
+          log: (message) => logger.info(`[phone-remote] ${message}`),
+        });
         hasDisposedHostResources = false;
         disposeHostResourcesInFlight = null;
         const agentWarmupTargets =

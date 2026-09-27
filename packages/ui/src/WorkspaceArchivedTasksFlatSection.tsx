@@ -5,6 +5,7 @@ import { cn } from "@/components/lib/utils.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
+import { usePhoneDrivenTaskIds } from "@/hooks/usePhoneDrivenTaskIds.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
@@ -43,6 +44,9 @@ export function WorkspaceArchivedTasksFlatSection({
   ) => void;
 }) {
   const { intl } = useZCodeIntl();
+  // The archived view is one component for the whole list, so the phone lookup
+  // is read once here and each row only tests its own id.
+  const phoneDrivenTaskIds = usePhoneDrivenTaskIds();
   const confirmDialog = useConfirmDialog();
   const baseServices = useBaseWorkspaceServices();
   const sessionsById = useRemoteWorkspaceSessionStore((state) => state.sessionsById);
@@ -141,7 +145,7 @@ export function WorkspaceArchivedTasksFlatSection({
           const deleteLabel = intl.formatMessage({ id: "taskList.delete" });
           // archived 平铺列表同样是跨 workspace 视图，选中态要按 workspaceKey 隔离。
           const isActive = workspaceKey === activeWorkspaceKey && task.taskId === activeTaskId;
-          const isMobileActive = false;
+          const isMobileActive = phoneDrivenTaskIds.has(task.taskId);
           const taskKey = `${workspaceKey}:${task.taskId}`;
           const isDeleting = deletingTaskKeys.has(taskKey);
 

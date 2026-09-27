@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { networkInterfaces } from "node:os";
+import type { PhoneRemoteReach } from "@zcode/services";
 
 export interface PhoneRemoteCandidate {
   readonly address: string;
   /** Where this address is reachable from. Drives the label on the QR. */
-  readonly reach: "tailnet" | "lan" | "routable";
+  readonly reach: PhoneRemoteReach;
 }
 
 /**

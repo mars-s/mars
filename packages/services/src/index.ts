@@ -199,6 +199,14 @@ export type {
   BotTestResult,
 } from "./bots/bots.js";
 
+// Phone remote service — IPhoneRemoteService is both a type (interface) and value (descriptor).
+export { IPhoneRemoteService } from "./phoneRemote/phoneRemote.js";
+export type {
+  PhoneRemotePairing,
+  PhoneRemoteReach,
+  PhoneRemoteState,
+} from "./phoneRemote/phoneRemote.js";
+
 // Hooks service — IHooksService is both a type (interface) and value (descriptor).
 export { IHooksService } from "./hooks/hooks.js";
 
