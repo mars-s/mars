@@ -66,7 +66,7 @@ The hard one. Depends on [#7](https://github.com/mars-s/mars/issues/7) and
 | --- | --- | --- |
 | [#13](https://github.com/mars-s/mars/issues/13) | Implement the ChatGPT OAuth adapter | code done, live flow unverified |
 | [#14](https://github.com/mars-s/mars/issues/14) | OpenCode Go end-to-end verification path | blocked, needs `op signin` |
-| [#17](https://github.com/mars-s/mars/issues/17) | Local CLIProxyAPI provider route | code done, live model call proven |
+| [#17](https://github.com/mars-s/mars/issues/17) | Local CLIProxyAPI provider route | closed, in-app e2e proven |
 
 ### #17 evidence: the local proxy route
 
@@ -74,11 +74,34 @@ The hard one. Depends on [#7](https://github.com/mars-s/mars/issues/7) and
 `http://127.0.0.1:8317/v1` with `api-key` access and `openai-responses` apiType.
 The catalog is at `revision 34` with 18 templates.
 
-**A real ChatGPT-backed model call is proven.** Against the running local proxy,
-`gpt-6-luna` returned `PROXY_OK` in 2.5s on `/v1/chat/completions`, and
-`/v1/responses` returned a completed response with `store: false` honoured. The
-proxy holds a ChatGPT/Codex account of its own and owns that account's refresh
-rotation, so nothing on our side holds a single-use refresh token.
+**A real ChatGPT-backed model call is proven, end to end inside the app.** The
+model picker lists `Local Proxy (CLIProxyAPI)`, `gpt-6-luna` was selected,
+`PROXY_E2E_OK` was sent and the app rendered `PROXY_E2E_OK` back in 2s. The
+proxy's own log carries the matching request with `X-Zcode-App-Version: 3.14.3`
+and the client key, so the call provably left the app and reached the proxy.
+Against the raw proxy, `gpt-6-luna` also returned `PROXY_OK` in 2.5s on
+`/v1/chat/completions`, and `/v1/responses` returned a completed response with
+`store: false` honoured. The proxy holds a ChatGPT/Codex account of its own and
+owns that account's refresh rotation, so nothing on our side holds a
+single-use refresh token.
+
+**One model id was wrong and is now gone.** The provider's model list carried
+`gpt-6-terra`, which the proxy rejects with
+`400 {"code":"model_not_found","message":"unknown provider for model gpt-6-terra"}`.
+The other five (`gpt-6-luna`, `gpt-6-sol`, `gpt-5.6-luna`, `gpt-5.6-sol`,
+`gpt-5.6-terra`) all return 200. The template itself never listed `gpt-6-terra`,
+the bad id was only in the local app config, so nothing in the repo needed
+changing. Model ids are the proxy's to change, so a new proxy build can break a
+working id again; check `/v1/models` before blaming the fork.
+
+**An empty control-plane origin is a legal state, not an error.**
+`normalizeZCodeBuiltinEndpointOrigin` used to throw on `""`, which is what
+`resolveZCodeEndpointOrigin` returns when nothing is configured, so the whole
+provider view failed to load and no provider or model rendered at all. It now
+normalises the empty string and only validates origins that are present, and the
+no-control-plane cache directory is the fixed literal `endpoint-none` so it
+cannot collide with a vendor build's historical `endpoint-<sha256(origin)>`
+directory. Four tests cover it.
 
 **This does NOT close #13.** #13's done-when is about our own ChatGPT OAuth
 adapter completing a real device-code login and a real call through it. That

@@ -556,3 +556,30 @@ provider registry when the `revision: \`zcode-builtin:${revision}:${sourceKey}\`
 string changes. A new template added without a bump loads but silently does not appear
 until the app restarts, and a stale Active cache with a higher revision wins outright and
 ignores the edit entirely.
+
+## The in-app end-to-end check for the local proxy route
+
+Picking the provider in the UI and sending a message is the only check that
+proves the three legs are actually joined: the catalog template resolves, the
+key the app holds authenticates, and the request the app builds is one the
+proxy accepts. Checking each leg separately leaves the join untested, and a
+stale error toast in the renderer can be a re-render of an old failure rather
+than a live one, so read the transport's own log rather than the UI.
+
+```bash
+# In the app: pick "Local Proxy (CLIProxyAPI)", pick a model, send a message
+# whose answer is a fixed token, then look for the request in the proxy log.
+grep -c "X-Zcode-App-Version" ~/.cli-proxy-api/logs/*.log
+
+# A model the proxy does not serve fails loudly and names itself. This is the
+# fastest way to tell a bad model id apart from a bad key.
+#   -> 400 {"code":"model_not_found","message":"unknown provider for model gpt-6-terra"}
+```
+
+`X-Zcode-App-Version` and `User-Agent: ZCode/3.14.3` in the proxy's request log
+headers are what make the round trip provable rather than assumed. CLIProxyAPI
+only writes a log file for failed requests, so a successful call leaves no trace
+there; the app log and the rendered reply are the evidence for the success case.
+
+Model ids belong to the proxy, not to the fork, and they change between proxy
+builds. Before debugging a model call, check the id against `/v1/models`.
