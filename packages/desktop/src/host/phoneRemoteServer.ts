@@ -4,12 +4,25 @@ import type { AddressInfo } from "node:net";
 import {
   buildPhoneRemoteUrl,
   createPhoneRemoteToken,
-  resolveLanIpv4Address,
+  resolvePhoneRemoteCandidates,
+  type PhoneRemoteCandidate,
 } from "./phoneRemoteNetwork.js";
 
-export interface PhoneRemoteServerHandle {
-  /** The scannable pairing URL, token included. */
+export interface PhoneRemotePairing {
+  readonly address: string;
+  readonly reach: "tailnet" | "lan" | "routable";
   readonly url: string;
+}
+
+export interface PhoneRemoteServerHandle {
+  /** The best pairing URL, for callers that only render one QR. */
+  readonly url: string;
+  /**
+   * Every pairing URL, best first. A machine with both a tailnet and a wifi
+   * address should offer both, because which one works depends on where the
+   * phone is standing, and that is not something the desktop can know.
+   */
+  readonly pairings: readonly PhoneRemotePairing[];
   readonly port: number;
   readonly host: string;
   /** Invalidates the pairing and stops accepting phone connections. */
@@ -21,7 +34,7 @@ export interface StartPhoneRemoteServerOptions {
   readonly staticRoot: string;
   readonly log?: (message: string) => void;
   /** Test seam. Defaults to the real interfaces on this machine. */
-  readonly resolveHost?: () => string | null;
+  readonly resolveCandidates?: () => PhoneRemoteCandidate[];
   /** Test seam. Defaults to port 0 so a second window can never collide. */
   readonly port?: number;
 }
@@ -38,8 +51,8 @@ export interface StartPhoneRemoteServerOptions {
 export async function startPhoneRemoteServer(
   options: StartPhoneRemoteServerOptions,
 ): Promise<PhoneRemoteServerHandle> {
-  const host = (options.resolveHost ?? resolveLanIpv4Address)();
-  if (!host) {
+  const candidates = (options.resolveCandidates ?? resolvePhoneRemoteCandidates)();
+  if (candidates.length === 0) {
     throw new Error(
       "Phone remote control needs a reachable network address, and this machine has none. Connect to a network and try again.",
     );
@@ -56,14 +69,27 @@ export async function startPhoneRemoteServer(
   });
 
   const port = await resolveListeningPort(server);
-  const url = buildPhoneRemoteUrl({ host, port, token });
-  options.log?.(`phone remote control listening on ${url}`);
+  const pairings: PhoneRemotePairing[] = candidates.map((candidate) => ({
+    address: candidate.address,
+    reach: candidate.reach,
+    url: buildPhoneRemoteUrl({ host: candidate.address, port, token }),
+  }));
+  const [primary] = pairings;
+  if (!primary) {
+    throw new Error("Phone remote control produced no pairing URL.");
+  }
+  options.log?.(
+    `phone remote control listening on port ${port} for ${pairings.length} address(es): ${pairings
+      .map((pairing) => `${pairing.address} (${pairing.reach})`)
+      .join(", ")}`,
+  );
 
   let disposed = false;
   return {
-    url,
+    url: primary.url,
+    pairings,
     port,
-    host,
+    host: primary.address,
     async dispose() {
       if (disposed) return;
       disposed = true;

@@ -1,32 +1,60 @@
 import { randomBytes } from "node:crypto";
 import { networkInterfaces } from "node:os";
 
+export interface PhoneRemoteCandidate {
+  readonly address: string;
+  /** Where this address is reachable from. Drives the label on the QR. */
+  readonly reach: "tailnet" | "lan" | "routable";
+}
+
 /**
- * Picks the IPv4 address a phone can actually reach.
+ * Every address a phone could plausibly dial, best first.
  *
  * There is no peer-to-peer discovery in this product, so the desktop has to
- * name itself. A tailnet address wins over the home LAN, because the whole
- * point of scanning this QR is to work away from home: the home LAN address
- * is dead the moment you walk out the door, while a tailnet address is the
- * same wherever you are. Loopback is never a candidate, since a phone cannot
- * open it.
+ * name itself, and a machine usually has more than one name. Rather than
+ * silently picking one and hoping it is the one the operator is standing in
+ * front of, we rank them and let the UI offer a choice: a tailnet address
+ * works from anywhere, a LAN address only from that wifi. Guessing wrong is
+ * the failure mode worth avoiding, because a QR carrying the wrong address
+ * looks perfectly valid and simply never connects.
  */
-export function resolveLanIpv4Address(
+export function resolvePhoneRemoteCandidates(
   interfaces: NodeJS.Dict<import("node:os").NetworkInterfaceInfo[]> = networkInterfaces(),
-): string | null {
-  const candidates: string[] = [];
+): PhoneRemoteCandidate[] {
+  const seen = new Set<string>();
+  const candidates: PhoneRemoteCandidate[] = [];
   for (const entries of Object.values(interfaces)) {
     for (const entry of entries ?? []) {
       // Node reports family as the string "IPv4" on every supported version,
       // but older typings still type it as a number, so accept both.
       const isIpv4 = entry.family === "IPv4" || (entry.family as unknown) === 4;
-      if (!isIpv4 || entry.internal) continue;
-      candidates.push(entry.address);
+      // Loopback is never a candidate: a phone cannot open it.
+      if (!isIpv4 || entry.internal || seen.has(entry.address)) continue;
+      seen.add(entry.address);
+      candidates.push({
+        address: entry.address,
+        reach: isTailnetIpv4(entry.address)
+          ? "tailnet"
+          : isPrivateLanIpv4(entry.address)
+            ? "lan"
+            : "routable",
+      });
     }
   }
-  return (
-    candidates.find(isTailnetIpv4) ?? candidates.find(isPrivateLanIpv4) ?? candidates[0] ?? null
-  );
+  const order: Record<PhoneRemoteCandidate["reach"], number> = { tailnet: 0, lan: 1, routable: 2 };
+  return candidates.sort((a, b) => order[a.reach] - order[b.reach]);
+}
+
+/**
+ * The single best address, for callers that only need one. A tailnet address
+ * wins over the home LAN, because the whole point of scanning this QR is to
+ * work away from home: the home LAN address is dead the moment you walk out
+ * the door, while a tailnet address is the same wherever you are.
+ */
+export function resolveLanIpv4Address(
+  interfaces: NodeJS.Dict<import("node:os").NetworkInterfaceInfo[]> = networkInterfaces(),
+): string | null {
+  return resolvePhoneRemoteCandidates(interfaces)[0]?.address ?? null;
 }
 
 /**

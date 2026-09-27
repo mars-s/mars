@@ -4,6 +4,7 @@ import {
   buildPhoneRemoteUrl,
   createPhoneRemoteToken,
   resolveLanIpv4Address,
+  resolvePhoneRemoteCandidates,
 } from "../src/host/phoneRemoteNetwork.js";
 
 const iface = (family: "IPv4" | "IPv6", address: string, internal = false) => ({
@@ -30,6 +31,38 @@ test("prefers a tailnet address over the home LAN, so the QR works away from hom
     utun100: [iface("IPv4", "100.124.17.182")],
   } as never);
   assert.equal(host, "100.124.17.182");
+});
+
+test("offers every reachable address, ranked, each labelled by where it works", () => {
+  const candidates = resolvePhoneRemoteCandidates({
+    lo0: [iface("IPv4", "127.0.0.1", true)],
+    en0: [iface("IPv6", "fe80::1"), iface("IPv4", "192.168.1.101")],
+    en1: [iface("IPv4", "10.0.0.7")],
+    utun100: [iface("IPv4", "100.124.17.182")],
+    ppp0: [iface("IPv4", "203.0.113.9")],
+  } as never);
+
+  assert.deepEqual(candidates, [
+    { address: "100.124.17.182", reach: "tailnet" },
+    { address: "192.168.1.101", reach: "lan" },
+    { address: "10.0.0.7", reach: "lan" },
+    { address: "203.0.113.9", reach: "routable" },
+  ]);
+});
+
+test("the same address on two interfaces is offered once", () => {
+  const candidates = resolvePhoneRemoteCandidates({
+    en0: [iface("IPv4", "192.168.1.101")],
+    bridge0: [iface("IPv4", "192.168.1.101")],
+  } as never);
+  assert.equal(candidates.length, 1);
+});
+
+test("no candidates at all is an empty list, not a loopback fallback", () => {
+  assert.deepEqual(
+    resolvePhoneRemoteCandidates({ lo0: [iface("IPv4", "127.0.0.1", true)] } as never),
+    [],
+  );
 });
 
 test("does not mistake the rest of 100/8 for a tailnet address", () => {

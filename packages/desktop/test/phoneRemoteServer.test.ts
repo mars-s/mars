@@ -6,13 +6,17 @@ import test from "node:test";
 import { ServiceCollection } from "@zcode/services";
 import { startPhoneRemoteServer } from "../src/host/phoneRemoteServer.js";
 
-async function startWithStaticPage() {
+async function stageIndex(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "phone-remote-"));
   await writeFile(join(root, "index.html"), "<!doctype html><title>phone</title>");
+  return root;
+}
+
+async function startWithStaticPage() {
   return startPhoneRemoteServer({
     services: new ServiceCollection(),
-    staticRoot: root,
-    resolveHost: () => "127.0.0.1",
+    staticRoot: await stageIndex(),
+    resolveCandidates: () => [{ address: "127.0.0.1", reach: "lan" }],
   });
 }
 
@@ -83,6 +87,27 @@ test("each start gets its own token and its own port", async (t) => {
   assert.notEqual(first.port, second.port);
 });
 
+test("every pairing shares one token and one port, so any QR unlocks the same session", async (t) => {
+  const handle = await startPhoneRemoteServer({
+    services: new ServiceCollection(),
+    staticRoot: await stageIndex(),
+    resolveCandidates: () => [
+      { address: "100.124.17.182", reach: "tailnet" as const },
+      { address: "192.168.1.101", reach: "lan" as const },
+    ],
+  });
+  t.after(() => handle.dispose());
+
+  assert.equal(handle.pairings.length, 2);
+  assert.equal(new Set(handle.pairings.map((p) => tokenOf(p.url))).size, 1);
+  for (const pairing of handle.pairings) {
+    assert.equal(new URL(pairing.url).port, String(handle.port));
+  }
+  // A caller that renders a single QR gets the best pairing, not an arbitrary one.
+  assert.equal(handle.url, handle.pairings[0].url);
+  assert.equal(handle.pairings[0].reach, "tailnet");
+});
+
 test("disposing stops answering, which is how the operator revokes a pairing", async () => {
   const handle = await startWithStaticPage();
   await handle.dispose();
@@ -96,7 +121,7 @@ test("refuses to start rather than binding loopback a phone cannot reach", async
       startPhoneRemoteServer({
         services: new ServiceCollection(),
         staticRoot: tmpdir(),
-        resolveHost: () => null,
+        resolveCandidates: () => [],
       }),
     /reachable network address/,
   );
