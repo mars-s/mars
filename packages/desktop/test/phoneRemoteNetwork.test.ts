@@ -24,6 +24,26 @@ test("skips loopback and IPv6, and prefers a private address", () => {
   assert.equal(host, "192.168.1.42");
 });
 
+test("prefers a tailnet address over the home LAN, so the QR works away from home", () => {
+  const host = resolveLanIpv4Address({
+    en0: [iface("IPv4", "192.168.1.101")],
+    utun100: [iface("IPv4", "100.124.17.182")],
+  } as never);
+  assert.equal(host, "100.124.17.182");
+});
+
+test("does not mistake the rest of 100/8 for a tailnet address", () => {
+  const host = resolveLanIpv4Address({
+    en0: [iface("IPv4", "100.63.17.182"), iface("IPv4", "192.168.1.101")],
+  } as never);
+  assert.equal(host, "192.168.1.101");
+  assert.equal(
+    resolveLanIpv4Address({ en0: [iface("IPv4", "100.128.0.1")] } as never),
+    "100.128.0.1",
+    "100.128/9 is outside the CGNAT block and should only be a last resort",
+  );
+});
+
 test("falls back to a routable address when nothing is private", () => {
   const host = resolveLanIpv4Address({
     en0: [iface("IPv4", "203.0.113.9")],

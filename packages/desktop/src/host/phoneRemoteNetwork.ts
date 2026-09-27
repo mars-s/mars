@@ -2,12 +2,14 @@ import { randomBytes } from "node:crypto";
 import { networkInterfaces } from "node:os";
 
 /**
- * Picks the IPv4 address a phone on the same LAN can actually reach.
+ * Picks the IPv4 address a phone can actually reach.
  *
  * There is no peer-to-peer discovery in this product, so the desktop has to
- * name itself. Loopback is never a candidate: a phone cannot open it. We
- * prefer a private range, because a phone on the same wifi is the case this
- * feature is actually for, and we skip interfaces that are still down.
+ * name itself. A tailnet address wins over the home LAN, because the whole
+ * point of scanning this QR is to work away from home: the home LAN address
+ * is dead the moment you walk out the door, while a tailnet address is the
+ * same wherever you are. Loopback is never a candidate, since a phone cannot
+ * open it.
  */
 export function resolveLanIpv4Address(
   interfaces: NodeJS.Dict<import("node:os").NetworkInterfaceInfo[]> = networkInterfaces(),
@@ -22,11 +24,22 @@ export function resolveLanIpv4Address(
       candidates.push(entry.address);
     }
   }
-  const privateFirst = candidates.find(isPrivateIpv4);
-  return privateFirst ?? candidates[0] ?? null;
+  return (
+    candidates.find(isTailnetIpv4) ?? candidates.find(isPrivateLanIpv4) ?? candidates[0] ?? null
+  );
 }
 
-function isPrivateIpv4(address: string): boolean {
+/**
+ * The CGNAT block a tailnet hands out. Naming it explicitly, rather than
+ * treating all of 100.64/10 as ours, keeps the intent readable: this is the
+ * "reachable from wherever the operator is" address, not just another LAN.
+ */
+function isTailnetIpv4(address: string): boolean {
+  const second = Number(address.split(".")[1]);
+  return /^100\./.test(address) && second >= 64 && second <= 127;
+}
+
+function isPrivateLanIpv4(address: string): boolean {
   return (
     /^10\./.test(address) ||
     /^192\.168\./.test(address) ||
