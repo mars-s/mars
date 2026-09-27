@@ -335,7 +335,12 @@ export function createHttpServer(
     "/ws",
     upgradeWebSocket(() => ({
       onOpen(_event, ws) {
-        setupChannelServer(ws.raw as WebSocket, services, "web-remote-replayable", options.serviceOverrides);
+        setupChannelServer(
+          ws.raw as WebSocket,
+          services,
+          "web-remote-replayable",
+          options.serviceOverrides,
+        );
       },
     })),
   );

@@ -43,11 +43,13 @@ export interface PhoneRemoteHostOptions {
  * output, which is the same bytes, so a behaviour difference between the two
  * would be a bug in staging rather than something to branch around.
  */
-export function resolvePhoneRemoteStaticRoot(options: {
-  isPackaged?: () => boolean;
-  resourcesPath?: () => string | undefined;
-  repoRoot?: () => string | undefined;
-} = {}): string {
+export function resolvePhoneRemoteStaticRoot(
+  options: {
+    isPackaged?: () => boolean;
+    resourcesPath?: () => string | undefined;
+    repoRoot?: () => string | undefined;
+  } = {},
+): string {
   const root = resolvePhoneRemoteStaticRootPath(options);
   // A listening port with nothing to serve produces a blank page on the phone
   // and a QR that looks perfectly valid, so fail here where the reason is known.

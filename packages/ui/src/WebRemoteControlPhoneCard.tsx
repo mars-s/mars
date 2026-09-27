@@ -52,9 +52,7 @@ function PairingQr({ pairing }: { pairing: PhoneRemotePairing }) {
         </div>
       )}
       <div className="text-center">
-        <div className="font-mono text-ui-base font-medium text-foreground">
-          {pairing.address}
-        </div>
+        <div className="font-mono text-ui-base font-medium text-foreground">{pairing.address}</div>
         <div className="text-ui-xs text-foreground-subtle">
           {intl.formatMessage({ id: REACH_LABEL_IDS[pairing.reach] })}
         </div>

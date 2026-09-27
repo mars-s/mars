@@ -1717,8 +1717,7 @@ const enUS: Record<string, string> = {
   "webRemoteControl.phone.title": "Phone browser",
   "webRemoteControl.phone.description":
     "Scan a code to drive this workspace from your phone's browser.",
-  "webRemoteControl.phone.unavailable":
-    "Phone access is not available on this host.",
+  "webRemoteControl.phone.unavailable": "Phone access is not available on this host.",
   "webRemoteControl.phone.start": "Start phone access",
   "webRemoteControl.phone.stop": "Stop phone access",
   "webRemoteControl.phone.retry": "Try again",

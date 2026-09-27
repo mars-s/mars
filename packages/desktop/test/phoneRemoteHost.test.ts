@@ -133,8 +133,7 @@ test("a packaged build with no staged web copy fails rather than serving nothing
 
 test("a packaged build without a resources directory fails loudly", () => {
   assert.throws(
-    () =>
-      resolvePhoneRemoteStaticRoot({ isPackaged: () => true, resourcesPath: () => undefined }),
+    () => resolvePhoneRemoteStaticRoot({ isPackaged: () => true, resourcesPath: () => undefined }),
     /resources/,
   );
 });
@@ -186,11 +185,7 @@ test("phone-driven task calls are recorded, read-only ones are not", async (t) =
   await phoneTaskService.getTaskSnapshot({ taskId: "task-b" });
 
   assert.deepEqual(seen, ["sendPrompt:task-a", "getTaskSnapshot:task-b"]);
-  assert.deepEqual(
-    [...activeTaskIds],
-    ["task-a"],
-    "browsing a task is not the same as driving it",
-  );
+  assert.deepEqual([...activeTaskIds], ["task-a"], "browsing a task is not the same as driving it");
   // The shared collection is untouched, so the desktop's own renderer keeps the
   // real service and its badge never lights from desktop-side activity.
   assert.equal(
