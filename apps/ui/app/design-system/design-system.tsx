@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MarsMark } from "@/components/mars-mark";
+import { marsLogoConcepts } from "@/components/brand/mars-logo-concepts";
+import { ComponentGallery } from "./component-gallery";
 import "./design-system.css";
 
 const swatches = [
@@ -118,6 +120,34 @@ export function DesignSystem() {
             ))}
           </div>
         </header>
+
+        <Section title="Logo" note="Three new Mars marks. Each is one solid shape in clay, so it holds at favicon size and in both themes. Pick one and it replaces the old ringed planet everywhere.">
+          <div className="ds-logos">
+            {marsLogoConcepts.map(({ id, name, Mark, note }) => (
+              <article key={id} className="ds-logo">
+                <div className="ds-logo-hero">
+                  <Mark width={72} height={72} />
+                </div>
+                <div className="ds-logo-lockup">
+                  <Mark width={22} height={22} />
+                  <span>Mars</span>
+                </div>
+                <div className="ds-logo-sizes" aria-label={`${name} at 32, 20 and 16 pixels`}>
+                  <span className="ds-logo-tile"><Mark width={32} height={32} /></span>
+                  <Mark width={20} height={20} />
+                  <Mark width={16} height={16} />
+                </div>
+                <h3>{name}</h3>
+                <p>{note}</p>
+              </article>
+            ))}
+            <article className="ds-logo ds-logo-old">
+              <div className="ds-logo-hero"><MarsMark width={72} height={72} /></div>
+              <h3>Current (old)</h3>
+              <p>Ringed planet. Reads as Saturn, thin strokes blur at small sizes.</p>
+            </article>
+          </div>
+        </Section>
 
         <Section title="Colour" note="Clay is rare: send, the Mars mark and focus only. Status colours always sit beside a label.">
           {swatches.map((group) => (
@@ -233,6 +263,10 @@ export function DesignSystem() {
               </div>
             </div>
           </div>
+        </Section>
+
+        <Section title="AI components" note="The chosen components from the redesign plan, themed to Mars tokens. Priority order: Kokonut UI, then 21st Agent Elements, then assistant-ui, then shadcn AI Elements. All sample data here is illustrative; nothing is connected to Pi.">
+          <ComponentGallery />
         </Section>
 
         <Section title="Notices">

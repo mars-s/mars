@@ -19,6 +19,11 @@
   "dependencies": {
     "@assistant-ui/react": "0.15.30",
     "@assistant-ui/react-markdown": "0.14.23",
+    "@base-ui/react": "1.9.0",
+    "@pierre/diffs": "1.5.2",
+    "@radix-ui/react-use-controllable-state": "1.3.0",
+    "@streamdown/code": "2.0.0",
+    "@tabler/icons-react": "3.49.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cn": "0.5.0",
@@ -31,7 +36,9 @@
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
     "sonner": "2.0.8",
+    "streamdown": "2.7.1",
     "tailwind-merge": "3.7.0",
+    "tw-shimmer": "0.4.14",
     "zustand": "5.0.15"
   },
   "devDependencies": {

@@ -109,3 +109,32 @@ html:has(.ds-frame), body:has(.ds-frame) { overflow: auto; height: auto; }
   .ds-type-row-item { grid-template-columns: 1fr; gap: 6px; }
   .ds-sidebar { width: 100%; }
 }
+
+.ds-logos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.ds-logo { display: grid; grid-template-rows: 128px 28px 48px auto 1fr; align-content: start; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); --logo-cut: var(--surface); }
+.ds-logo-hero { display: flex; align-items: center; justify-content: center; height: 128px; border-radius: 10px; background: var(--background); color: var(--clay); --logo-cut: var(--background); }
+.ds-logo-lockup { display: flex; align-items: center; gap: 9px; color: var(--clay); }
+.ds-logo-lockup span { color: var(--text); font: 400 22px var(--font-serif); }
+.ds-logo-sizes { display: flex; align-items: center; gap: 14px; color: var(--clay); }
+.ds-logo-tile { display: inline-flex; padding: 8px; border-radius: 10px; background: var(--clay); color: var(--primary-foreground); --logo-cut: var(--clay); }
+.ds-logo h3 { margin: 0; color: var(--text); font-size: 14px; font-weight: 500; }
+.ds-logo p { margin: -8px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.ds-logo-old { opacity: 0.7; grid-template-rows: 128px auto 1fr; }
+
+.ds-gallery-group { margin: 36px 0 14px !important; font-size: 13px !important; color: var(--text) !important; }
+.ds-gallery-group:first-child { margin-top: 0 !important; }
+.ds-specimens { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.ds-specimen { min-width: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.ds-specimen-wide { grid-column: 1 / -1; }
+.ds-specimen > header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.ds-specimen h3 { margin: 0 !important; color: var(--text) !important; font-size: 13px !important; font-weight: 500; }
+.ds-specimen > header p { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.ds-library { flex-shrink: 0; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+.ds-library[data-library="Kokonut UI"] { color: var(--clay); border-color: color-mix(in srgb, var(--clay) 40%, var(--border)); }
+.ds-library[data-library="21st Agent Elements"] { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, var(--border)); }
+.ds-library[data-library="assistant-ui"] { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
+.ds-specimen-stage { display: grid; gap: 12px; justify-items: stretch; padding: 18px; background: var(--background); min-height: 96px; }
+.ds-specimen-stage > * { max-width: 100%; }
+.ds-island-stage { position: relative; display: flex; justify-content: center; min-height: 120px; }
+.ds-island-stage > * { position: relative !important; inset: auto !important; transform: none !important; }
+@media (max-width: 860px) { .ds-specimens { grid-template-columns: 1fr; } }
