@@ -1,21 +1,4 @@
-.live-welcome {
-  padding: 28px 0 35px;
-  text-align: center;
-}
-.live-welcome h1 {
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-  align-items: center;
-  font:
-    normal clamp(29px, 3.4vw, 43px)/1.2 Georgia,
-    serif;
-  letter-spacing: -0.025em;
-  text-wrap: balance;
-}
-.live-welcome svg {
-  color: var(--orange);
-}
+
 .live-composer-wrap {
   position: sticky;
   bottom: 0;
@@ -122,17 +105,6 @@
 @media (max-width: 760px) {
   .live-composer-wrap {
     padding: 15px 15px 12px;
-  }
-  .live-welcome {
-    padding: 25px 12px;
-  }
-  .live-welcome h1 {
-    font-size: 30px;
-    gap: 10px;
-  }
-  .live-welcome svg {
-    width: 32px;
-    height: 32px;
   }
   .live-composer {
     padding: 15px 14px 11px;
