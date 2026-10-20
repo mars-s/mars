@@ -72,6 +72,9 @@ try {
   const state = await (await request('/api/state', { headers: auth })).json();
   assert.ok(state.conversationId);
   assert.equal(state.auth.connected, false);
+  assert.ok(["estimated", "reported"].includes(state.context.basis), "live host reports context: " + JSON.stringify(state.context));
+  assert.ok(state.context.limit > 0 && state.context.used >= 0 && state.context.compactAt > 0 && state.context.compactAt < 1);
+  assert.equal(state.context.segments.reduce((sum, segment) => sum + segment.tokens, 0), state.context.used);
   const device = await readFile(join(root, 'data/device-id'), 'utf8');
   const login = await request('/?token=' + encodeURIComponent(token), { headers: { host: publicHost }, redirect: 'manual' });
   assert.equal(login.status, 303);
