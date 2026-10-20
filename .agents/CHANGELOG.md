@@ -138,3 +138,15 @@ Five parallel lanes rebuilt the live UI on that base:
   buttons, inputs, switches and tabs, a calm Extensions page.
 - Activity: see the entry above.
 Verification is against the preview fixture only; see the integration entry.
+
+## 2026-10-20 redesign integration check
+
+After merging all five lanes: typecheck and lint clean, 33 UI unit tests pass,
+workspace boundaries pass, production build passes, and all six browser
+fixtures pass against the merged UI on the preview fixture. Native host checks:
+18 of 21 pass, including the new context meter check and a real fresh-host
+boot reporting partitioned context. check-dev-tools, check-ui-patches and
+check-vm-control fail identically on the untouched pre-redesign commit on this
+Mac (Bubblewrap and /var path assumptions); the installer script tests need
+util-linux flock. Both need the Linux Bot Box. No live Pi host, account or
+model call was used; nothing was pushed or deployed.
