@@ -62,10 +62,20 @@ output are separate. Repeated setup never overwrites an existing runtime or data
 
 ## Live cutover
 
-The final live cutover, source/dependency staging receipt and exact publication
-commit are recorded in the integration changelog after the assembled commit has
-passed its staged dry run. Existing owner token, OAuth connections, root model,
-root history and installed plugin hashes are compared to the pre-cutover baseline.
+The managed host deployed public candidate33a5ebf6 after all20 native checks, a
+locked host-only dependency installation and isolated startup. The watchdog reports
+deployed and healthy. Both user services now launch from the canonical Mars checkout.
+The host reports mars-monorepo-1. Existing root history has131 entries and keeps
+its Anthropic model selection. Owner token and OAuth file hashes are unchanged,
+both ChatGPT and Claude remain connected, and installed plugin hashes and enabled
+flags match the baseline. The existing mock plugin remains owner-disabled.
+
+The saved image demonstration retains four child conversations and its completed
+Map/Pick/Explain workflow. No paid model requests or Discord messages were needed
+for this migration. The main Tailscale HTTPS route and the existing9443 alias both
+return the new authenticated host with certificate validation. The retired8443
+DeepSeek and8787 old Mars routes are removed. The local MagicDNS lookup needed
+an explicit Tailscale IP for the TLS probe; access from the Mac was not retested.
 
 Mac execution remains unverified. Local host mode needs util-linux-compatible
 flock; Mac UI-only development can proxy an existing Pi host without running it.

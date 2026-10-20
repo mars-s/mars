@@ -14,3 +14,10 @@ Bot Box cutover explicitly retains the existing private mars-pi-trial data root.
 Retiring services does not delete database backups or installed plugin packages.
 Owner HTTP auth, full authorised local VM control, deferred tool discovery and
 bounded results stay. Codex remote control and Tailscale stay separate.
+
+Bot Box cutover is complete. Canonical source is /home/bot/ChatGPT/mars; active
+services are mars-pi-trial.service and mars-pi-ui.service, both generated from this
+checkout. The private managed runtime/data root remains mars-pi-trial. Tailnet
+HTTPS443 and9443 route to the Pi gateway3081. Old ZCode/Mars/DeepSeek services
+and routes are retired, with private cold backups. Public main uses a reviewed
+source snapshot and public Mars ancestry, excluding private UI history.

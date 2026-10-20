@@ -83,3 +83,17 @@ isolatedboot. Actual UIpatch validation with native-only host dependencies passe
 real typecheck, lint and webpack build inside Bubblewrap, with no promotion.
 Resolved UIdependencies from the UIworkspace independently of runtime dependencies.
 Bumped hostVersion to mars-monorepo-1 for an observable cutover check.
+
+## 2026-10-20 public monorepo and live cutover
+
+Published the reviewed Pi Durable plus Mars UI tree on public Mars ancestry,
+excluding private UI history and personal screenshots. Switched the canonical
+checkout and both user services to the monorepo. The native staged deployment
+passed20 checks, locked installation, isolated boot and watchdog health. Compared
+131 root entries, saved model, both OAuth connections, credential/token hashes and
+all plugin hashes/settings against the private baseline. Four image-demo children
+and the completed three-step workflow survive. Routed tailnet443 and9443 to Pi;
+removed retired8443/8787 routes. TLS owner API probes pass on both active ports.
+Legacy code/data and full Git histories remain backed up privately. No live model
+calls or external messages were made. Full automated results and limitations are
+in docs/MIGRATION-RESULTS.md.
