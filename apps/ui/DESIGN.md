@@ -92,8 +92,9 @@ Assistant Markdown headings use sans semibold, not serif.
 - Tool activity: one compact, collapsible line per group ("Ran 3 commands",
   chevron), rows inside with icon, label and state. Code and output in mono on
   `--surface`. No cards around ordinary output.
-- Settings: a centred dialog, 720px, left tab list (General/Account,
+- Settings: a centred dialog, 760 × 560px, left tab list (Account,
   Appearance, Connection, Apps) and content on the right, like Claude settings.
+  On phones it becomes a full-screen sheet with horizontal tabs.
 - Full pages (Extensions): 768px column, serif page title, simple rows.
 
 ## Motion
