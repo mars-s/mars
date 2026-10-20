@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { record, type LiveSnapshot } from "@/lib/pi/live-state";
 import { PluginManager } from "@/components/settings/plugin-manager";
 import { useWorkspace } from "@/components/workspace-context";
-import "./settings.css";
+import "./extensions.css";
 
 function ExtensionPanel({ extension }: { extension: LiveSnapshot["extensions"][number] }) {
   const target = useRef<HTMLDivElement>(null);
@@ -48,21 +48,19 @@ function ExtensionPanel({ extension }: { extension: LiveSnapshot["extensions"][n
 export function ExtensionsPage() {
   const { snapshot } = useWorkspace();
   return (
-              <div className="live-extensions-page">
-                <h1>Your extensions</h1>
-                <p>Capabilities installed into this Pi agent, including their own interface.</p>
-                <PluginManager
-                  renderInterface={(name) => {
-                    const extension = snapshot?.extensions.find((item) => item.name === name);
-                    return extension &&
-                      extension.enabled !== false &&
-                      extension.uiEnabled !== false ? (
-                      <ExtensionPanel extension={extension} />
-                    ) : (
-                      <p role="status">The interface is unavailable. Refresh after installation.</p>
-                    );
-                  }}
-                />
-              </div>
+    <div className="live-extensions-page">
+      <h1>Your extensions</h1>
+      <p>Capabilities installed into this Pi agent, including their own interface.</p>
+      <PluginManager
+        renderInterface={(name) => {
+          const extension = snapshot?.extensions.find((item) => item.name === name);
+          return extension && extension.enabled !== false && extension.uiEnabled !== false ? (
+            <ExtensionPanel extension={extension} />
+          ) : (
+            <p role="status">The interface is unavailable. Refresh after installation.</p>
+          );
+        }}
+      />
+    </div>
   );
 }

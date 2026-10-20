@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { piRequest, record } from "@/lib/pi/live-state";
 import { parsePlugins, type Plugin } from "@/lib/pi/plugins";
+import { ChevronRight, RotateCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
 export function PluginManager({
@@ -48,6 +50,7 @@ export function PluginManager({
           <div>
             <h2>{plugin.title}</h2>
             {plugin.version && <small>{plugin.version}</small>}
+            {plugin.description && <p>{plugin.description}</p>}
           </div>
           <Switch
             checked={plugin.enabled}
@@ -56,47 +59,56 @@ export function PluginManager({
             onCheckedChange={(enabled) => void update(plugin.name, { enabled })}
           />
         </header>
-        {plugin.description && <p>{plugin.description}</p>}
         <div className="live-plugin-controls">
           {plugin.hasUi && (
-            <button
-              className="live-text-button"
+            <Button
+              variant="outline"
+              size="sm"
               disabled={!visible}
+              aria-expanded={opened === plugin.name && visible}
               onClick={() => setOpened(opened === plugin.name ? "" : plugin.name)}
             >
               {opened === plugin.name && visible ? "Close interface" : "Open interface"}
-            </button>
+            </Button>
           )}
           <details>
-            <summary>Manage {plugin.title}</summary>
-            {plugin.hasUi && (
-              <label>
-                Interface
-                <Switch
-                  checked={plugin.uiEnabled}
-                  disabled={!!pending || !plugin.enabled}
-                  aria-label={`Enable ${plugin.title} interface`}
-                  onCheckedChange={(uiEnabled) => void update(plugin.name, { uiEnabled })}
-                />
-              </label>
-            )}
-            {plugin.tools.map((tool) => (
-              <label key={tool.name}>
-                <span>
-                  <strong>{tool.name}</strong>
-                  {tool.description && <small>{tool.description}</small>}
-                </span>
-                <Switch
-                  checked={tool.enabled}
-                  disabled={!!pending || !plugin.enabled}
-                  aria-label={`Enable ${tool.name}`}
-                  onCheckedChange={(enabled) =>
-                    void update(plugin.name, { tools: { [tool.name]: enabled } })
-                  }
-                />
-              </label>
-            ))}
-            {!plugin.tools.length && !plugin.hasUi && <p>No configurable tools.</p>}
+            <summary>
+              <ChevronRight size={14} aria-hidden="true" />
+              Manage {plugin.title}
+            </summary>
+            <div className="live-plugin-tools">
+              {plugin.hasUi && (
+                <label>
+                  <span>
+                    <strong className="live-plugin-setting">Interface</strong>
+                    <small>Show this extension&rsquo;s own panel here.</small>
+                  </span>
+                  <Switch
+                    checked={plugin.uiEnabled}
+                    disabled={!!pending || !plugin.enabled}
+                    aria-label={`Enable ${plugin.title} interface`}
+                    onCheckedChange={(uiEnabled) => void update(plugin.name, { uiEnabled })}
+                  />
+                </label>
+              )}
+              {plugin.tools.map((tool) => (
+                <label key={tool.name}>
+                  <span>
+                    <strong>{tool.name}</strong>
+                    {tool.description && <small>{tool.description}</small>}
+                  </span>
+                  <Switch
+                    checked={tool.enabled}
+                    disabled={!!pending || !plugin.enabled}
+                    aria-label={`Enable ${tool.name}`}
+                    onCheckedChange={(enabled) =>
+                      void update(plugin.name, { tools: { [tool.name]: enabled } })
+                    }
+                  />
+                </label>
+              ))}
+              {!plugin.tools.length && !plugin.hasUi && <p>No configurable tools.</p>}
+            </div>
           </details>
         </div>
         {pending === plugin.name && <p role="status">Saving settings…</p>}
@@ -104,40 +116,41 @@ export function PluginManager({
       </article>
     );
   }
+  const installed = plugins.filter((plugin) => plugin.kind !== "system");
+  const system = plugins.filter((plugin) => plugin.kind === "system");
+  const reload = () =>
+    void refresh().catch((failure) =>
+      setError(failure instanceof Error ? failure.message : "Could not refresh plugins."),
+    );
   return (
     <section className="live-plugin-manager" aria-label="Installed plugins">
-      <button
-        type="button"
-        className="live-text-button"
-        disabled={!!pending}
-        onClick={() =>
-          void refresh().catch((failure) =>
-            setError(failure instanceof Error ? failure.message : "Could not refresh plugins."),
-          )
-        }
-      >
-        Refresh plugins
-      </button>
+      <div className="live-plugin-toolbar">
+        <p>{loaded ? `${installed.length} installed` : ""}</p>
+        <Button variant="ghost" size="sm" disabled={!!pending} onClick={reload}>
+          <RotateCw aria-hidden="true" />
+          Refresh plugins
+        </Button>
+      </div>
       {error && (
         <p role="alert">
-          {error}{" "}
-          <button
-            className="live-text-button"
-            onClick={() => void refresh().catch(() => undefined)}
-          >
+          {error}
+          <Button variant="outline" size="xs" onClick={() => void refresh().catch(() => undefined)}>
             Retry
-          </button>
+          </Button>
         </p>
       )}
       {!loaded && !error && <p role="status">Loading plugins…</p>}
-      {plugins.filter((plugin) => plugin.kind !== "system").map(card)}
-      {loaded && !plugins.some((plugin) => plugin.kind !== "system") && (
-        <p>No installed plugins yet.</p>
+      {installed.length > 0 && <div className="live-plugin-list">{installed.map(card)}</div>}
+      {loaded && !installed.length && (
+        <p className="live-plugin-empty">No installed plugins yet.</p>
       )}
-      {plugins.some((plugin) => plugin.kind === "system") && (
+      {system.length > 0 && (
         <details className="live-system-plugins">
-          <summary>System capabilities</summary>
-          {plugins.filter((plugin) => plugin.kind === "system").map(card)}
+          <summary>
+            <ChevronRight size={14} aria-hidden="true" />
+            System capabilities
+          </summary>
+          <div className="live-plugin-list">{system.map(card)}</div>
         </details>
       )}
     </section>
