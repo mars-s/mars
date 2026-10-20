@@ -3,7 +3,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-:root {
+:root, [data-theme="dark"] {
   /* Mars on the Claude desktop palette. Warm charcoal, ivory text, one clay accent. */
   --background: #262624;
   --foreground: #e8e6dc;
@@ -105,7 +105,7 @@ svg { flex-shrink: 0; }
 .muted { color: var(--text-muted); }
 .text-faint { color: var(--text-faint); }
 
-html[data-theme="light"] {
+[data-theme="light"] {
   color-scheme: light;
   --background: #faf9f5; --foreground: #141413; --text: #141413;
   --sidebar: #f5f4ed; --sidebar-foreground: #3d3d3a; --sidebar-accent: #ebe9df; --sidebar-accent-foreground: #141413; --sidebar-border: #e8e6dc;
