@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MarsMark } from "@/components/mars-mark";
-import { marsLogoConcepts } from "@/components/brand/mars-logo-concepts";
 import { ComponentGallery } from "./component-gallery";
 import "./design-system.css";
 
@@ -121,30 +120,23 @@ export function DesignSystem() {
           </div>
         </header>
 
-        <Section title="Logo" note="Three new Mars marks. Each is one solid shape in clay, so it holds at favicon size and in both themes. Pick one and it replaces the old ringed planet everywhere.">
+        <Section title="Logo" note="Phase: Mars half-lit with Phobos alongside. One solid shape in clay, so it holds at favicon size and in both themes.">
           <div className="ds-logos">
-            {marsLogoConcepts.map(({ id, name, Mark, note }) => (
-              <article key={id} className="ds-logo">
-                <div className="ds-logo-hero">
-                  <Mark width={72} height={72} />
-                </div>
-                <div className="ds-logo-lockup">
-                  <Mark width={22} height={22} />
-                  <span>Mars</span>
-                </div>
-                <div className="ds-logo-sizes" aria-label={`${name} at 32, 20 and 16 pixels`}>
-                  <span className="ds-logo-tile"><Mark width={32} height={32} /></span>
-                  <Mark width={20} height={20} />
-                  <Mark width={16} height={16} />
-                </div>
-                <h3>{name}</h3>
-                <p>{note}</p>
-              </article>
-            ))}
-            <article className="ds-logo ds-logo-old">
-              <div className="ds-logo-hero"><MarsMark width={72} height={72} /></div>
-              <h3>Current (old)</h3>
-              <p>Ringed planet. Reads as Saturn, thin strokes blur at small sizes.</p>
+            <article className="ds-logo">
+              <div className="ds-logo-hero">
+                <MarsMark width={72} height={72} />
+              </div>
+              <div className="ds-logo-lockup">
+                <MarsMark width={22} height={22} />
+                <span>Mars</span>
+              </div>
+              <div className="ds-logo-sizes" aria-label="Mars mark at 32, 20 and 16 pixels">
+                <span className="ds-logo-tile"><MarsMark width={32} height={32} /></span>
+                <MarsMark width={20} height={20} />
+                <MarsMark width={16} height={16} />
+              </div>
+              <h3>Phase</h3>
+              <p>Used for the sidebar, greeting, favicon and app icon.</p>
             </article>
           </div>
         </Section>

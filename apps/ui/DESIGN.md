@@ -15,6 +15,14 @@ Copy Claude's interaction patterns and visual grammar. Do not copy Anthropic's
 logo, the Claude name, the spark mark or account details. The Mars mark stands
 where Claude's mark would.
 
+The Mars mark is **Phase** (`components/mars-mark.tsx`): Mars half-lit with
+Phobos alongside, one solid shape in currentColor. Use it in clay for the
+sidebar brand and greeting; the favicon (`app/icon.svg`) is the mark in ivory on
+a clay tile. Never redraw it per surface.
+
+The live preview of every token, the mark and the selected components is
+`/design-system`. Check it before and after changing a shared surface.
+
 ## Tokens (app/globals.css owns the values)
 
 | Role | Dark | Light |
@@ -115,3 +123,25 @@ navigation", "New chat", "Attach images", "Copy response".
 Show only real Pi state. Do not add Projects, Artifacts, search results,
 connectors or usage figures that the host does not provide. A control for an
 unsupported feature is absent, not decorative.
+
+## Selected components
+
+Priority: Kokonut UI, then 21st Agent Elements, then assistant-ui, then AI
+Elements, then shadcn primitives. Vendored source lives in `components/vendor`
+(register: `components/vendor/SOURCES.md`). Wrap vendor components in
+`components/ai/*` with Mars props; never pass demo defaults to the live app
+(several Kokonut components animate a demo when a prop is omitted).
+
+| Surface | Component |
+| --- | --- |
+| Composer shell, attachments, commands | Kokonut AI Prompt (direction) on the assistant-ui composer runtime |
+| Model and effort | Kokonut Model Selector, fed the real Pi model list |
+| Context | Kokonut Context Meter only (ring in the composer, breakdown and Compact). No assistant-ui ContextBreakdown. Data: `snapshot.context` from the host |
+| Tool activity in the transcript | 21st Edit, Bash, Search, Thinking, Generic, Subagent, MCP, Plan, To-do, Question cards |
+| Approvals, change review, citations | Kokonut Tool Approval, Diff Review, Inline Citations |
+| Run progress label | Kokonut AI Text Loading or the existing StatusMark |
+| Background work, schedules, checkpoints, artifacts, memory, cost, connection | assistant-ui Elements, only where Pi supplies the data |
+| Reasoning steps, sources, task lists | AI Elements |
+
+A component whose data Pi does not provide stays in `/design-system` and out
+of the live app until the host exposes it.

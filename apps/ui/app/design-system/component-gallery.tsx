@@ -29,7 +29,6 @@ import { ArtifactCard } from "@/components/vendor/assistant-ui/elements/artifact
 import { CheckpointHistory } from "@/components/vendor/assistant-ui/elements/checkpoint-history";
 import { ScheduleCard } from "@/components/vendor/assistant-ui/elements/schedule-card";
 import { ConnectionState } from "@/components/vendor/assistant-ui/elements/connection-state";
-import { ContextBreakdown } from "@/components/vendor/assistant-ui/elements/context-breakdown";
 import { MemoryChips } from "@/components/vendor/assistant-ui/elements/memory-chips";
 import { ElicitationForm } from "@/components/vendor/assistant-ui/elements/elicitation-form";
 import { CostMeter } from "@/components/vendor/assistant-ui/elements/cost-meter";
@@ -114,7 +113,7 @@ export function ComponentGallery() {
             defaultValue={{ model: "sol", effort: "medium" }}
           />
         </Specimen>
-        <Specimen name="Context meter" library="Kokonut UI" use="Composer footer ring with breakdown and compaction">
+        <Specimen name="Context meter" library="Kokonut UI" use="Composer ring; opens the breakdown and Compact. Sole context surface.">
           <AIContextMeter
             model="GPT-6 Sol"
             limit={200000}
@@ -125,6 +124,7 @@ export function ComponentGallery() {
               { id: "messages", label: "Messages", tokens: 52100 },
             ]}
             onCompact={noop}
+            defaultOpen
           />
         </Specimen>
         <Specimen name="Voice" library="Kokonut UI" use="Dictation appearance (real capture comes later)">
@@ -401,16 +401,6 @@ export function ComponentGallery() {
 
       <h3 className="ds-gallery-group">Context, memory, artifacts and cost</h3>
       <div className="ds-specimens">
-        <Specimen name="Context breakdown" library="assistant-ui" use="Expanded context inspector">
-          <ContextBreakdown
-            limit={200000}
-            segments={[
-              { label: "Instructions", tokens: 6200, tint: "bg-clay" },
-              { label: "Files", tokens: 38400, tint: "bg-info" },
-              { label: "Messages", tokens: 52100, tint: "bg-success" },
-            ]}
-          />
-        </Specimen>
         <Specimen name="Memory chips" library="assistant-ui" use="What the agent remembered this turn">
           <MemoryChips
             chips={[

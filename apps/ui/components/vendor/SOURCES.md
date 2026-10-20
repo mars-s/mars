@@ -112,7 +112,6 @@ edit-tool.tsx follows data-theme and uses --surface instead of forced black. Mar
 | assistant-ui | [elements-checkpoint-history](https://r.assistant-ui.com/elements-checkpoint-history.json) | components/vendor/assistant-ui/elements/checkpoint-history.tsx | e451c6358c8e7e11 |
 | assistant-ui | [elements-schedule-card](https://r.assistant-ui.com/elements-schedule-card.json) | components/vendor/assistant-ui/elements/schedule-card.tsx | c2f61a13868feb4d |
 | assistant-ui | [elements-connection-state](https://r.assistant-ui.com/elements-connection-state.json) | components/vendor/assistant-ui/elements/connection-state.tsx | 5afe58eaec85737c |
-| assistant-ui | [elements-context-breakdown](https://r.assistant-ui.com/elements-context-breakdown.json) | components/vendor/assistant-ui/elements/context-breakdown.tsx | f52f206457afc4be |
 | assistant-ui | [elements-range](https://r.assistant-ui.com/elements-range.json) | components/vendor/assistant-ui/utils/range.ts | 3506d5f07865c042 |
 | assistant-ui | [elements-memory-chips](https://r.assistant-ui.com/elements-memory-chips.json) | components/vendor/assistant-ui/elements/memory-chips.tsx | 43b9d2ff8c27c00d |
 | assistant-ui | [elements-elicitation-form](https://r.assistant-ui.com/elements-elicitation-form.json) | components/vendor/assistant-ui/elements/elicitation-form.tsx | 9d98ed74254ada76 |

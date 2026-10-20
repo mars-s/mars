@@ -101,7 +101,43 @@ export type WorkerSummary = {
   result: string;
   error: string;
 };
+export type ContextUsage =
+  | { basis: "unavailable" }
+  | {
+      basis: "reported" | "estimated";
+      limit: number;
+      used: number;
+      compactAt: number;
+      autoCompact: boolean;
+      segments: { id: string; label: string; tokens: number }[];
+    };
+export function parseContext(value: unknown): ContextUsage {
+  const row = record(value);
+  const limit = Number(row.limit);
+  const used = Number(row.used);
+  if (
+    (row.basis !== "reported" && row.basis !== "estimated") ||
+    !Number.isFinite(limit) ||
+    limit <= 0 ||
+    !Number.isFinite(used) ||
+    used < 0
+  )
+    return { basis: "unavailable" };
+  return {
+    basis: row.basis,
+    limit,
+    used,
+    compactAt: Math.min(1, Math.max(0, Number(row.compactAt) || 0.8)),
+    autoCompact: row.autoCompact !== false,
+    segments: (Array.isArray(row.segments) ? row.segments : []).map(record).flatMap((segment) =>
+      typeof segment.id === "string" && Number.isFinite(Number(segment.tokens))
+        ? [{ id: segment.id, label: typeof segment.label === "string" ? segment.label : segment.id, tokens: Number(segment.tokens) }]
+        : [],
+    ),
+  };
+}
 export type LiveSnapshot = {
+  context: ContextUsage;
   parentConversationId: string;
   conversationTitle: string;
   subthreads: Subthread[];
@@ -451,6 +487,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
     conversations: parseConversations(data.conversations),
     workers: parseWorkers(data.workers),
     usage: parseUsage(data.usage),
+    context: parseContext(data.context),
   };
 }
 export async function piRequest(path: string, body?: unknown): Promise<unknown> {

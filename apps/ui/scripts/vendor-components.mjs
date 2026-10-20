@@ -30,7 +30,7 @@ const sources = {
     licence: "MIT, Copyright (c) 2026 AgentbaseAI Inc. (github.com/assistant-ui/assistant-ui)",
     items: [
       "elements-background-inbox", "elements-artifact-card", "elements-checkpoint-history",
-      "elements-schedule-card", "elements-connection-state", "elements-context-breakdown",
+      "elements-schedule-card", "elements-connection-state",
       "elements-memory-chips", "elements-elicitation-form", "elements-cost-meter",
     ],
   },

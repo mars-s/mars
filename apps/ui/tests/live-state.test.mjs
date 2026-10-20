@@ -340,3 +340,26 @@ test("codemode history and live nested calls retain real action outcomes", () =>
   assert.equal(state.messages[1].tools[0].name, "host_write");
   assert.equal(state.messages[1].tools[0].state, "running");
 });
+
+test("context usage passes through Pi numbers and never invents a window", () => {
+  const missing = parseSnapshot(snapshot([]));
+  assert.deepEqual(missing.context, { basis: "unavailable" });
+  const source = snapshot([]);
+  source.context = {
+    basis: "reported",
+    limit: 200000,
+    used: 52000,
+    compactAt: 0.918,
+    autoCompact: true,
+    segments: [
+      { id: "instructions", label: "Instructions", tokens: 6000 },
+      { id: "messages", label: "Messages", tokens: 46000 },
+    ],
+  };
+  const state = parseSnapshot(source);
+  assert.equal(state.context.basis, "reported");
+  assert.equal(state.context.used, 52000);
+  assert.equal(state.context.segments.length, 2);
+  source.context = { basis: "reported", limit: 0, used: 10 };
+  assert.deepEqual(parseSnapshot(source).context, { basis: "unavailable" });
+});

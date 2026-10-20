@@ -13,6 +13,7 @@ import { createVmControl } from "./vm-control.mjs";
 import { createWebSearchExtension } from "./web-search.mjs";
 import { createDevTools } from "./dev-tools.mjs";
 import { createConversationManager } from "./conversations.mjs";
+import { contextMeter } from "./context-meter.mjs";
 import { createOrchestrationExtension, listWorkers, stopWorker } from "./orchestration.mjs";
 import { nextPage, attachNextUpgrade } from "./next-proxy.mjs";
 import { readFile, writeFile, mkdir, appendFile, symlink, lstat, readlink, rename } from "node:fs/promises";
@@ -497,7 +498,13 @@ const server = http.createServer(async (req, res) => {
       const state = await conversations.state(conversation.id);
       const thread = await conversations.selectedThread(conversation.id);
       const subthreads = await conversations.listSubthreads({ conversationId: thread.parentConversationId || conversation.id });
+      const selectedModel = state.docs?.["pi.agent"]?.model;
+      const contextView = await conversation.context(context);
       send(res, 200, {
+        context: contextMeter(
+          contextView,
+          selectedModel && models.getModel(selectedModel.provider, selectedModel.modelId),
+        ),
         runtime: "Pi Durable 1.3.0",
         customHost: true,
         hostVersion: "mars-monorepo-1",
@@ -614,6 +621,12 @@ const server = http.createServer(async (req, res) => {
         context,
       );
       send(res, 202, { submissionId: submission.id });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/compact") {
+      const data = await jsonBody(req);
+      const taskId = await (await conversations.resolve(data.conversationId)).compact(undefined, context);
+      send(res, 202, { taskId });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/abort") {
