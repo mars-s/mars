@@ -92,6 +92,13 @@ Assistant Markdown headings use sans semibold, not serif.
 - Tool activity: one compact, collapsible line per group ("Ran 3 commands",
   chevron), rows inside with icon, label and state. Code and output in mono on
   `--surface`. No cards around ordinary output.
+- Workbench: a `+` icon at the top right of the conversation header opens a pane
+  beside the chat (spec: `docs/WORKBENCH.md`). Pane background `--sidebar`, 1px
+  `--border` divider that turns clay on hover and focus, 48px tab strip with 32px
+  tabs (selected tab on `--surface-raised`). A new tab is a launcher: 14px Tools
+  heading, two-column 48px tiles on a 4% text tint with keyboard hints, then a
+  Suggested grid of 44px icon tiles. Unavailable tiles are disabled and show the
+  host's reason. Full-screen sheet with Back at 768px and below.
 - Settings: a centred dialog, 760 × 560px, left tab list (Account,
   Appearance, Connection, Apps) and content on the right, like Claude settings.
   On phones it becomes a full-screen sheet with horizontal tabs.

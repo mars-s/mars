@@ -138,3 +138,16 @@ html:has(.ds-frame), body:has(.ds-frame) { overflow: auto; height: auto; }
 .ds-island-stage { position: relative; display: flex; justify-content: center; min-height: 120px; }
 .ds-island-stage > * { position: relative !important; inset: auto !important; transform: none !important; }
 @media (max-width: 860px) { .ds-specimens { grid-template-columns: 1fr; } }
+
+.ds-workbench {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.ds-workbench .wb-launcher {
+  padding: 28px 24px 32px;
+}
+.ds-section .ds-workbench h2 {
+  margin: 0 0 14px;
+  font: 500 14px/1.4 var(--font-sans);
+}

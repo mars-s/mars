@@ -18,6 +18,7 @@ import {
 import { useEffect, useState } from "react";
 import { MarsMark } from "@/components/mars-mark";
 import { ComponentGallery } from "./component-gallery";
+import { WorkbenchSpecimen } from "./workbench-specimen";
 import "./design-system.css";
 
 const swatches = [
@@ -255,6 +256,10 @@ export function DesignSystem() {
               </div>
             </div>
           </div>
+        </Section>
+
+        <Section title="Workbench" note="Opened from the + at the top right of the chat. Tabs, a ChatGPT-style launcher with Tools and Suggested, and one pane per tool. Unavailable tools stay disabled with the host's reason.">
+          <WorkbenchSpecimen />
         </Section>
 
         <Section title="AI components" note="The chosen components from the redesign plan, themed to Mars tokens. Priority order: Kokonut UI, then 21st Agent Elements, then assistant-ui, then shadcn AI Elements. All sample data here is illustrative; nothing is connected to Pi.">
