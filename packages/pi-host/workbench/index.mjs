@@ -20,7 +20,8 @@ export function createWorkbench({ work, send, jsonBody, tools = {}, extensionUis
   }
   async function capabilities() {
     const reasons = {
-      changes: tools.changes ? "" : "Changes is not built into this host yet.",
+      // lane: changes. git can be missing at runtime.
+      changes: tools.changes ? ((await tools.changes.available()).reason ?? "") : "Changes is not built into this host yet.",
       files: tools.files ? "" : "Files is not built into this host yet.",
       terminal: tools.terminal ? ((await hasPython()) ? "" : "python3 with the pty module was not found on the host.") : "Terminal is not built into this host yet.",
       "side-chat": "",

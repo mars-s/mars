@@ -1,0 +1,312 @@
+/* Changes pane: Kokonut Diff Review shell, read-only. Tokens only (DESIGN.md). */
+.wb-changes {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.wb-changes-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 12px 8px 16px;
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+}
+.wb-changes-repo {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+.wb-changes-repo select {
+  min-width: 0;
+  max-width: 240px;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 120ms var(--ease-out);
+}
+.wb-changes-repo select:hover {
+  border-color: color-mix(in srgb, var(--text) 24%, var(--border));
+}
+.wb-changes-repo svg {
+  position: absolute;
+  right: 9px;
+  color: var(--text-muted);
+  transform: rotate(90deg);
+  pointer-events: none;
+}
+.wb-changes-branch {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.wb-changes-branch > svg {
+  flex: none;
+}
+.wb-changes-branch-name {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-changes-ab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.wb-changes-refresh {
+  margin-left: auto;
+}
+.wb-changes-refresh:disabled {
+  cursor: progress;
+}
+.wb-changes-refresh svg[data-spin] {
+  animation: wb-spin 900ms linear infinite;
+}
+@keyframes wb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.wb-changes .wb-empty {
+  flex: 1;
+  height: auto;
+}
+.wb-changes .wb-empty p {
+  max-width: 42ch;
+  margin: 0;
+  line-height: 1.5;
+}
+.wb-changes-message {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.wb-changes-retry {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 13px;
+}
+.wb-changes-retry:hover {
+  border-color: color-mix(in srgb, var(--text) 24%, var(--border));
+}
+
+/* Kokonut Diff Review: a soft tray holding a raised list. */
+.wb-review {
+  margin: 16px;
+  padding: 6px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.wb-review-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+}
+.wb-review-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.wb-review-note {
+  padding: 0 10px 8px;
+}
+.wb-counts {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.wb-add {
+  color: var(--green);
+}
+.wb-del {
+  color: var(--red);
+}
+.wb-review-list {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--background);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--background) 40%, transparent),
+    inset 0 0 0 1px var(--border);
+  list-style: none;
+}
+.wb-review-row + .wb-review-row {
+  border-top: 1px solid var(--border);
+}
+.wb-review-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 12px 6px 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  transition: background-color 120ms var(--ease-out);
+}
+.wb-review-file:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+.wb-review-file:focus-visible {
+  outline-offset: -2px;
+}
+.wb-review-chevron {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform 180ms var(--ease-out);
+}
+.wb-review-chevron[data-open] {
+  transform: rotate(90deg);
+}
+.wb-review-status {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+.wb-review-status[data-kind="added"],
+.wb-review-status[data-kind="untracked"] {
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green);
+}
+.wb-review-status[data-kind="deleted"],
+.wb-review-status[data-kind="conflict"] {
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  color: var(--red);
+}
+.wb-review-path {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+/* The directory gives way first so the file name stays readable. */
+.wb-review-path > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-review-dir {
+  flex: 0 1000 auto;
+  color: var(--text-muted);
+}
+.wb-review-name {
+  flex: 0 1 auto;
+}
+.wb-review-binary {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.wb-bar {
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+}
+.wb-bar > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--border);
+}
+.wb-bar > [data-tone="add"] {
+  background: var(--green);
+}
+.wb-bar > [data-tone="del"] {
+  background: var(--red);
+}
+.wb-review-diff {
+  padding: 0 8px 8px;
+  animation: wb-diff-in 160ms var(--ease-out);
+}
+.wb-review-diff > .wb-note {
+  padding: 8px 10px 4px;
+}
+/* The file row is the header; the card's own "Edited <file>" line would repeat it and
+   misname deletions. */
+.wb-review-diff .an-edit-tool-card > :first-child {
+  display: none;
+}
+@keyframes wb-diff-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (max-width: 768px) {
+  .wb-review {
+    margin: 12px 8px;
+  }
+  .wb-bar {
+    display: none;
+  }
+  .wb-review-file {
+    min-height: 44px;
+  }
+  .wb-changes-repo select {
+    max-width: 160px;
+    height: 40px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-changes-refresh svg[data-spin],
+  .wb-review-diff {
+    animation: none;
+  }
+  .wb-review-chevron {
+    transition: none;
+  }
+}
