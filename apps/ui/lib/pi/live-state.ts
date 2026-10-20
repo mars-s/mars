@@ -64,6 +64,8 @@ export type ToolActivity = {
   state?: "running" | "complete" | "failed" | "cancelled";
   durationMs?: number;
   exitCode?: number;
+  /** Pi tool result details, bounded: unified patch for edit/write, truncation flag for shell. */
+  details?: { patch?: string; diff?: string; truncated?: boolean; fullOutputPath?: string };
   children?: ToolActivity[];
 };
 export type LiveMessage = {
@@ -311,6 +313,15 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
           call.state = call.failed ? "failed" : "complete";
           const details = record(message.details);
           if (typeof details.exitCode === "number") call.exitCode = details.exitCode;
+          const bounded = (value: unknown) =>
+            typeof value === "string" && value.length <= 200000 ? value : undefined;
+          const kept = {
+            patch: bounded(details.patch),
+            diff: bounded(details.diff),
+            truncated: typeof details.truncated === "boolean" ? details.truncated : undefined,
+            fullOutputPath: bounded(details.fullOutputPath),
+          };
+          if (Object.values(kept).some((value) => value !== undefined)) call.details = kept;
           call.children = list(details.calls)
             .map(record)
             .map((nested, index) => ({
