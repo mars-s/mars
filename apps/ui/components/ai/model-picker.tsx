@@ -16,16 +16,19 @@ import "./model-picker.css";
  * without levels simply has no Effort section.
  */
 
-const EFFORT_COPY: Record<string, { label: string; hint: string }> = {
+// `short` fits a detent stop when a model offers six or seven levels.
+const EFFORT_COPY: Record<string, { label: string; short?: string; hint: string }> = {
   off: { label: "Off", hint: "No thinking step. Fastest replies." },
-  minimal: { label: "Minimal", hint: "Skips reasoning almost entirely. Lowest latency." },
+  minimal: { label: "Minimal", short: "Min", hint: "Skips reasoning almost entirely. Lowest latency." },
   low: { label: "Low", hint: "Answers right away. Best for quick edits and lookups." },
-  medium: { label: "Medium", hint: "Thinks briefly first. A good default for most work." },
+  medium: { label: "Medium", short: "Med", hint: "Thinks briefly first. A good default for most work." },
   high: { label: "High", hint: "Thinks longer on hard problems. Slower, uses more tokens." },
-  xhigh: { label: "Extra high", hint: "Thinks at length before answering. For tricky tasks." },
+  xhigh: { label: "Extra high", short: "XHigh", hint: "Thinks at length before answering. For tricky tasks." },
   max: { label: "Max", hint: "No limit on thinking. For the hardest tasks only." },
 };
 const effortLabel = (level: string) => EFFORT_COPY[level]?.label ?? level;
+const stopLabel = (level: string, count: number) =>
+  (count > 5 ? EFFORT_COPY[level]?.short : undefined) ?? effortLabel(level);
 
 const DESCRIPTIONS: [RegExp, string][] = [
   [/opus/i, "Most capable, for complex work"],
@@ -130,8 +133,8 @@ function EffortTrack({
           style={{ left: `${(value / count) * 100}%`, width: `${100 / count}%` }}
         />
         {levels.map((level, index) => (
-          <span key={level} aria-hidden="true" data-active={index === value ? "" : undefined}>
-            {effortLabel(level)}
+          <span key={level} aria-hidden="true" data-active={index === value ? "" : undefined} title={effortLabel(level)}>
+            {stopLabel(level, count)}
           </span>
         ))}
       </div>
