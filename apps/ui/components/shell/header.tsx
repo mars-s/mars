@@ -2,6 +2,7 @@
 
 import { Menu, Settings, X } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
+import "./shell.css";
 
 export function WorkspaceHeader() {
   const { snapshot, connectionError, actionError, setActionError, extensionsOpen, setSidebarOpen, refresh, selectConversation, openSettings } = useWorkspace();

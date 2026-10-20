@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectionSettings } from "@/components/settings/connection-settings";
 import { ThemeSettings } from "@/components/settings/theme-settings";
 import { useWorkspace } from "@/components/workspace-context";
+import "./settings.css";
 
 export function SettingsDialog() {
   const { snapshot, pending, connectionError, connected, settingsOpen, setSettingsOpen, settingsTab, setSettingsTab, action, safely } = useWorkspace();

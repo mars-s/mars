@@ -1,6 +1,7 @@
 "use client";
 import { Check, Circle, Terminal, FileText, Pencil, Wrench } from "lucide-react";
 import { record, type WorkerSummary } from "@/lib/pi/live-state";
+import "./activity.css";
 
 function argumentsOf(value: unknown) {
   if (typeof value !== "string") return record(value);

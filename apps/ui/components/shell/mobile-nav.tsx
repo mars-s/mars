@@ -3,6 +3,7 @@
 import { MessageSquare, Plus, Settings, Wrench } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWorkspace } from "@/components/workspace-context";
+import "./shell.css";
 import { useChildNavigation } from "./child-navigation";
 
 export function MobileNav() {

@@ -8,6 +8,7 @@ import { LiveWorkers } from "@/components/activity/live-workers";
 import { Composer } from "@/components/composer/composer";
 import { UserMessage, AssistantMessage } from "./messages";
 import { useWorkspace } from "@/components/workspace-context";
+import "./thread.css";
 
 export function ConversationView() {
   const { snapshot, pending, hasMessages, action, safely, selectConversation } = useWorkspace();
