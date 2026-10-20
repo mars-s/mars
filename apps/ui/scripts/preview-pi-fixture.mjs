@@ -126,7 +126,13 @@ const readBody = (req) =>
   new Promise((resolve) => {
     let data = "";
     req.on("data", (chunk) => (data += chunk));
-    req.on("end", () => resolve(data ? JSON.parse(data) : {}));
+    req.on("end", () => {
+      try {
+        resolve(data ? JSON.parse(data) : {});
+      } catch {
+        resolve({});
+      }
+    });
   });
 
 createServer(async (req, res) => {
@@ -134,6 +140,18 @@ createServer(async (req, res) => {
   const body = req.method === "POST" ? await readBody(req) : {};
   const id = url.searchParams.get("conversationId") || String(body.conversationId || "1");
   if (url.pathname === "/api/state") return json(res, 200, state(id));
+  if (url.pathname === "/api/attachments" && req.method === "POST")
+    return json(res, 201, {
+      attachment: {
+        id: "a".repeat(64),
+        name: decodeURIComponent(String(req.headers["x-file-name"] || "image")),
+        mimeType: String(req.headers["content-type"] || "image/png"),
+        size: 1,
+        width: 1,
+        height: 1,
+        url: `/api/attachments/${"a".repeat(64)}`,
+      },
+    });
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });
   if (url.pathname === "/api/connections")
     return json(res, 200, {
