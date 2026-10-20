@@ -1,0 +1,6 @@
+{
+  "models": {
+    "concurrency": 4,
+    "maxOutputTokens": 8192
+  }
+}

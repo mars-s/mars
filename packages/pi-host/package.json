@@ -1,0 +1,19 @@
+{
+  "scripts": {
+    "check": "node run-checks.mjs"
+  },
+  "dependencies": {
+    "@earendil-works/chord": "1.3.0",
+    "@earendil-works/pi-ai": "1.3.0",
+    "@earendil-works/pi-codemode": "1.3.0",
+    "@earendil-works/pi-durable": "1.3.0",
+    "sharp": "0.35.5"
+  },
+  "name": "@mars/pi-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.14.0"
+  }
+}

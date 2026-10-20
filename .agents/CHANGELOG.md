@@ -1,268 +1,85 @@
-# Changelog
+# Change log
 
-Append-only. One entry per change. Newest at the top. Name the agent that made
-the change so the other one knows who to ask.
+20 October 2026: scaffolded the owner-authorised replacement of ZCode with the
+Pi Durable and Mars UI monorepo. Imported the complete UI ancestry through
+db85735, including the agent's latest configuration/search/deploy changes.
+Preserved former Mars source in Git and private backup. Migration contract is
+in docs/MONOREPO.md. Installation and portability checks remain in progress.
+## 2026-10-20 UI monorepo integration
 
-Format: `- **<what changed>** — <agent> — <issue or reason>`
+- Preserved Pi live UI, local fonts, assistant-ui binding, image input, subthreads, ordered workflows, activity and plugin cards.
+- Configured explicit workspace tracing/Turbopack roots and exact MARS_PUBLIC_ORIGIN development hostnames. Added portable loopback Next launcher with MARS_UI_PORT.
+- Consolidated browser discovery through pinned Playwright, removed checkout-specific browser paths and made the opt-in existing-host check configurable.
+- Removed duplicate UI handoff scaffolding and obsolete runtime-retention/demo model instructions. Kept component notices and native fixture proof markers.
+- Verified UI typecheck, lint, 23 unit tests and actual Next configuration loading. Browser fixtures and production build are integration checks for the parent lane.
 
----
+## 2026-10-20: portable Pi host for the Mars monorepo
 
-## Unreleased
+Derived data, repository, UI, Node and hoisted SDK paths; retained explicit old data
+roots, added configurable ports and exact HTTP/WebSocket proxy origins and aliases.
+Self-deployment now stages the root workspace lock, installs host dependencies only,
+keeps active dependency snapshots and restores dependencies on watchdog rollback.
+Frontend patch validation finds workspace dependencies. Runtime guides reflect the
+Pi and UI layout. All 20 native checks passed, including a real temporary-root
+host restart/auth/proxy test and monorepo staging/dependency rollback fixtures.
+No live service or account was changed by this lane.
+## 2026-10-20 Pi monorepo installer
 
-- **The "Phone is using this task" badge is live again (ui agent).** The vendor build
-  stripped phone remote control and left three hardcoded stubs behind, so
-  `TaskList.tsx`, `workspace-grouped-tasks/task-row.tsx` and
-  `WorkspaceArchivedTasksFlatSection.tsx` all passed `isMobileActive = false` and the
-  badge could never light up, even though `phoneRemoteHost` already recorded the task ids
-  a phone drives and `TaskListItem` already rendered them. New hook
-  `packages/ui/src/hooks/usePhoneDrivenTaskIds.ts` reads `phoneRemoteService.listActiveTaskIds()`
-  and exposes both the full `Set<string>` and a per-task boolean selector. Polling lives
-  in one refcounted store per window (3s interval, one RPC regardless of row count) so a
-  per-row consumer cannot turn into a timer and a call per row. Every degraded path
-  reads as "the phone is driving nothing": no service on the host, no ServiceProvider,
-  a rejected or synchronously throwing RPC, and a response that lands after the last
-  subscriber unmounted. Covered by `packages/ui/test/phoneDrivenTaskStore.test.ts`
-  (run it from `packages/ui` with `pnpm exec tsx --test test/phoneDrivenTaskStore.test.ts`,
-  the `@/` alias only resolves from that directory).
+Added exact Node24.14.0/npm11.9.0 workspace manifests and one root npm lock,
+private idempotent bootstrap, local authenticated sign-in URL, development and
+production process launchers, isolated production smoke verification and portable
+Linux user-service generation. Production uses .next-build and development uses
+.next. The installer preserves existing native data, credentials, owner guides
+and extra private service configuration. Root dependency installation, typecheck,
+lint, seven installer/process/systemd-parser tests and JavaScript syntax passed.
+Production smoke and full integrated native/browser verification remain for the
+integration checkout after the portability and UI lanes are combined.
 
-- **The build no longer reads the vendor app's provider catalog.** The vendor build at
-  `/Applications/ZCode.app` exports `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`,
-  `ZCODE_BASE_URL` and the rest of its block into any shell it launches. `loadEndpointEnv`
-  merged `{...fileValues, ...env}`, so that ambient block silently beat `.env` and the
-  build read the vendor catalog instead of
-  `config/provider/zcode-builtin.json`, then died at `Invalid Built-in Provider config
-  (test)` with no hint about the cause. `scripts/load-endpoint-env.mjs` now classifies
-  leaked values by two signals, the vendor host or runtime cache path, and the
-  `__CFBundleIdentifier` launch marker that macOS sets for any app-bundle launch and that
-  nothing in this repo touches, drops them before the merge, and prints a
-  `[vendor-env] WARNING` naming the variable, the value and the scrub command. New
-  precedence: non-leaked ambient beats `.env.local` beats `.env` beats the default, so a
-  `.env` value now survives a contaminated shell while a deliberate `VAR=1 pnpm build`
-  still wins. `ZCODE_ENV` is warned about but never dropped, because
-  `scripts/dev-desktop-env.mjs` sets it in tree.
-  `scripts/builtin-provider-config.mjs` additionally hard-errors when the config path
-  resolves outside the repository root (escape hatch
-  `ZCODE_ALLOW_EXTERNAL_BUILTIN_PROVIDER_CONFIG=1`) and when the catalog carries
-  `zhipu` / `bigmodel` / `z.ai` / `off-peak` provider rules, which is the one failure mode
-  here that would not have announced itself. The scan is scoped to
-  `config.providerConfigRules` on purpose: the repository's own `modelConfigRules` already
-  carries `providerSiteRules` base URL patterns for `bigmodel.cn` and `zcode.z.ai`, and
-  those only recognise a site a user typed. Tests in
-  `scripts/vendor-env-guard.test.mjs`; the copy-pasteable scrub lives in
-  `.agents/vendor-env-scrub.md`. (agent: vendor-env) the build was reading
-  `/Applications/ZCode.app`'s provider catalog through the ambient environment.
-  `scripts/load-endpoint-env.mjs`, `scripts/builtin-provider-config.mjs`,
-  `scripts/vendor-env-guard.test.mjs`, `.agents/vendor-env-scrub.md`.
+## 2026-10-20: verify the first workspace dependency installation
 
-- **The packaged app now ships `packages/web/dist` as `resources/web`.** Phone
-  remote control serves the web client over a local HTTP server, and in a
-  packaged build the static root did not exist inside the bundle, so the phone
-  got a 404 for every asset. Dev worked only because the path pointed straight
-  at `packages/web/dist` in the repo. `electron-builder.config.js` gained an
-  `extraResources` entry (`to: "web"`, the exact directory name the runtime
-  joins onto `process.resourcesPath`), a `beforePack` preflight and an
-  `afterPack` assertion, plus the same preflight in `scripts/bundle.mjs`
-  immediately before it spawns electron-builder. Both preflights throw with the
-  path and the `pnpm --filter @zcode/web build` command; this matters because
-  electron-builder only logs a warning when an `extraResources` `from` is
-  missing and then copies nothing, so without the assertion a fresh checkout
-  ships a silently broken installer. `packages/web/dist` is gitignored via
-  `.gitignore:2` (`dist/`), so CI and any packaging job must build the web
-  package first; no build ordering was changed here. Test:
-  `packages/desktop/test/phoneRemotePackagedWebAssets.test.ts`. packaging/phone-remote
+An existing standalone host without an installed workspace lock marker now always
+performs the filtered native workspace install. The checkout lock no longer counts
+as proof of installed dependencies. Regression fixture uses matching declarations
+and a missing marker, then verifies the deployed marker and dependency rollback.
+## 2026-10-20 Host ownership and runtime separation
 
-- **Removed every `cdn-zcode.z.ai` origin from shipped source.** Remote release
-  assets, the official marketplace catalog, official plugin store icons and the
-  suggested-prompt icons no longer have a built-in vendor host; each is now
-  operator-configured via `ZCODE_CDN_BASE_URL`,
-  `ZCODE_OFFICIAL_MARKETPLACE_SOURCE` and `ZCODE_OFFICIAL_PLUGIN_ASSETS_BASE_URL`.
-  Remote connect and the plugin marketplace both stay. Development remote connect
-  still runs off `mock-cdn`; a packaged build with nothing configured now fails
-  with an explicit "no remote asset origin is configured" error instead of
-  reaching a third party. — w1/cdn — issue #4, de-Z.ai-ify the asset CDN path.
-  `packages/desktop/src/main/remoteCdn.ts`,
-  `packages/server/src/remote/remoteAssetCache.ts`,
-  `packages/shared/src/plugin-marketplaces.ts`,
-  `apps/zcode-cli/packages/bootstrap/src/app/official-plugin-definitions.ts`,
-  `apps/zcode-cli/packages/bootstrap/src/zcode-protocol/plugin-reference-catalog.ts`,
-  `packages/ui/src/v4/featureSuggestedPrompts.ts`,
-  `packages/ui/src/v4/ConversationDraftSuggestedPrompts.tsx`.
+The documented host launcher now requires resolved flock and acquires the shared
+private data/host.lock before native code or SQLite starts. Services record the
+resolved executable. A second host using the same root is rejected across ports,
+and SIGKILL releases ownership for restart. Bootstrap atomically initialises a
+separate private app runtime only when absent, including its workspace lock and
+dependency link. Subsequent setup preserves runtime changes and never replaces
+existing app files. Concurrent first setup publishes one complete persistent
+owner token. Installer tests cover real SQLite ownership, crash release, runtime
+preservation, concurrent setup and missing-flock failure without fallback.
 
-- **Reverted the Mars fork back to upstream ZCode 3.14.3.** Deleted
-  `packages/mars-gateway` and `packages/mars-desktop`, restored the original
-  ZCode theme, restored the Z.ai env config. Working tree verified byte-identical
-  to upstream commit `29628c9`. — ZCode — reverted a ChatGPT-authored fork that
-  replaced the ZCode UI with a thin Electron client the owner did not want.
-- **Added the shared agent context folder.** `.agents/README.md`,
-  `CONTEXT.md`, `ROADMAP.md`, `DECISIONS.md`, `CHANGELOG.md`, `verification.md`,
-  `pstack-models.md`. — ZCode — two agents share this repo and need one place to
-  record what each did.
-- **Pinned every pstack role to `space-bunny-free`.** — ZCode — owner instruction.
-- **`pnpm install` verified clean.** 14.5s against a warm store, exit 0. — ZCode —
-  baseline check before touching anything.
 
-## 2026-09-26 — wave 1 lane: provider-config sync (issue #5)
+## 2026-10-20 assembled migration verification
 
-Removed layer 3 of the provider config. `zcode-builtin-remote-synchronizer.ts` (lease/TTL/failure
-backoff hourly scheduler) and `zcode-builtin-download.ts` (the fetch of
-`https://<endpoint>/api/v1/client/configs` followed by a CDN release) are deleted, along with
-`zcodeBuiltinRemoteConfig.ts` in services. 13 files, 520 lines deleted, 36 added.
+Combined the three lanes and retained the latest agent changes. Added root boundary
+policy and negative import test, fixed native check execution from paths with spaces,
+and added an operator host:deploy command using the same staged native workflow.
+Removed the personal screenshot archive from the public tree. Full UI/private
+history stays in private backup; publication uses a reviewed source snapshot with
+public Mars ancestry only. Generic UI wording now refers to Pi/workspace.
 
-What survives on purpose: the bundled JSON in `packages/server/tsup.config.ts` stays the single
-source of truth, the Active/LKG file stays a discardable cache of it, and
-`ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` still overrides both for air-gapped installs.
+Clean npmci476, typecheck, lint,13 script tests,23 UI units,20 native checks,
+production build,6 browser fixtures and fresh isolated production restart pass.
+Actual live cutover and final public publication remain the next phase.
 
-The load-bearing part is the timer. The 60s `setInterval` in `NodeProviderConfigRuntime` used to
-run `refreshZCodeBuiltin()`, which went to the network. It is now created only when a recovery
-listener is registered, so a default install does no background polling at all.
+## 2026-10-20: isolate UI validation dependencies from the native host
 
-Verified on `main` after the merge: `pnpm typecheck` exit 0, `pnpm lint` exit 0 (70 warnings, all
-pre-existing). Also checked that no consumer still switches on the removed `"skipped"` result.
+Frontend patch validation now resolves Next from the UI source package and mounts
+that hoisted dependency tree. It never substitutes a filtered host SDK tree. Local
+standalone and toy fixture dependency directories still work. All 10 UI patch
+fixture scenarios pass, including real Bubblewrap/npm validation with separate
+hoisted Next/TypeScript packages and a native-only deployment dependency tree.
 
-Left for later: orphaned `zcode-builtin-refresh.json` lease files from old installs are never
-cleaned up, and `onZCodeBuiltinRefreshError` is now a misnomer (it reports recovery-check
-failures, not refreshes).
 
-## 2026-09-26 — wave 1 lane: asset CDN (issue #4)
+## 2026-10-20 managed dependency validation
 
-`DEFAULT_CDN_BASE_URL = https://cdn-zcode.z.ai` is gone. `resolveRemoteCdnBaseUrls` returns
-`[]` when nothing is configured, which promotes the local mock-CDN path that
-`remoteAssetDeployDecision` already preferred, rather than deleting the remote path. Three env
-vars now carry the whole contract: `ZCODE_CDN_BASE_URL`, `ZCODE_OFFICIAL_MARKETPLACE_SOURCE`
-and `ZCODE_OFFICIAL_PLUGIN_ASSETS_BASE_URL`.
-
-The plugin engine was not touched. `parseMarketplaceSourceInput` still accepts directory, file,
-git, github and url sources, and the built-in official plugins are still seeded at startup from
-`OFFICIAL_PLUGIN_DEFINITIONS`, so the marketplace survives; what is gone is the remote/community
-portion of the catalog, which `DECISIONS.md` entry 4 already accepted.
-
-I then fixed `.env.example` myself. It still shipped `ZCODE_CDN_BASE_URL=https://cdn-zcode.z.ai`
-and `ZCODE_REMOTE_ASSET_CDN_BASE_URL=https://cdn-zcode.z.ai/...`, so a developer copying it
-would have silently undone the whole lane. Both are now empty and documented as
-operator-configured, with the two new vars added.
-
-## 2026-09-26 — wave 1 lane: telemetry (issue #3)
-
-The vendor telemetry path is gone: the `@arms/rum-electron` dependency and its patch, 9
-desktop `*Telemetry.ts` aggregators, the ARMS bootstrap and RUM bridge, the crash-capture
-remote reporter, the whole `@zcode/telemetry` CLI package (OTLP exporter, bootstrap, agent trace
-runtime), and the shared `ZCODE_TELEMETRY_*` / `ZCODE_ARMS_RUM_ENDPOINT` surface. 129 files,
-13,417 lines deleted.
-
-Two behaviours worth remembering:
-
-  `reportTelemetryEvent` stays a platform method because 8 UI modules call it, but its main-side
-  channel is now `DiscardTelemetryEvent` and resolves without doing anything. Deleting the method
-  would have left 8 renderers with a rejected `ipcRenderer.invoke`.
-
-  `isZCodeAgentTelemetryEnvKey` was replaced by an explicit literal `OTEL_*` guard rather than
-  deleted. Removing it outright would have let OTEL credentials flow into Bash and MCP
-  subprocesses, which is the confused-deputy problem it existed to stop.
-
-`crashReporter` now runs with `uploadToServer: false`, so crash dumps stay local.
-
-### The one bug the worker's own verification missed
-
-The worker removed the ARMS patch from `pnpm-lock.yaml` and deleted the patch file, but left
-`pnpm.patchedDependencies` in the root `package.json` still pointing at it. `pnpm install` died
-with `ENOENT: no such file or directory, open 'patches/@arms__rum-electron@0.0.3.patch'`. The
-worker's `typecheck` and `lint` both passed because it ran them against a pre-existing
-`node_modules` without reinstalling. Removing the declaration makes
-`pnpm install --frozen-lockfile` exit 0 with `Packages: -243`.
-
-The lesson for every future wave in this repo: **a lockfile or manifest change is not verified
-until `pnpm install --frozen-lockfile` has been run after it.** `pnpm typecheck` and
-`pnpm lint` prove nothing about installability.
-
-### Known second channel, deliberately not touched
-
-`packages/desktop/src/main/localTtft*` still exports OTLP, but only to an endpoint the user
-configures via `OTEL_EXPORTER_OTLP_*`. It contains no hardcoded vendor host and was out of scope
-for issue #3. It is a second telemetry channel and should be a deliberate decision, not an
-accident. Same for the CLI MCP telemetry tracker, which reports over local IPC to the app and
-never to the network; its desktop consumer is gone, so its output now has nowhere to land.
-
-## 2026-09-26 — provider family union is data-driven (issue #7)
-
-The cascade risk was never the named `ModelProviderFamilyId` type, which only 7 files
-reference. It was the literal `"zai" | "bigmodel"` hand-inlined in 13 other files across
-shared, services, ui, desktop and the CLI. Removing Z.ai would have meant editing 13
-unrelated signatures.
-
-`ModelProviderFamilyId` is now derived from `MODEL_PROVIDER_FAMILY_SPECS`. Adding or removing
-a family is one array entry. The spec shape is string-typed, the family lookup map is keyed by
-string rather than `BuiltinModelProviderId`, and `normalizeProviderFamilyDomain` validates
-through the same set instead of two hardcoded comparisons. Added `isModelProviderFamilyId`.
-
-Verified: no inlined union remains, root typecheck exit 0, lint exit 0, `apps/zcode-cli` 25/25,
-and the four desktop projects root typecheck skips are unchanged at 82/3/123/1 pre-existing
-errors against a stashed baseline.
-
-## 2026-09-26 — the desktop typecheck gap, found by running it
-
-Root `pnpm typecheck` builds ten projects. It misses `apps/zcode-cli` entirely and, inside
-`packages/desktop`, it builds only `tsconfig.host.json` — not `main`, `preload`, `renderer` or
-`scheduler`. Those four carry **209 pre-existing type errors** between them.
-
-Nothing about this changes the stage, but it changes what a green typecheck means. A wave can
-merge with a clean root typecheck and still have broken the desktop renderer. The per-project
-baseline table is now in `verification.md`.
-
-One trap worth repeating: `tsc -b` writes `.d.ts` and `.js` artifacts into
-`packages/desktop/src/scheduler/`, which then collide with `git stash pop`. Delete those four
-generated files before popping. I verified the stash held nothing extra before dropping it.
-
-## 2026-09-26 — marketplace records migration
-
-Removing the CDN default only fixed fresh installs. An upgrading install still had a
-`zcode-plugins-official` record in `known_marketplaces.json` with a url source on
-`cdn-zcode.z.ai`, and `updateMarketplace` calls `ensureDefaultPluginMarketplaces` before
-refreshing, so the store's refresh button kept hitting the retired host.
-
-`ensureDefaultPluginMarketplaces` now drops records whose url or git source is on a retired
-host, then re-adds any configured default. Filtering has to come before the add-missing step,
-otherwise a stale record blocks the re-add of a freshly configured
-`ZCODE_OFFICIAL_MARKETPLACE_SOURCE` for the same id. Subdomains count as the same operator.
-
-Proven by executing the real function against seeded storage roots — six cases, all pass —
-rather than by reading the diff. See the table in `verification.md`.
-
-## 2026-09-26 — verification: the app was already drivable
-
-`maintain-verification-skill` cannot be used yet. It requires an existing project-local verify
-skill with a feature map under `.claude/skills/verify/`, and this repo has none. Per its own
-step 0, the correct next move is `/create-verification-skill`, not running the maintain pass
-against an invented target.
-
-What the repo *does* have is `.agents/skills/electron` and `.agents/skills/dogfood`, both
-driving the app through `agent-browser` over CDP, and `agent-browser` 0.23.0 is installed.
-`packages/desktop/src/main/index.ts:201` already appends `--remote-debugging-port=9229` when the
-app is unpackaged. So the whole live-verification capability the maintain skill assumes was
-already available and unclaimed.
-
-I tried adding a `ZCODE_CDP_PORT` argument to the dev spawn and **reverted it**. The main
-process overrides the argument with its own switch, so the port stayed 9229 while my code
-logged 9222. A log line that confidently reports the wrong port is worse than no log line.
-
-Also found: the vendor's e2e harness is not in this tree. `ZCODE_E2E_KEEP_BUILD_CACHE`,
-`.e2e-cache`, `.e2e-artifacts` and `.e2e-home-*` appear in scripts as leftovers, and there is no
-`.github/workflows/` directory and no test runner. `verify:pre-push` is lint plus an
-architecture check. There is no test suite to extend; a mass e2e harness has to be built.
-
-Then ran the live pass by hand, and the headline result: with the app running, the marketplace
-open, and everything else idle, the whole process tree held **only loopback sockets** — the CDP
-port, my agent-browser session, and the Vite dev server. Zero external connections. That is the
-proof that phoning home actually stopped, and it is now recorded rather than asserted.
-
-## 2026-09-26 — AGENTS.md translated to English (issue #16)
-
-The owner does not read Chinese. All 61 Chinese lines in `AGENTS.md` are now English, which
-closes the language conflict recorded in issue #16: upstream mandated Chinese comments when
-fixing bugs, and that line now says English.
-
-Verified by diff, not by reading. All 61 backticked code spans are byte-identical to the
-previous version, so every command, path and identifier survived the translation. Bullet count
-48 to 48, table rows 12 to 12, headings 7 to 7, and zero Han characters remain.
-
-Also removed from the global `~/AGENTS.md`, at the owner's request: the graphify trigger and
-the `@RTK.md` include. An English-only rule now lives there, so both agents write English.
+The real assembled host stage passed20checks, locked host-only installation and
+isolatedboot. Actual UIpatch validation with native-only host dependencies passed
+real typecheck, lint and webpack build inside Bubblewrap, with no promotion.
+Resolved UIdependencies from the UIworkspace independently of runtime dependencies.
+Bumped hostVersion to mars-monorepo-1 for an observable cutover check.

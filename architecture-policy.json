@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "modules": {
+    "ui": { "root": "apps/ui", "responsibility": "Browser rendering, local drafts and server-only HTTP bridge", "cannotImport": ["packages/pi-host"] },
+    "pi-host": { "root": "packages/pi-host", "responsibility": "Pi-native state, owner HTTP boundary and plugin/runtime adapters", "cannotImport": ["apps/ui"] }
+  },
+  "integration": "Host proxies HTTP/HMR to UI; server-only UI bridge proxies authenticated HTTP to host. No direct module imports between workspaces."
+}
