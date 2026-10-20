@@ -15,6 +15,7 @@ import { createDevTools } from "./dev-tools.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
+import { workbenchTools } from "./workbench/tools.mjs";
 import { createOrchestrationExtension, listWorkers, stopWorker } from "./orchestration.mjs";
 import { nextPage, attachNextUpgrade } from "./next-proxy.mjs";
 import { readFile, writeFile, mkdir, appendFile, symlink, lstat, readlink, rename } from "node:fs/promises";
@@ -35,7 +36,7 @@ import {
   defineTask,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { ROOT, WORK, APP, PORT, DEPENDENCIES, requestPolicy, Credentials, atomicJson } from "./security.mjs";
+import { ROOT, WORK, APP, PORT, UI_PORT, DEPENDENCIES, requestPolicy, Credentials, atomicJson } from "./security.mjs";
 import { ExtensionStore } from "./extension-store.mjs";
 import { UiPatchStore } from "./ui-patches.mjs";
 await mkdir(ROOT + "/data", { recursive: true, mode: 0o700 });
@@ -364,7 +365,7 @@ const workbench = createWorkbench({
   work: WORK,
   send,
   jsonBody,
-  tools: {},
+  tools: workbenchTools({ work: WORK, hostPort: PORT, uiPort: UI_PORT }),
   extensionUis: () =>
     extensions.catalogue
       .filter((row) => plugins.list().find((plugin) => plugin.name === row.name)?.enabled !== false && plugins.isUiEnabled(row.name))
