@@ -199,7 +199,7 @@ createServer(async (req, res) => {
         files: { available: false, reason: "Fixture: Files is not built yet." },
         terminal: { available: false, reason: "Fixture: Terminal is not built yet." },
         "side-chat": { available: true },
-        page: { available: false, reason: "Fixture: Pages are not built yet." },
+        page: { available: true },
         browser: { available: false, reason: "Fixture: Browser is not built yet." },
       },
     });
@@ -210,6 +210,31 @@ createServer(async (req, res) => {
         { kind: "page", title: "Release plan (fixture)", name: "release-plan" },
       ],
     });
+  // workbench lane: pages
+  if (url.pathname === "/api/workbench/pages" || url.pathname.startsWith("/api/workbench/pages/")) {
+    const fixturePages = (globalThis.marsFixturePages ??= new Map([
+      ["release-plan", { text: "# Release plan (fixture)\n\nFixture page: not a real workspace file.\n\n- [x] Merge the workbench lanes\n- [ ] Run the Bot Box checks\n", modified: Date.now() - 3600000 }],
+      ["reading-notes", { text: "# Reading notes (fixture)\n\nA second fixture page.", modified: Date.now() - 86400000 * 2 }],
+    ]));
+    const pageTitle = (value, name) => /^# +(.+?)\s*#*\s*$/m.exec(value)?.[1].trim() || name;
+    const summary = ([name, page]) => ({ name, title: pageTitle(page.text, name), modified: page.modified, size: Buffer.byteLength(page.text) });
+    if (req.method === "GET" && url.pathname === "/api/workbench/pages")
+      return json(res, 200, { pages: [...fixturePages].map(summary).sort((a, b) => b.modified - a.modified) });
+    if (req.method === "GET") {
+      const name = url.pathname.slice("/api/workbench/pages/".length);
+      const page = fixturePages.get(name);
+      return page ? json(res, 200, { name, text: page.text, modified: page.modified }) : json(res, 404, { error: "That page does not exist." });
+    }
+    if (typeof body.text !== "string") return json(res, 400, { error: "Page text must be a string." });
+    let name = body.name;
+    if (name === undefined) for (let n = 1; fixturePages.has((name = n === 1 ? "untitled" : `untitled-${n}`)); n++);
+    if (!/^[a-z0-9-]{1,64}$/.test(String(name))) return json(res, 400, { error: "Page names use a to z, 0 to 9 and hyphens, up to 64 characters." });
+    const current = fixturePages.get(name);
+    if (current ? body.baseModified !== current.modified : body.baseModified !== undefined)
+      return json(res, 409, { error: "This page changed elsewhere since you opened it.", modified: current?.modified ?? 0 });
+    fixturePages.set(name, { text: body.text, modified: Math.max(Date.now(), (current?.modified ?? 0) + 1) });
+    return json(res, current ? 200 : 201, summary([name, fixturePages.get(name)]));
+  }
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });
   if (url.pathname === "/api/connections")
     return json(res, 200, {

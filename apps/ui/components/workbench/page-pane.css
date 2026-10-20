@@ -1,0 +1,332 @@
+/* Pages pane (docs/WORKBENCH.md "Pages"). Tokens only; see DESIGN.md. */
+.wb-pages,
+.wb-page {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 760px);
+  min-height: 100%;
+  margin: 0 auto;
+}
+.wb-pages {
+  gap: 16px;
+  padding: 28px 24px 40px;
+}
+.wb-pages-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.wb-pages-head h2,
+.wb-page-heading h2 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.wb-pages-head h2 {
+  flex: 1;
+  font-size: 24px;
+  line-height: 1.25;
+}
+.wb-page-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 120ms var(--ease-out);
+}
+.wb-page-new:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface-raised));
+}
+.wb-page-new:disabled {
+  color: var(--text-muted);
+}
+.wb-page-problem {
+  color: var(--red);
+}
+.wb-page-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wb-page-list button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  transition: background-color 120ms var(--ease-out);
+}
+.wb-page-list button:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.wb-page-list svg {
+  grid-row: span 2;
+  color: var(--text-muted);
+}
+.wb-page-row-title {
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-page-list small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Editor */
+.wb-page {
+  padding: 12px 16px 0;
+}
+.wb-page-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+}
+.wb-page-heading {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.wb-page-heading h2 {
+  overflow: hidden;
+  font-size: 20px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-page-heading small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.wb-page-view {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.wb-page-view button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.wb-page-view button[aria-pressed="true"] {
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+.wb-page-view button:hover:not([aria-pressed="true"]):not(:disabled) {
+  color: var(--text);
+}
+.wb-page-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 28px;
+  padding: 0 4px 0 48px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.wb-page-status[data-status="conflict"],
+.wb-page-status[data-status="failed"],
+.wb-page-status[data-status="unavailable"] {
+  color: var(--amber);
+}
+.wb-page-status button {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.wb-page-status button:hover {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface-raised));
+}
+.wb-page-text,
+.wb-page-preview {
+  flex: 1;
+  min-height: 320px;
+  margin: 4px 0 0;
+  padding: 16px 16px 48px 48px;
+}
+.wb-page-text {
+  width: 100%;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.65;
+  caret-color: var(--clay);
+}
+.wb-page-text::placeholder {
+  color: var(--text-faint);
+}
+.wb-page-text:disabled {
+  color: var(--text-muted);
+}
+/* The writing surface shows focus with its caret and a quiet rule, not the global ring. */
+.wb-page-text:focus-visible {
+  outline: none;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--clay) 55%, transparent);
+}
+.wb-page-text::selection,
+.wb-page-preview ::selection {
+  background: color-mix(in srgb, var(--clay) 32%, transparent);
+}
+
+/* Preview: the same reading rhythm as an assistant turn. */
+.wb-page-preview {
+  max-width: 72ch;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.wb-page-preview > :first-child {
+  margin-top: 0;
+}
+.wb-page-preview p {
+  margin: 0 0 14px;
+}
+.wb-page-preview :is(h1, h2, h3, h4) {
+  margin: 28px 0 10px;
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.wb-page-preview h1 {
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.wb-page-preview h2 {
+  font-size: 19px;
+}
+.wb-page-preview h3 {
+  font-size: 16px;
+}
+.wb-page-preview :is(ul, ol) {
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+.wb-page-preview li + li {
+  margin-top: 4px;
+}
+.wb-page-preview li::marker {
+  color: var(--text-muted);
+}
+.wb-page-preview a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--clay) 60%, transparent);
+  text-underline-offset: 3px;
+}
+.wb-page-preview blockquote {
+  margin: 0 0 14px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.wb-page-preview :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  font-size: 0.88em;
+}
+.wb-page-preview pre {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.wb-page-preview table {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 14px;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.wb-page-preview :is(th, td) {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.wb-page-preview th {
+  font-weight: 600;
+}
+.wb-page-preview hr {
+  margin: 24px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.wb-page-preview img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .wb-pages {
+    padding: 20px 16px 32px;
+  }
+  .wb-page {
+    padding: 8px 8px 0;
+  }
+  .wb-page-status {
+    padding-left: 8px;
+  }
+  .wb-page-text,
+  .wb-page-preview {
+    padding: 12px 12px 40px;
+  }
+  .wb-page-new,
+  .wb-page-view button {
+    min-height: 40px;
+  }
+  .wb-page-text {
+    font-size: 16px;
+  }
+}

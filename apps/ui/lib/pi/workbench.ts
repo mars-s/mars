@@ -119,6 +119,16 @@ export function parsePage(value: unknown): Page {
   const row = record(record(value).page ?? value);
   return { name: str(row.name), text: str(row.text), modified: num(row.modified) };
 }
+/** A POST /api/workbench/pages answer: the saved page's name, title and new modified time. */
+export type SavedPage = PageSummary;
+export function parseSavedPage(value: unknown): SavedPage {
+  const row = record(value);
+  const name = str(row.name);
+  if (!PAGE_NAME.test(name) || !num(row.modified)) throw Error("Pi did not confirm the page save. Your text is kept; try again.");
+  return { name, title: str(row.title) || name, modified: num(row.modified), size: num(row.size) };
+}
+/** Title shown for a page: its first `# heading`, else its name. Mirrors the host. */
+export const pageTitle = (text: string, name: string) => /^# +(.+?)\s*#*\s*$/m.exec(text)?.[1].trim() || name;
 
 export type TerminalChunk = { offset: number; data: string; exited: boolean; exitCode?: number; dropped: boolean };
 /** `data` stays base64 here; the pane decodes bytes for xterm. */

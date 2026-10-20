@@ -1,0 +1,262 @@
+/* Side chat pane (docs/WORKBENCH.md). Reuses the thread renderers; tokens only. */
+.wb-chat-pick {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  width: min(100%, 640px);
+  margin: 0 auto;
+  padding: 32px 24px 40px;
+}
+.wb-chat-pick h2 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.wb-chat-pick h3 {
+  margin: 4px 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.wb-chat-new {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 120ms var(--ease-out);
+}
+.wb-chat-new:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface-raised));
+}
+.wb-chat-new:disabled {
+  color: var(--text-muted);
+}
+.wb-chat-problem {
+  color: var(--red);
+}
+.wb-chat-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wb-chat-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  transition: background-color 120ms var(--ease-out);
+}
+.wb-chat-list button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.wb-chat-list button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+.wb-chat-list svg {
+  flex: none;
+  color: var(--text-muted);
+}
+.wb-chat-list span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-chat-list small {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Conversation */
+.wb-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.wb-chat-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 12px;
+}
+.wb-chat-heading {
+  display: grid;
+  min-width: 0;
+}
+.wb-chat-heading h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-chat-heading small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-chat > .wb-chat-problem {
+  padding: 0 20px 8px;
+}
+.wb-chat-thread {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.wb-chat-viewport {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 20px 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.wb-chat-empty {
+  padding: 24px 0;
+  text-align: center;
+}
+/* The shared renderers at a side-panel scale. */
+.wb-chat-viewport .live-message {
+  margin-bottom: 20px;
+}
+.wb-chat-viewport .live-user-bubble {
+  font-size: 14px;
+}
+.wb-chat-viewport .live-assistant,
+.wb-chat-viewport .live-assistant .mars-markdown {
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.wb-chat-composer {
+  display: grid;
+  flex: none;
+  gap: 6px;
+  padding: 8px 16px max(14px, env(safe-area-inset-bottom));
+}
+.wb-chat-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--composer);
+  box-shadow: var(--shadow-composer);
+  transition: border-color 150ms var(--ease-out);
+}
+.wb-chat-box:focus-within {
+  border-color: color-mix(in srgb, var(--text) 24%, var(--border));
+}
+.wb-chat-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 24px;
+  padding: 4px 0;
+  border: 0;
+  outline: none !important;
+  resize: none;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.wb-chat-input::placeholder {
+  color: var(--text-faint);
+}
+.wb-chat-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-faint);
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    color 150ms var(--ease-out);
+}
+.wb-chat-send[data-ready] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.wb-chat-send[data-ready]:hover {
+  background: var(--clay-strong);
+}
+.wb-chat-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.wb-chat-send:disabled {
+  cursor: not-allowed;
+}
+.wb-chat-stop {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+@media (max-width: 768px) {
+  .wb-chat-pick {
+    padding: 24px 16px 32px;
+  }
+  .wb-chat-viewport {
+    padding: 8px 14px 12px;
+  }
+  .wb-chat-composer {
+    padding-inline: 10px;
+  }
+  .wb-chat-new,
+  .wb-chat-list button {
+    min-height: 44px;
+  }
+  .wb-chat-send {
+    width: 40px;
+    height: 40px;
+  }
+  .wb-chat-input {
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-chat-send {
+    transition: none;
+  }
+}
