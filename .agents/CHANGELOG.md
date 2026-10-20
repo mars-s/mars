@@ -111,3 +111,30 @@ codes come only from Pi data. Workers and workflows are compact task cards with
 StatusMark, model, elapsed time, open-thread links and the existing stop
 controls. Usage with no workers or workflows is a quiet line, hidden in an empty
 chat. The vendored bash card scrolls long output instead of clipping it.
+
+## 2026-10-20 Claude-style redesign of the live Pi client
+
+Replaced the screenshot-ledger DESIGN.md with a Claude desktop direction:
+warm charcoal and ivory tokens, one clay accent, the Phase Mars mark (sidebar,
+greeting, favicon). Added /design-system as the live token, mark and component
+preview. Vendored the selected Kokonut UI, 21st Agent Elements, assistant-ui
+Elements and AI Elements source with a hashed register and licences, themed to
+Mars tokens by script. The Pi host now reports the current context window the
+way Pi Durable measures it for compaction, and accepts /api/compact.
+
+Five parallel lanes rebuilt the live UI on that base:
+- Shell: 288px sidebar collapsing to a 56px rail (mars-sidebar-collapsed),
+  shared sidebar and drawer tree, Recents with a running dot, quiet subthread
+  status, 48px borderless header, inline error banner.
+- Composer: one 20px surface on the assistant-ui composer runtime, Radix model
+  menu from Pi's model list (no effort levels: Pi exposes none), clay send and
+  stop, 56px image drafts, Kokonut-style context meter fed only by
+  snapshot.context with estimates labelled and Compact now.
+- Thread: 768px column, serif greeting beside the mark, user bubbles, unboxed
+  Markdown with code headers and copy, quiet outcome notes, pulsing mark while
+  running. chat-thread.css removed.
+- Settings: 760x560 dialog with a left tab rail, full-screen sheet on phones,
+  theme cards painted by their own data-theme, true-black OLED, restyled
+  buttons, inputs, switches and tabs, a calm Extensions page.
+- Activity: see the entry above.
+Verification is against the preview fixture only; see the integration entry.
