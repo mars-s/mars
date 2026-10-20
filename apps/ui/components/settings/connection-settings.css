@@ -1,21 +1,25 @@
 .connection-settings {
   min-width: 0;
 }
+.connection-settings .connection-settings-intro {
+  margin-bottom: 20px;
+}
+.connection-settings section {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
 .connection-settings section + section {
-  margin-top: 26px;
-  padding-top: 22px;
-  border-top: 1px solid var(--border);
+  margin-top: 12px;
 }
 .connection-settings-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 4px;
 }
 .connection-settings-heading h3 {
-  font-size: 14px;
-  font-weight: 500;
   margin: 0;
 }
 .connection-settings-heading span {
@@ -24,56 +28,49 @@
 }
 .connection-settings label {
   display: block;
-  margin: 14px 0 8px;
+  margin: 14px 0 6px;
   color: var(--text);
   font-size: 13px;
-}
-.connection-settings input {
-  height: 44px;
+  font-weight: 500;
 }
 .connection-settings .connection-settings-help {
+  margin: 6px 0 0;
   font-size: 12px;
-  line-height: 1.6;
-  margin: 8px 0 16px;
+  line-height: 1.55;
 }
 .connection-settings-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 16px;
 }
 .connection-settings-save {
   display: flex;
   justify-content: flex-end;
-  margin-top: 24px;
-}
-.connection-settings button {
-  min-height: 44px;
-  transition-property: color, background-color, border-color;
+  margin-top: 20px;
 }
 .connection-settings .connection-settings-error {
+  margin-top: 10px;
   color: var(--red);
   overflow-wrap: anywhere;
 }
 .connection-settings .connection-settings-notice {
+  margin-top: 14px;
   color: var(--text);
   overflow-wrap: anywhere;
 }
 .connection-settings-loading {
   min-height: 80px;
 }
-@media (max-width: 460px) {
+@media (max-width: 640px) {
+  .connection-settings section {
+    padding: 14px;
+  }
   .connection-settings-heading {
     flex-wrap: wrap;
     gap: 6px;
   }
   .connection-settings-save button {
     width: 100%;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .connection-settings button,
-  .connection-settings input {
-    transition: none;
   }
 }

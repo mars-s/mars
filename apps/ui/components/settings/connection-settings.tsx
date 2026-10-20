@@ -83,13 +83,10 @@ export function ConnectionSettings() {
 
   return (
     <div className="connection-settings" aria-busy={busy}>
-      <div className="connection-settings-intro">
-        <h2>Connected apps</h2>
-        <p>
-          Credentials stay on the Pi host and are never added to the conversation. Use fresh keys if you
-          have shared them in chat.
-        </p>
-      </div>
+      <p className="connection-settings-intro">
+        Credentials stay on the Pi host and are never added to the conversation. Use fresh keys if
+        you have shared them in chat.
+      </p>
       {error && (
         <p className="connection-settings-error" role="alert">
           {error}

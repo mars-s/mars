@@ -1,0 +1,265 @@
+/* Extensions page: one calm column of bordered rows. */
+.live-extensions-page {
+  width: 100%;
+  max-width: 816px;
+  margin: 0 auto;
+  padding: 48px 24px 56px;
+  overflow-y: auto;
+}
+.live-extensions-page > h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.live-extensions-page > p {
+  margin: 8px 0 0;
+  max-width: 60ch;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.live-plugin-manager {
+  display: grid;
+  gap: 12px;
+  margin-top: 32px;
+}
+.live-plugin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.live-plugin-toolbar p {
+  margin: 0;
+}
+.live-plugin-manager > [role="alert"],
+.live-plugin-manager > [role="status"],
+.live-plugin-empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.live-plugin-manager > [role="alert"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--red);
+  overflow-wrap: anywhere;
+}
+.live-plugin-manager > [role="status"],
+.live-plugin-empty {
+  color: var(--text-muted);
+}
+.live-plugin-empty {
+  padding: 20px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+.live-plugin-list {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.live-plugin-card {
+  padding: 16px 18px;
+}
+.live-plugin-card + .live-plugin-card {
+  border-top: 1px solid var(--border);
+}
+.live-plugin-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.live-plugin-card > header > div {
+  min-width: 0;
+}
+.live-plugin-card h2 {
+  display: inline;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+.live-plugin-card header small {
+  margin-left: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.live-plugin-card header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.live-plugin-card > header [data-slot="switch"] {
+  margin-top: 2px;
+}
+.live-plugin-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+}
+.live-plugin-controls details {
+  flex: 1 1 100%;
+  font-size: 13px;
+}
+.live-plugin-controls summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px 0 6px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+.live-plugin-controls summary::-webkit-details-marker {
+  display: none;
+}
+.live-plugin-controls summary:hover {
+  background: var(--accent);
+  color: var(--text);
+}
+.live-plugin-controls summary svg {
+  transition: rotate 150ms var(--ease-out);
+}
+.live-plugin-controls details[open] > summary svg {
+  rotate: 90deg;
+}
+.live-plugin-tools {
+  margin: 8px 0 0;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.live-plugin-tools label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  min-height: 44px;
+  padding: 10px 0;
+}
+.live-plugin-tools label + label {
+  border-top: 1px solid var(--border);
+}
+.live-plugin-tools strong {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.live-plugin-tools .live-plugin-setting {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+}
+.live-plugin-tools small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.live-plugin-tools p {
+  margin: 0;
+  padding: 12px 0;
+  color: var(--text-muted);
+}
+.live-plugin-card > [role="status"] {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.live-system-plugins {
+  margin-top: 12px;
+}
+.live-system-plugins > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
+}
+.live-system-plugins > summary::-webkit-details-marker {
+  display: none;
+}
+.live-system-plugins > summary svg {
+  transition: rotate 150ms var(--ease-out);
+}
+.live-system-plugins[open] > summary svg {
+  rotate: 90deg;
+}
+.live-system-plugins > summary:hover {
+  color: var(--text);
+}
+
+/* Installed extension interfaces mount their own markup here. */
+.live-extension {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.live-extension [role="alert"] {
+  margin: 0 0 8px;
+  color: var(--red);
+}
+.live-extension button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+}
+.live-extension button:hover {
+  background: var(--accent);
+}
+.live-extension pre {
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (pointer: coarse) {
+  .live-plugin-controls summary,
+  .live-system-plugins > summary,
+  .live-extension button {
+    min-height: 44px;
+  }
+}
+@media (max-width: 640px) {
+  .live-extensions-page {
+    padding: 28px 16px 40px;
+  }
+  .live-extensions-page > h1 {
+    font-size: 24px;
+  }
+  .live-plugin-card {
+    padding: 14px;
+  }
+}
