@@ -191,6 +191,25 @@ createServer(async (req, res) => {
         url: `/api/attachments/${"a".repeat(64)}`,
       },
     });
+  // Workbench fixture routes: labelled data only, mirroring docs/WORKBENCH.md.
+  if (url.pathname === "/api/workbench/capabilities")
+    return json(res, 200, {
+      tools: {
+        changes: { available: false, reason: "Fixture: Changes is not built yet." },
+        files: { available: false, reason: "Fixture: Files is not built yet." },
+        terminal: { available: false, reason: "Fixture: Terminal is not built yet." },
+        "side-chat": { available: true },
+        page: { available: false, reason: "Fixture: Pages are not built yet." },
+        browser: { available: false, reason: "Fixture: Browser is not built yet." },
+      },
+    });
+  if (url.pathname === "/api/workbench/suggestions")
+    return json(res, 200, {
+      suggestions: [
+        { kind: "service", title: "Fixture service (Chemwatch dev)", port: 3100 },
+        { kind: "page", title: "Release plan (fixture)", name: "release-plan" },
+      ],
+    });
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });
   if (url.pathname === "/api/connections")
     return json(res, 200, {

@@ -14,6 +14,7 @@ import { createWebSearchExtension } from "./web-search.mjs";
 import { createDevTools } from "./dev-tools.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { contextMeter } from "./context-meter.mjs";
+import { createWorkbench } from "./workbench/index.mjs";
 import { createOrchestrationExtension, listWorkers, stopWorker } from "./orchestration.mjs";
 import { nextPage, attachNextUpgrade } from "./next-proxy.mjs";
 import { readFile, writeFile, mkdir, appendFile, symlink, lstat, readlink, rename } from "node:fs/promises";
@@ -359,6 +360,16 @@ function valid(value) {
     b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+const workbench = createWorkbench({
+  work: WORK,
+  send,
+  jsonBody,
+  tools: {},
+  extensionUis: () =>
+    extensions.catalogue
+      .filter((row) => plugins.list().find((plugin) => plugin.name === row.name)?.enabled !== false && plugins.isUiEnabled(row.name))
+      .map((row) => ({ title: row.title || row.name, hash: row.hash })),
+});
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://local");
@@ -425,6 +436,7 @@ const server = http.createServer(async (req, res) => {
       res.end(await extensions.ui(hash));
       return;
     }
+    if (await workbench.handle(req, res, url)) return;
     if (url.pathname === "/api/plugins" && req.method === "GET") {
       send(res, 200, { plugins: plugins.list() }); return;
     }

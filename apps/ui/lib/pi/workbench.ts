@@ -1,0 +1,181 @@
+// Boundary parsers for /api/workbench/* (docs/WORKBENCH.md). Type-only imports so node --test loads it.
+
+const record = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+const str = (value: unknown) => (typeof value === "string" ? value : "");
+const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+
+export type ToolCapability = { available: boolean; reason: string };
+export type Capabilities = Record<
+  "changes" | "files" | "terminal" | "side-chat" | "page" | "browser",
+  ToolCapability
+>;
+const TOOLS = ["changes", "files", "terminal", "side-chat", "page", "browser"] as const;
+
+/** Unknown or missing tools are unavailable with the host's reason, or a generic one. */
+export function parseCapabilities(value: unknown): Capabilities {
+  const row = record(record(value).tools);
+  return Object.fromEntries(
+    TOOLS.map((tool) => {
+      const item = record(row[tool]);
+      return [
+        tool,
+        item.available === true
+          ? { available: true, reason: "" }
+          : { available: false, reason: str(item.reason) || "This Pi host does not offer it yet." },
+      ];
+    }),
+  ) as Capabilities;
+}
+
+export type FileEntry = { name: string; type: "file" | "dir" | "link"; size: number; modified: number };
+export type Listing = { path: string; entries: FileEntry[]; truncated: boolean };
+export function parseListing(value: unknown): Listing {
+  const row = record(value);
+  return {
+    path: str(row.path),
+    truncated: row.truncated === true,
+    entries: list(row.entries)
+      .map(record)
+      .flatMap((entry) => {
+        const name = str(entry.name);
+        const type = entry.type === "dir" || entry.type === "link" ? entry.type : "file";
+        return name && !name.includes("/") ? [{ name, type, size: num(entry.size), modified: num(entry.modified) } as FileEntry] : [];
+      }),
+  };
+}
+
+export type FileContent = {
+  path: string;
+  size: number;
+  modified: number;
+  kind: "text" | "image" | "binary";
+  text: string;
+  truncated: boolean;
+};
+export function parseFile(value: unknown): FileContent {
+  const row = record(value);
+  const kind = row.kind === "image" || row.kind === "binary" ? row.kind : "text";
+  return {
+    path: str(row.path),
+    size: num(row.size),
+    modified: num(row.modified),
+    kind,
+    text: kind === "text" ? str(row.text) : "",
+    truncated: row.truncated === true,
+  };
+}
+
+export type SearchHit = { path: string; type: "file" | "dir" };
+export function parseSearch(value: unknown): SearchHit[] {
+  return list(record(value).results)
+    .map(record)
+    .flatMap((hit) => (str(hit.path) ? [{ path: str(hit.path), type: hit.type === "dir" ? "dir" : "file" } as SearchHit] : []));
+}
+
+export type Repo = { path: string; branch: string; ahead: number; behind: number; dirty: boolean };
+export function parseRepos(value: unknown): Repo[] {
+  return list(record(value).repos)
+    .map(record)
+    .flatMap((repo) =>
+      typeof repo.path === "string"
+        ? [{ path: repo.path, branch: str(repo.branch), ahead: num(repo.ahead), behind: num(repo.behind), dirty: repo.dirty === true }]
+        : [],
+    );
+}
+
+export type ChangedFile = { path: string; status: string; added: number; removed: number; binary: boolean };
+export type Changes = { repo: string; branch: string; files: ChangedFile[]; patch: string; truncated: boolean };
+export function parseChanges(value: unknown): Changes {
+  const row = record(value);
+  return {
+    repo: str(row.repo),
+    branch: str(row.branch),
+    patch: str(row.patch),
+    truncated: row.truncated === true,
+    files: list(row.files)
+      .map(record)
+      .flatMap((file) =>
+        str(file.path)
+          ? [{ path: str(file.path), status: str(file.status) || "M", added: num(file.added), removed: num(file.removed), binary: file.binary === true }]
+          : [],
+      ),
+  };
+}
+
+export type PageSummary = { name: string; title: string; modified: number; size: number };
+export const PAGE_NAME = /^[a-z0-9-]{1,64}$/;
+export function parsePages(value: unknown): PageSummary[] {
+  return list(record(value).pages)
+    .map(record)
+    .flatMap((page) => {
+      const name = str(page.name);
+      return PAGE_NAME.test(name) ? [{ name, title: str(page.title) || name, modified: num(page.modified), size: num(page.size) }] : [];
+    });
+}
+export type Page = { name: string; text: string; modified: number };
+export function parsePage(value: unknown): Page {
+  const row = record(record(value).page ?? value);
+  return { name: str(row.name), text: str(row.text), modified: num(row.modified) };
+}
+
+export type TerminalChunk = { offset: number; data: string; exited: boolean; exitCode?: number; dropped: boolean };
+/** `data` stays base64 here; the pane decodes bytes for xterm. */
+export function parseTerminalChunk(value: unknown): TerminalChunk {
+  const row = record(value);
+  return {
+    offset: num(row.offset),
+    data: str(row.data),
+    exited: row.exited === true,
+    exitCode: typeof row.exitCode === "number" ? row.exitCode : undefined,
+    dropped: row.dropped === true,
+  };
+}
+
+export type Service = { port: number; title: string; status: number };
+export function parseServices(value: unknown): Service[] {
+  return list(record(value).services)
+    .map(record)
+    .flatMap((service) => {
+      const port = num(service.port);
+      return Number.isInteger(port) && port > 0 && port < 65536
+        ? [{ port, title: str(service.title), status: num(service.status) }]
+        : [];
+    });
+}
+
+export type Suggestion =
+  | { kind: "service"; title: string; port: number }
+  | { kind: "extension"; title: string; hash: string }
+  | { kind: "page"; title: string; name: string };
+export function parseSuggestions(value: unknown): Suggestion[] {
+  return list(record(value).suggestions)
+    .map(record)
+    .flatMap((item): Suggestion[] => {
+      const title = str(item.title);
+      if (item.kind === "service" && Number.isInteger(item.port)) return [{ kind: "service", title: title || `localhost:${item.port}`, port: Number(item.port) }];
+      if (item.kind === "extension" && /^[a-f0-9]{64}$/.test(str(item.hash))) return [{ kind: "extension", title: title || "Extension", hash: str(item.hash) }];
+      if (item.kind === "page" && PAGE_NAME.test(str(item.name))) return [{ kind: "page", title: title || str(item.name), name: str(item.name) }];
+      return [];
+    });
+}
+
+/** Browser pane URLs: local proxied ports become /api/workbench/browse/<port>/<path>; anything else is external. */
+export function browseTarget(input: string): { kind: "local"; port: number; path: string } | { kind: "external"; url: string } | { kind: "invalid" } {
+  const text = input.trim();
+  if (!text) return { kind: "invalid" };
+  const portOnly = /^:?(\d{2,5})(\/.*)?$/.exec(text);
+  if (portOnly) return { kind: "local", port: Number(portOnly[1]), path: portOnly[2] || "/" };
+  let url: URL;
+  try {
+    url = new URL(/^[a-z]+:\/\//i.test(text) ? text : `http://${text}`);
+  } catch {
+    return { kind: "invalid" };
+  }
+  if (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && url.protocol === "http:") {
+    const port = Number(url.port || 80);
+    return { kind: "local", port, path: `${url.pathname}${url.search}` };
+  }
+  return url.protocol === "https:" || url.protocol === "http:" ? { kind: "external", url: url.href } : { kind: "invalid" };
+}

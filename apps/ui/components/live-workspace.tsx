@@ -30,6 +30,8 @@ import { ConversationView } from "./thread/conversation-view";
 import { convertMessage } from "./thread/messages";
 import { ExtensionsPage } from "./settings/extensions-page";
 import { SettingsDialog } from "./settings/settings-dialog";
+import { WorkbenchProvider } from "./workbench/workbench-context";
+import { WorkbenchPane } from "./workbench/workbench";
 
 const EMPTY_MESSAGES: LiveMessage[] = [];
 type ConversationDraft = {
@@ -357,10 +359,15 @@ export function LiveWorkspace() {
       >
         <div className="live-workspace">
           <Sidebar />
-          <main className="live-main">
-            <WorkspaceHeader />
-            {extensionsOpen ? <ExtensionsPage /> : <ConversationView />}
-          </main>
+          <WorkbenchProvider>
+            <div className="live-stage">
+              <main className="live-main">
+                <WorkspaceHeader />
+                {extensionsOpen ? <ExtensionsPage /> : <ConversationView />}
+              </main>
+              {!extensionsOpen && <WorkbenchPane />}
+            </div>
+          </WorkbenchProvider>
         </div>
         <MobileNav />
         <SettingsDialog />

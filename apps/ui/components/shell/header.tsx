@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronLeft, CircleAlert, CloudOff, Menu, Settings, X } from "lucide-react";
+import { ChevronLeft, CircleAlert, CloudOff, Menu, Plus, Settings, X } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
+import { useWorkbench } from "@/components/workbench/workbench-context";
 import "./shell.css";
 
 export function WorkspaceHeader() {
@@ -16,6 +17,7 @@ export function WorkspaceHeader() {
     selectConversation,
     openSettings,
   } = useWorkspace();
+  const workbench = useWorkbench();
   const parentId = snapshot?.parentConversationId;
   return (
     <>
@@ -37,6 +39,19 @@ export function WorkspaceHeader() {
         <span className="live-header-title">
           {extensionsOpen ? "Extensions" : snapshot?.conversationTitle || "Pi workspace"}
         </span>
+        {!extensionsOpen && (
+          <button
+            type="button"
+            className="live-icon live-workbench-toggle"
+            aria-label="Open workbench"
+            aria-pressed={workbench.state.open}
+            title={workbench.state.open ? "Close workbench (⌃⇧E)" : "Open workbench (⌃⇧E)"}
+            data-open={workbench.state.open ? "" : undefined}
+            onClick={() => workbench.dispatch({ type: workbench.state.open ? "close" : "open" })}
+          >
+            <Plus size={18} />
+          </button>
+        )}
         <button
           type="button"
           className="live-icon live-header-settings"
