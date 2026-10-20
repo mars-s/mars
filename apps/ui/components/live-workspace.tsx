@@ -223,6 +223,7 @@ export function LiveWorkspace() {
         "/api/chat",
         "/api/model",
         "/api/abort",
+        "/api/compact",
         "/api/trial",
         "/api/workers/stop",
         "/api/workflows/stop",

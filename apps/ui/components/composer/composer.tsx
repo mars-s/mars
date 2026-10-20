@@ -52,7 +52,7 @@ export function Composer() {
                   context={snapshot.context}
                   canCompact={hasMessages && !snapshot.running && !blocked}
                   onCompact={() =>
-                    safely(action("/api/compact", { conversationId: snapshot.conversationId }))
+                    safely(action("/api/compact"))
                   }
                 />
               )}
