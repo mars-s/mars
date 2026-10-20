@@ -164,3 +164,18 @@ cap listings at 2,000 entries, text at 2 MiB, raw images at 20 MiB, and search a
 200 results and 3 s while skipping node_modules and .git. Verified by
 check-workbench-files.mjs on a real temporary host and a fixture browser check;
 no live Pi host was used.
+
+## 2026-10-21 workbench lane: Changes
+
+Added the read-only Changes tool. Host: `workbench/changes.mjs` serves
+`/api/workbench/repos` (git repos up to depth 3 under the workspace, branch,
+ahead/behind, dirty) and `/api/workbench/changes` (file list with status, exact
++/- counts and binary flag, patch capped at 1 MiB, untracked text files as
+additions, at most 50). Git runs through `execFile` with no pager, external diff,
+textconv, hooks, fsmonitor or repo-configured filters, `GIT_OPTIONAL_LOCKS=0` and
+a 10 s timeout. Capabilities report "git was not found on the host." when git is
+missing. UI: `changes-pane.tsx` with a repo picker, branch and ahead/behind,
+refresh, the Kokonut Diff Review file list and the 21st EditTool diff card per
+file; no accept or reject. Verified with `check-workbench-changes.mjs` against a
+real host on a temporary root, 5 new unit tests and a fixture browser check at
+1440 and 390px in dark and light. No live Pi host, account or model call was used.

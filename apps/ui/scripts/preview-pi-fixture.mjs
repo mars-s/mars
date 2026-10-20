@@ -195,7 +195,7 @@ createServer(async (req, res) => {
   if (url.pathname === "/api/workbench/capabilities")
     return json(res, 200, {
       tools: {
-        changes: { available: false, reason: "Fixture: Changes is not built yet." },
+        changes: { available: true },
         files: { available: true },
         terminal: { available: false, reason: "Fixture: Terminal is not built yet." },
         "side-chat": { available: true },
@@ -263,6 +263,55 @@ createServer(async (req, res) => {
       const results = q ? all.filter((path) => path.split("/").pop().toLowerCase().includes(q)).map((path) => ({ path, type: "file" })) : [];
       return json(res, 200, { query: q, results, truncated: false, timedOut: false });
     }
+  }
+  // workbench lane: changes
+  if (url.pathname === "/api/workbench/repos")
+    return json(res, 200, {
+      repos: [
+        { path: "mars-fixture", branch: "fixture/workbench", ahead: 2, behind: 0, dirty: true },
+        { path: "notes", branch: "main", ahead: 0, behind: 0, dirty: false },
+      ],
+    });
+  if (url.pathname === "/api/workbench/changes") {
+    const repo = url.searchParams.get("repo") ?? "";
+    if (repo === "notes") return json(res, 200, { repo, branch: "main", files: [], patch: "", truncated: false });
+    if (repo !== "mars-fixture") return json(res, 404, { error: `No git repository at ${repo || "the workspace root"}.` });
+    return json(res, 200, {
+      repo,
+      branch: "fixture/workbench",
+      truncated: false,
+      files: [
+        { path: "FIXTURE.md", status: "?", added: 2, removed: 0, binary: false },
+        { path: "assets/fixture-logo.png", status: "M", added: 0, removed: 0, binary: true },
+        { path: "docs/old-fixture.md", status: "D", added: 0, removed: 1, binary: false },
+        { path: "src/fixture-greeting.ts", status: "M", added: 2, removed: 1, binary: false },
+      ],
+      patch: [
+        "diff --git a/src/fixture-greeting.ts b/src/fixture-greeting.ts",
+        "--- a/src/fixture-greeting.ts",
+        "+++ b/src/fixture-greeting.ts",
+        "@@ -1,3 +1,4 @@",
+        " export function greet(name: string) {",
+        '-  return "Hello " + name;',
+        '+  // Fixture change for the workbench preview.',
+        "+  return `Hello, ${name}`;",
+        " }",
+        "diff --git a/docs/old-fixture.md b/docs/old-fixture.md",
+        "--- a/docs/old-fixture.md",
+        "+++ /dev/null",
+        "@@ -1 +0,0 @@",
+        "-Fixture page that was removed.",
+        "diff --git a/assets/fixture-logo.png b/assets/fixture-logo.png",
+        "Binary files a/assets/fixture-logo.png and b/assets/fixture-logo.png differ",
+        "diff --git a/FIXTURE.md b/FIXTURE.md",
+        "--- /dev/null",
+        "+++ b/FIXTURE.md",
+        "@@ -0,0 +1,2 @@",
+        "+# Fixture data",
+        "+Untracked file shown as an addition.",
+        "",
+      ].join("\n"),
+    });
   }
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });
   if (url.pathname === "/api/connections")

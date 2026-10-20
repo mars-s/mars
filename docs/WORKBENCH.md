@@ -104,6 +104,16 @@ The launcher renders exactly this; nothing is assumed by the browser.
   files included as additions), patch capped at 1 MiB with a `truncated` flag.
   Git runs with `GIT_OPTIONAL_LOCKS=0`, no pager, no config-driven external diff or
   hooks, and a 10 s timeout. Read-only.
+  `status` is one letter: `M`, `A`, `D`, `T`, `U` from `git diff --raw` (renames off)
+  or `?` for untracked. `added`/`removed` come from `--numstat` and stay exact when the
+  patch is cut; binary files have `binary: true` and zero counts. Untracked files use
+  `git diff --no-index /dev/null <file>`, at most 50 (more sets `truncated`). A repo
+  with no commits diffs against the empty tree. `fsmonitor`, textconv and
+  repository-configured clean/smudge/process filters are switched off, so opening a
+  repo never runs its config. A repo is a directory whose `.git` is a real directory.
+  `/repos` skips `node_modules` and `.git` and does not follow symlinks.
+  `capabilities.changes` is unavailable with "git was not found on the host." when
+  git is missing.
 
 ### Pages
 
