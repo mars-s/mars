@@ -133,6 +133,12 @@ export function parseTerminalChunk(value: unknown): TerminalChunk {
   };
 }
 
+/** `POST /api/workbench/terminal` answers `{ id }`; anything else is not a session. */
+export function parseTerminalCreated(value: unknown): string {
+  const id = str(record(value).id);
+  return /^[a-f0-9]{24}$/.test(id) ? id : "";
+}
+
 export type Service = { port: number; title: string; status: number };
 export function parseServices(value: unknown): Service[] {
   return list(record(value).services)

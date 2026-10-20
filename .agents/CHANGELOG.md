@@ -150,3 +150,18 @@ check-vm-control fail identically on the untouched pre-redesign commit on this
 Mac (Bubblewrap and /var path assumptions); the installer script tests need
 util-linux flock. Both need the Linux Bot Box. No live Pi host, account or
 model call was used; nothing was pushed or deployed.
+
+## 2026-10-21 workbench lane: terminal
+
+Host: `workbench/terminal.mjs` runs `python3 pty-bridge.py <shell> -l` in the
+workspace with PATH, HOME, LANG, TERM, SHELL and USER only. It keeps at most 4 live
+sessions, a 256 KiB output ring with absolute byte offsets and `dropped`, 20 s long
+polls, 64 KiB input requests and resizes clamped to 20..400 by 5..200. The idle
+timeout is 30 minutes (`MARS_TERMINAL_IDLE_MS` overrides it for tests). Kill hangs
+up every process group on the session's tty, then forces any left after 1 s.
+Input is never logged. UI: a lazy-loaded xterm 6.0.0 pane, themed from Mars tokens,
+that follows theme changes. It refits on resize, reattaches after a reload,
+shows "Reconnecting…" with backoff, and offers New session and End session.
+Verified by check-workbench-terminal (real host, real shell), 7 unit tests, a
+fixture browser check, and an ad hoc run through the Next dev proxy to a real host
+with zsh. Nothing was pushed, deployed or run against a live service.

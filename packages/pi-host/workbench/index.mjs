@@ -10,19 +10,12 @@ const run = promisify(execFile);
  */
 export function createWorkbench({ work, send, jsonBody, tools = {}, extensionUis = () => [] }) {
   const ready = mkdir(work, { recursive: true });
-  let python;
-  async function hasPython() {
-    python ??= run("python3", ["-c", "import pty"], { timeout: 5000 }).then(
-      () => true,
-      () => false,
-    );
-    return python;
-  }
   async function capabilities() {
     const reasons = {
       changes: tools.changes ? "" : "Changes is not built into this host yet.",
       files: tools.files ? "" : "Files is not built into this host yet.",
-      terminal: tools.terminal ? ((await hasPython()) ? "" : "python3 with the pty module was not found on the host.") : "Terminal is not built into this host yet.",
+      // lane: terminal. The module probes python3 and its pty module itself.
+      terminal: tools.terminal ? (await tools.terminal.available()).reason : "Terminal is not built into this host yet.",
       "side-chat": "",
       page: tools.pages ? "" : "Pages are not built into this host yet.",
       browser: tools.browser ? "" : "Browser is not built into this host yet.",
