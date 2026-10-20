@@ -1,0 +1,209 @@
+.live-workspace {
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  background: var(--background);
+  color: var(--text);
+}
+.live-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 12px 12px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--sidebar-border);
+  min-width: 0;
+}
+.live-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 10px;
+}
+.live-brand a {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--text);
+  text-decoration: none;
+  font:
+    29px Georgia,
+    serif;
+}
+.live-brand svg {
+  color: var(--orange);
+}
+.live-sidebar nav {
+  display: grid;
+  gap: 5px;
+}
+.live-nav {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  color: var(--sidebar-foreground);
+  text-align: left;
+}
+.live-nav:hover,
+.live-nav-selected {
+  background: var(--sidebar-accent);
+  color: var(--text);
+}
+.live-nav span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-count {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.live-sidebar-history {
+  margin-top: 17px;
+}
+.live-sidebar-history > p {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 0 12px;
+  margin-bottom: 10px;
+}
+.live-settings-button {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--sidebar-foreground);
+}
+.live-settings-button:hover {
+  background: var(--sidebar-accent);
+}
+.live-connection-dot {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.live-connection-dot.is-connected {
+  background: var(--green);
+}
+.live-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.live-header {
+  height: 58px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 27px;
+  color: var(--text-muted);
+}
+.live-header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.live-menu,
+.live-mobile-close,
+.live-scrim {
+  display: none;
+}
+.live-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 12px 24px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text);
+}
+.live-notice button {
+  background: none;
+  border: 0;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .live-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .live-sidebar {
+    display: none;
+  }
+  .live-menu,
+  .live-mobile-close {
+    display: inline-flex;
+  }
+  .live-mobile-nav {
+    width: 290px !important;
+    max-width: calc(100% - 35px) !important;
+    left: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    transform: none !important;
+    translate: none !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column;
+    gap: 25px !important;
+    padding: 30px 15px !important;
+  }
+  .live-header {
+    height: 54px;
+    padding: 0 15px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-workspace * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.live-sidebar-history {
+  min-height: 0;
+  overflow-y: auto;
+}
+.live-sidebar-history .live-nav[aria-current="page"] {
+  color: var(--text);
+  background: var(--sidebar-accent);
+}
+.live-conversation-running {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.live-mobile-nav nav {
+  max-height: 60dvh;
+  overflow-y: auto;
+}
+.live-subthread {
+  padding-left: 28px;
+  font-size: 12px;
+}
+.live-subthread small {
+  opacity: 0.65;
+  font-size: 10px;
+}

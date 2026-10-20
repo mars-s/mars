@@ -1,0 +1,220 @@
+.live-settings {
+  max-width: 590px !important;
+  max-height: 85dvh;
+  overflow: auto;
+  gap: 25px !important;
+  border-radius: 14px !important;
+}
+.live-settings [data-slot="tabs-list"] {
+  margin-bottom: 18px;
+  max-width: 100%;
+}
+.live-settings [data-slot="tabs-trigger"] {
+  transition-property: color, background-color, border-color !important;
+}
+.live-settings h2 {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+.live-settings p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  margin: 9px 0 17px;
+}
+.live-account-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-auth-flow {
+  padding-top: 18px;
+}
+.live-auth-flow a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.live-callback {
+  display: grid;
+  gap: 10px;
+  margin-top: 25px;
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+.live-callback p {
+  margin: 0 0 5px;
+}
+.live-callback input {
+  height: 44px;
+}
+.live-theme-options {
+  display: flex;
+  gap: 10px;
+}
+.live-connection-details {
+  margin: 0 0 20px;
+}
+.live-connection-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.live-connection-details dt {
+  color: var(--text-muted);
+}
+.live-connection-details dd {
+  margin: 0;
+}
+.live-extensions-page {
+  max-width: 850px;
+  width: 100%;
+  margin: 45px auto 0;
+  padding: 0 35px 45px;
+  overflow: auto;
+}
+.live-extensions-page > h1 {
+  font:
+    normal 30px Georgia,
+    serif;
+  margin: 0 0 12px;
+}
+.live-extensions-page > p {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.live-empty-extensions {
+  margin-top: 70px;
+  max-width: 420px;
+}
+.live-empty-extensions > svg {
+  color: var(--orange);
+}
+.live-empty-extensions h2 {
+  font:
+    normal 24px Georgia,
+    serif;
+  margin: 20px 0 12px;
+}
+.live-empty-extensions p {
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 23px;
+}
+.live-empty-extensions .live-text-button {
+  display: block;
+  margin-top: 15px;
+  font-size: 12px;
+}
+.live-extension {
+  margin-top: 25px;
+  padding: 20px 0;
+  border-top: 1px solid var(--border);
+}
+.live-extension > h2 {
+  font-size: 17px;
+  margin: 0 0 17px;
+}
+.live-extension p {
+  line-height: 1.7;
+}
+.live-extension button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--input);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.live-extension pre {
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .live-settings {
+    padding: 23px 20px !important;
+  }
+  .live-settings [data-slot="tabs-trigger"] {
+    font-size: 12px;
+    padding: 6px 9px;
+  }
+  .live-extensions-page {
+    margin-top: 30px;
+    padding: 0 22px 30px;
+  }
+  .live-empty-extensions {
+    margin-top: 45px;
+  }
+  .live-connection-details {
+    font-size: 12px;
+  }
+}
+.live-plugin-manager {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+.live-plugin-card {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.live-plugin-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.live-plugin-card h2 {
+  display: inline;
+  font-size: 16px;
+}
+.live-plugin-card header small {
+  margin-left: 10px;
+  color: var(--text-muted);
+}
+.live-plugin-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.live-plugin-controls {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.live-plugin-controls details {
+  flex: 1;
+  min-width: 180px;
+  font-size: 13px;
+}
+.live-plugin-controls label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  gap: 20px;
+}
+.live-plugin-controls strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.live-plugin-controls small {
+  display: block;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.live-system-plugins > summary {
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+.live-system-plugins article {
+  margin-top: 12px;
+}

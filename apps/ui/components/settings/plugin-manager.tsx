@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { piRequest, record } from "@/lib/pi/live-state";
 import { parsePlugins, type Plugin } from "@/lib/pi/plugins";
-import { Switch } from "./ui/switch";
+import { Switch } from "@/components/ui/switch";
 
 export function PluginManager({
   renderInterface,

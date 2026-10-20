@@ -7,8 +7,8 @@ import {
   updateConnections,
   type ConnectionsStatus,
 } from "@/lib/pi/connections";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import "./connection-settings.css";
 
 type Operation = "idle" | "save" | "connect" | "disconnect";

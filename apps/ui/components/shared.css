@@ -1,0 +1,23 @@
+.live-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-muted);
+}
+.live-icon:hover {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.live-text-button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
