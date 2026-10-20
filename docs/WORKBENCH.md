@@ -78,13 +78,22 @@ The launcher renders exactly this; nothing is assumed by the browser.
 
 ### Files
 
-- `GET /api/workbench/files?path=<rel>`: a directory listing `{ path, entries: [{ name, type: "file"|"dir"|"link", size, modified }] }`,
-  hiding nothing but marking dotfiles; `node_modules` and `.git` are listed but not
-  descended by search.
-- `GET /api/workbench/file?path=<rel>`: `{ path, size, modified, kind: "text"|"image"|"binary", text? }`.
-  Images stream from `GET /api/workbench/raw?path=<rel>` with a sniffed image type.
-- `GET /api/workbench/search?q=<text>`: quick open by file name, max 200 results.
-  Read-only. No write routes for files in this version.
+- `GET /api/workbench/files?path=<rel>`: a directory listing `{ path, truncated, entries: [{ name, type: "file"|"dir"|"link", size, modified, hidden, target? }] }`,
+  folders first, hiding nothing but marking dotfiles (`hidden`). A link carries
+  `target: { type: "dir"|"file", path }` when it resolves inside `WORK`, otherwise
+  `{ type: "outside"|"missing" }`, and is never followed out. `node_modules` and
+  `.git` are listed but not descended by search.
+- `GET /api/workbench/file?path=<rel>`: `{ path, size, modified, kind: "text"|"image"|"binary", text?, truncated?, mime? }`.
+  The kind comes from the first 8 KiB: PNG, JPEG, GIF or WebP magic bytes make an
+  image (`mime`), NUL bytes or invalid UTF-8 make binary, anything else is text
+  capped at 2 MiB with `truncated`. The extension is never consulted; SVG is text.
+  Only regular files open, without following a final symlink or blocking on a FIFO.
+- `GET /api/workbench/raw?path=<rel>`: streams an image with its sniffed type,
+  `nosniff` and a sandbox CSP, at most 20 MiB. Anything that is not an image is 415.
+- `GET /api/workbench/search?q=<text>`: quick open by file or folder name,
+  breadth first, not following links, max 200 results and 3 s:
+  `{ query, results: [{ path, type }], truncated, timedOut }`, exact then prefix then
+  substring matches. Read-only. No write routes for files in this version.
 
 ### Changes
 

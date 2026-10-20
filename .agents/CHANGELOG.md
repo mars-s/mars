@@ -150,3 +150,17 @@ check-vm-control fail identically on the untouched pre-redesign commit on this
 Mac (Bubblewrap and /var path assumptions); the installer script tests need
 util-linux flock. Both need the Linux Bot Box. No live Pi host, account or
 model call was used; nothing was pushed or deployed.
+
+## 2026-10-21 workbench Files pane
+
+The Files tool now opens a read-only view of the Pi workspace beside the chat: a
+keyboard tree (one tab stop, arrows, Home and End) beside a viewer, stacked on
+narrow panes and phones. Breadcrumbs, Cmd/Ctrl+P quick open by name, rendered
+Markdown with workspace links and images (remote images are never fetched),
+numbered source, sniffed images and "Binary file, N KB". The tab keeps its path so
+a reload reopens the file. Host routes confine every path, mark links that leave
+the workspace instead of following them, sniff images from bytes (SVG stays text),
+cap listings at 2,000 entries, text at 2 MiB, raw images at 20 MiB, and search at
+200 results and 3 s while skipping node_modules and .git. Verified by
+check-workbench-files.mjs on a real temporary host and a fixture browser check;
+no live Pi host was used.
