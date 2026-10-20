@@ -179,3 +179,20 @@ refresh, the Kokonut Diff Review file list and the 21st EditTool diff card per
 file; no accept or reject. Verified with `check-workbench-changes.mjs` against a
 real host on a temporary root, 5 new unit tests and a fixture browser check at
 1440 and 390px in dark and light. No live Pi host, account or model call was used.
+## 2026-10-21 workbench lane: pages and side chat
+
+Pages host module (`packages/pi-host/workbench/pages.mjs`): Markdown pages in
+`WORK/pages`, names `[a-z0-9-]{1,64}`, generated `untitled[-n]` names, title from
+the first `# heading`, 1 MiB cap, atomic temp-file-and-rename writes, exclusive
+creates, a serialised `baseModified` conflict check (409 with the newer time),
+every path through `resolveInside`, and `list()` feeding Suggested. Page pane:
+list, New page, a sans Markdown editor with a live preview toggle, 800 ms
+debounced autosave with a Saved state, and "Changed elsewhere: reload or
+overwrite" that never overwrites without an explicit click. Side chat pane: pick
+or create a second Pi conversation, its own assistant-ui external store runtime
+with the shared message renderers, 1.5 s polling only while visible, a compact
+composer sending with `conversationId` and a `requestId`, and Stop scoped to that
+conversation; the main chat's selection, draft and scroll are untouched.
+Verified with `check-workbench-pages.mjs` on a real temporary host, unit tests and
+`workbench-pages-check.mjs` on fixture routes only. No live Pi host, account or
+model call was used.
