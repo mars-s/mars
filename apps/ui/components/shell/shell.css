@@ -1,103 +1,9 @@
 .live-workspace {
   height: 100dvh;
   display: grid;
-  grid-template-columns: 256px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   background: var(--background);
   color: var(--text);
-}
-.live-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 22px 12px 12px;
-  background: var(--sidebar);
-  border-right: 1px solid var(--sidebar-border);
-  min-width: 0;
-}
-.live-brand {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px 10px;
-}
-.live-brand a {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  color: var(--text);
-  text-decoration: none;
-  font:
-    29px Georgia,
-    serif;
-}
-.live-brand svg {
-  color: var(--orange);
-}
-.live-sidebar nav {
-  display: grid;
-  gap: 5px;
-}
-.live-nav {
-  display: flex;
-  gap: 11px;
-  align-items: center;
-  width: 100%;
-  height: 38px;
-  padding: 0 12px;
-  background: none;
-  border: 0;
-  border-radius: 7px;
-  color: var(--sidebar-foreground);
-  text-align: left;
-}
-.live-nav:hover,
-.live-nav-selected {
-  background: var(--sidebar-accent);
-  color: var(--text);
-}
-.live-nav span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.live-count {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.live-sidebar-history {
-  margin-top: 17px;
-}
-.live-sidebar-history > p {
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 0 12px;
-  margin-bottom: 10px;
-}
-.live-settings-button {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  height: 44px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--sidebar-foreground);
-}
-.live-settings-button:hover {
-  background: var(--sidebar-accent);
-}
-.live-connection-dot {
-  margin-left: auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-faint);
-}
-.live-connection-dot.is-connected {
-  background: var(--green);
 }
 .live-main {
   display: flex;
@@ -105,44 +11,372 @@
   min-height: 0;
   min-width: 0;
 }
-.live-header {
-  height: 58px;
-  flex-shrink: 0;
+
+/* Sidebar and drawer share one content tree (sidebar-content.tsx). */
+.live-sidebar,
+.live-mobile-nav {
   display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 8px 8px;
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+  font-size: 14px;
+  line-height: 20px;
+}
+.live-sidebar {
+  width: 288px;
+  overflow: hidden;
+  border-right: 1px solid var(--sidebar-border);
+}
+.live-sidebar[data-settled] {
+  transition: width 200ms var(--ease-out);
+}
+.live-sidebar[data-collapsed] {
+  width: 56px;
+}
+
+.live-brand {
+  display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  padding: 0 27px;
+  gap: 8px;
+  height: 48px;
+  padding: 0 4px 0 10px;
+}
+.live-brand-name {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: opacity 120ms var(--ease-out);
+}
+.live-brand-name svg {
+  color: var(--clay);
+}
+
+.live-sidebar-primary {
+  display: grid;
+  flex-shrink: 0;
+  gap: 2px;
+  padding-top: 4px;
+}
+.live-nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--sidebar-foreground);
+  text-align: left;
+  white-space: nowrap;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.live-nav:hover {
+  background: var(--sidebar-accent);
+  color: var(--text);
+}
+.live-nav:disabled {
+  opacity: 0.5;
+  background: none;
+}
+.live-nav[aria-current="page"],
+.live-nav-selected {
+  background: var(--sidebar-accent);
+  color: var(--text);
+  font-weight: 500;
+}
+.live-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 120ms var(--ease-out);
+}
+.live-new-chat {
+  gap: 8px;
+  padding-left: 8px;
+  color: var(--text);
+}
+.live-new-chat-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--clay) 22%, transparent);
+  color: var(--clay);
+  transition: background-color 120ms var(--ease-out);
+}
+.live-new-chat:hover:not(:disabled) .live-new-chat-icon {
+  background: color-mix(in srgb, var(--clay) 32%, transparent);
+}
+.live-count {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+/* The negative margin lets focus rings sit inside the scroll area's clip. */
+.live-sidebar-history {
+  flex: 1;
+  min-height: 0;
+  margin: 0 -8px;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  transition:
+    opacity 120ms var(--ease-out),
+    visibility 0s linear 0s;
+}
+.live-section-label {
+  margin: 20px 0 6px;
+  padding: 0 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+.live-conversation {
+  gap: 8px;
+}
+.live-running-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--clay);
+  animation: live-running-pulse 1.6s var(--ease-out) infinite;
+}
+@keyframes live-running-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.live-subthread {
+  gap: 8px;
+  height: 30px;
+  padding-left: 28px;
+  font-size: 13px;
+}
+.live-subthread small {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.live-account {
+  flex-shrink: 0;
+  gap: 10px;
+  height: 48px;
+  margin-top: 4px;
+  padding: 0 6px;
+}
+.live-avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--sidebar);
+  font-size: 13px;
+  font-weight: 500;
+}
+.live-connection-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--sidebar);
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.live-connection-dot.is-connected {
+  background: var(--green);
+}
+.live-account-text {
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  font-weight: 400;
+  line-height: 18px;
+}
+.live-account-text small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+}
+
+.live-sidebar[data-collapsed] .live-brand {
+  gap: 0;
+  padding: 0 4px;
+}
+/* Icon rail: icons stay put, labels fade, recents step out of the tab order. */
+.live-sidebar[data-collapsed] .live-brand-name,
+.live-sidebar[data-collapsed] .live-nav-label,
+.live-sidebar[data-collapsed] .live-count {
+  opacity: 0;
+}
+.live-sidebar[data-collapsed] .live-sidebar-history {
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 120ms var(--ease-out),
+    visibility 0s linear 120ms;
+}
+
+.live-header {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
   color: var(--text-muted);
 }
-.live-header > div {
-  display: flex;
+.live-header-title {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-back {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
   align-items: center;
-  gap: 12px;
+  height: 32px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.live-back:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
 }
 .live-menu,
-.live-mobile-close,
-.live-scrim {
+.live-header-settings {
   display: none;
 }
+
 .live-notice {
   display: flex;
+  flex-shrink: 0;
+  gap: 10px;
   align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  padding: 12px 24px;
-  background: var(--surface-raised);
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  width: calc(100% - 32px);
+  max-width: 768px;
+  min-height: 40px;
+  margin: 0 auto 8px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 32%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 10%, var(--background));
   color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
 }
-.live-notice button {
-  background: none;
+.live-notice > svg {
+  color: var(--red);
+}
+.live-notice p {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.live-notice-action {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
   border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 120ms var(--ease-out);
 }
-@media (max-width: 760px) {
+.live-notice-action:hover {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+.live-notice-dismiss {
+  width: 28px;
+  height: 28px;
+}
+
+/* Drawer: overrides the centred dialog defaults (unlayered CSS beats Tailwind's layers). */
+.live-mobile-nav {
+  inset: 0 auto 0 0;
+  gap: 0;
+  width: 288px;
+  max-width: calc(100% - 48px);
+  height: 100dvh;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  border: 0;
+  border-right: 1px solid var(--sidebar-border);
+  border-radius: 0;
+  box-shadow: var(--shadow-float);
+  animation: live-drawer-in 200ms var(--ease-out);
+}
+.live-mobile-nav[data-state="closed"] {
+  animation: live-drawer-out 150ms var(--ease-out) forwards;
+}
+.live-mobile-nav .live-nav {
+  height: 40px;
+}
+.live-mobile-nav .live-account {
+  height: 48px;
+}
+@keyframes live-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes live-drawer-out {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@media (max-width: 768px) {
   .live-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -150,60 +384,25 @@
     display: none;
   }
   .live-menu,
-  .live-mobile-close {
+  .live-header-settings {
     display: inline-flex;
   }
-  .live-mobile-nav {
-    width: 290px !important;
-    max-width: calc(100% - 35px) !important;
-    left: 0 !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    transform: none !important;
-    translate: none !important;
-    border-radius: 0 !important;
-    display: flex !important;
-    flex-direction: column;
-    gap: 25px !important;
-    padding: 30px 15px !important;
-  }
   .live-header {
-    height: 54px;
-    padding: 0 15px;
+    padding: 0 8px;
   }
-}
-@media (prefers-reduced-motion: reduce) {
-  .live-workspace * {
-    animation: none !important;
-    transition: none !important;
+  .live-menu,
+  .live-header-settings,
+  .live-back {
+    min-width: 40px;
+    height: 40px;
   }
 }
 
-.live-sidebar-history {
-  min-height: 0;
-  overflow-y: auto;
-}
-.live-sidebar-history .live-nav[aria-current="page"] {
-  color: var(--text);
-  background: var(--sidebar-accent);
-}
-.live-conversation-running {
-  flex-shrink: 0;
-  margin-left: auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--green);
-}
-.live-mobile-nav nav {
-  max-height: 60dvh;
-  overflow-y: auto;
-}
-.live-subthread {
-  padding-left: 28px;
-  font-size: 12px;
-}
-.live-subthread small {
-  opacity: 0.65;
-  font-size: 10px;
+/* The live-client fixture reads a zero transition duration under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .live-workspace *,
+  .live-workspace {
+    animation: none !important;
+    transition: none !important;
+  }
 }
