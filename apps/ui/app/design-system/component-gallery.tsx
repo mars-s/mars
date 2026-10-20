@@ -41,6 +41,8 @@ import {
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/components/vendor/ai-elements/sources";
 import { Task, TaskContent, TaskItem, TaskItemFile, TaskTrigger } from "@/components/vendor/ai-elements/task";
 import "@/components/vendor/agent-elements/agent-ui.css";
+import { ModelPicker } from "@/components/ai/model-picker";
+import { ContextMeter } from "@/components/ai/context-meter";
 import { DiffHighlighterReady } from "@/components/ai/diff-highlighter";
 
 type Library = "Kokonut UI" | "21st Agent Elements" | "assistant-ui" | "shadcn AI Elements";
@@ -78,6 +80,25 @@ const noop = () => undefined;
 const toolStep = (fields: Record<string, unknown>) =>
   ({ id: String(fields.toolName), type: "tool-call", duration: 0, toolDetail: "", ...fields }) as never;
 
+function LiveModelPicker() {
+  const [model, setModel] = useState("anthropic/claude-opus-5-5");
+  const [effort, setEffort] = useState("low");
+  return (
+    <ModelPicker
+      models={[
+        { id: "anthropic/claude-opus-5-5", name: "Claude Opus 5.5", provider: "anthropic", efforts: ["off", "low", "medium", "high", "xhigh", "max"] },
+        { id: "anthropic/claude-haiku-5-5", name: "Claude Haiku 5.5", provider: "anthropic", efforts: ["off", "low", "medium", "high"] },
+        { id: "gpt-6-sol", name: "GPT-6 Sol", provider: "openai", efforts: ["off", "low", "medium", "high", "xhigh", "max"] },
+      ]}
+      value={model}
+      effort={effort}
+      disabled={false}
+      onChange={setModel}
+      onEffortChange={setEffort}
+    />
+  );
+}
+
 export function ComponentGallery() {
   const [answer, setAnswer] = useState("");
   const [fields, setFields] = useState([
@@ -102,6 +123,27 @@ export function ComponentGallery() {
               { id: "search", label: "Search", description: "Look things up", icon: <Search size={14} /> },
             ]}
             onSubmit={noop}
+          />
+        </Specimen>
+        <Specimen name="Live model selector" library="Kokonut UI" use="As used in the composer: provider mark, Pi models, Pi effort levels">
+          <LiveModelPicker />
+        </Specimen>
+        <Specimen name="Live context meter" library="Kokonut UI" use="As used in the composer: hover to open, hover a segment to highlight">
+          <ContextMeter
+            canCompact
+            onCompact={noop}
+            context={{
+              basis: "reported",
+              limit: 400000,
+              used: 96700,
+              compactAt: 0.959,
+              autoCompact: true,
+              segments: [
+                { id: "instructions", label: "Instructions", tokens: 7200 },
+                { id: "tools", label: "Tool results", tokens: 38400 },
+                { id: "messages", label: "Messages", tokens: 51100 },
+              ],
+            }}
           />
         </Specimen>
         <Specimen name="Model selector" library="Kokonut UI" use="Model plus effort, from the server catalogue">

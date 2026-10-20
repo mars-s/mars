@@ -103,6 +103,14 @@ export type WorkerSummary = {
   result: string;
   error: string;
 };
+export const EFFORT_ORDER = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type ModelChoice = {
+  id: string;
+  name: string;
+  provider: string;
+  /** Pi's supported thinking levels for this model, lowest first. Empty when unknown. */
+  efforts: string[];
+};
 export type ContextUsage =
   | { basis: "unavailable" }
   | {
@@ -150,7 +158,9 @@ export type LiveSnapshot = {
   model: string;
   running: boolean;
   messages: LiveMessage[];
-  models: { id: string; name: string }[];
+  models: ModelChoice[];
+  /** Pi's effort (thinking level) for this conversation, or "" when the host does not report it. */
+  thinkingLevel: string;
   extensions: {
     name: string;
     title: string;
@@ -474,10 +484,24 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
     models: list(data.models)
       .map(record)
       .filter((model) => typeof model.id === "string")
-      .map((model) => ({
-        id: string(model.id),
-        name: string(model.name) || string(model.id),
-      })),
+      .map((model) => {
+        const id = string(model.id);
+        const slash = id.indexOf("/");
+        return {
+          id,
+          name: string(model.name) || id,
+          provider: string(model.provider) || (slash > 0 ? id.slice(0, slash) : "openai"),
+          efforts: list(model.efforts)
+            .filter((level): level is string => typeof level === "string")
+            .filter((level) => (EFFORT_ORDER as readonly string[]).includes(level))
+            .sort(
+              (a, b) =>
+                (EFFORT_ORDER as readonly string[]).indexOf(a) -
+                (EFFORT_ORDER as readonly string[]).indexOf(b),
+            ),
+        };
+      }),
+    thinkingLevel: string(data.thinkingLevel),
     extensions: list(data.extensions)
       .map(record)
       .filter(

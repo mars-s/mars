@@ -7,19 +7,10 @@ import { LiveWorkers } from "@/components/activity/live-workers";
 import { Composer } from "@/components/composer/composer";
 import { UserMessage, AssistantMessage } from "./messages";
 import { useWorkspace } from "@/components/workspace-context";
-import type { LiveSnapshot } from "@/lib/pi/live-state";
+import { RunProgress } from "@/components/ai/run-progress";
+import { runSteps } from "@/components/ai/run-steps";
+import { toolViews } from "@/components/ai/tool-adapter";
 import "./thread.css";
-
-function hasRunningTool(snapshot: LiveSnapshot) {
-  return snapshot.messages.some((message) =>
-    message.tools.some(
-      (tool) =>
-        tool.output === undefined ||
-        tool.state === "running" ||
-        tool.children?.some((child) => child.state === "running"),
-    ),
-  );
-}
 
 export function ConversationView() {
   const { snapshot, pending, hasMessages, action, safely, selectConversation } = useWorkspace();
@@ -54,12 +45,7 @@ export function ConversationView() {
             />
           )}
           {snapshot && <AgentActivity workers={workers} />}
-          {snapshot?.running && (
-            <div className="live-working" role="status">
-              <MarsMark className="live-working-mark" />
-              {hasRunningTool(snapshot) ? "Working" : "Thinking"}
-            </div>
-          )}
+          <RunProgress steps={runSteps(snapshot, toolViews)} />
         </div>
         <ThreadPrimitive.ViewportFooter className="live-composer-wrap">
           <Composer />

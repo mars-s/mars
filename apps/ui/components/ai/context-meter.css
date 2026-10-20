@@ -178,3 +178,30 @@
     height: 36px;
   }
 }
+
+/* Hover interactions: segment and legend row highlight together. */
+.mars-context-bar-track > span {
+  transition: opacity 150ms var(--ease-out);
+}
+.mars-context-bar-track > span[data-dim] {
+  opacity: 0.3;
+}
+.mars-context-legend li {
+  margin-inline: -6px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  transition: background-color 150ms var(--ease-out);
+}
+.mars-context-legend li[data-active] {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.mars-context-trigger[data-open] {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mars-context-bar-track > span,
+  .mars-context-legend li {
+    transition: none;
+  }
+}

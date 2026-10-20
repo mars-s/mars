@@ -363,3 +363,17 @@ test("context usage passes through Pi numbers and never invents a window", () =>
   source.context = { basis: "reported", limit: 0, used: 10 };
   assert.deepEqual(parseSnapshot(source).context, { basis: "unavailable" });
 });
+
+test("models carry provider and Pi effort levels in order; unknown levels are dropped", () => {
+  const source = snapshot([]);
+  source.models = [
+    { id: "gpt-6-sol", name: "Sol", provider: "openai", efforts: ["high", "off", "low", "bogus"] },
+    { id: "anthropic/claude-opus-5-5", name: "Claude Opus 5.5" },
+  ];
+  source.thinkingLevel = "low";
+  const state = parseSnapshot(source);
+  assert.deepEqual(state.models[0].efforts, ["off", "low", "high"]);
+  assert.equal(state.models[1].provider, "anthropic");
+  assert.deepEqual(state.models[1].efforts, []);
+  assert.equal(state.thinkingLevel, "low");
+});

@@ -19,7 +19,7 @@ import { nextPage, attachNextUpgrade } from "./next-proxy.mjs";
 import { readFile, writeFile, mkdir, appendFile, symlink, lstat, readlink, rename } from "node:fs/promises";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { createModels, getSupportedThinkingLevels, clampThinkingLevel } from "@earendil-works/pi-ai/models";
 import { OAuthSessions, oauthProvider, modelSelection } from "./oauth-sessions.mjs";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
@@ -527,18 +527,19 @@ const server = http.createServer(async (req, res) => {
           ...oauth.state("anthropic"),
         },
         providerReady: await providerReady(state),
+        thinkingLevel: (await conversation.agent(context)).thinkingLevel,
         models: models
           .getModels("openai")
           .filter((m) => /^gpt-6/.test(m.id))
-          .map((m) => ({ id: m.id, name: m.name }))
+          .map((m) => ({ id: m.id, name: m.name, provider: "openai", efforts: getSupportedThinkingLevels(m) }))
           .concat(
-            models.getModels("anthropic").map((m) => ({ id: "anthropic/" + m.id, name: m.name })),
+            models.getModels("anthropic").map((m) => ({ id: "anthropic/" + m.id, name: m.name, provider: "anthropic", efforts: getSupportedThinkingLevels(m) })),
           )
           .concat(
             connections.getOpenCodeApiKey()
               ? models
                   .getModels("opencode-go")
-                  .map((m) => ({ id: "opencode-go/" + m.id, name: "OpenCode Go · " + m.name }))
+                  .map((m) => ({ id: "opencode-go/" + m.id, name: "OpenCode Go · " + m.name, provider: "opencode-go", efforts: getSupportedThinkingLevels(m) }))
               : [],
           ),
       });
@@ -635,13 +636,28 @@ const server = http.createServer(async (req, res) => {
       send(res, 200, { aborted: true });
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/effort") {
+      const data = await jsonBody(req);
+      const conversation = await conversations.resolve(data.conversationId);
+      const selected = (await conversations.state(conversation.id)).docs?.["pi.agent"]?.model;
+      const model = selected && models.getModel(selected.provider, selected.modelId);
+      if (!model) throw Error("Choose a model first");
+      if (!getSupportedThinkingLevels(model).includes(data.effort)) throw Error("This model does not support that effort");
+      await conversation.configure({ thinkingLevel: data.effort }, context);
+      send(res, 200, { effort: data.effort });
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/model") {
       const data = await jsonBody(req);
       const { provider, modelId } = modelSelection(data.model);
-      if (!models.getModel(provider, modelId)) throw Error("Unknown model");
+      const model = models.getModel(provider, modelId);
+      if (!model) throw Error("Unknown model");
       if (provider === "opencode-go" && !connections.getOpenCodeApiKey())
         throw Error("Save an OpenCode key in Settings Apps first");
-      await (await conversations.resolve(data.conversationId)).configure({ model: { provider, modelId } }, context);
+      const conversation = await conversations.resolve(data.conversationId);
+      // Keep the chosen effort valid for the new model (Pi clamps to the nearest supported level).
+      const thinkingLevel = clampThinkingLevel(model, (await conversation.agent(context)).thinkingLevel);
+      await conversation.configure({ model: { provider, modelId }, thinkingLevel }, context);
       send(res, 200, { model: data.model });
       return;
     }

@@ -65,6 +65,35 @@ const conversations = new Map([
   ["2", { title: "New conversation", running: false, entries: [] }],
   ["3", { title: "Weekly reading list", running: false, entries: [] }],
   [
+    "7",
+    {
+      title: "Draft the release notes",
+      running: true,
+      entries: [
+        {
+          id: 71,
+          model: [
+            { role: "user", content: text("Draft release notes from the last ten commits.") },
+            {
+              role: "assistant",
+              content: [
+                { type: "toolCall", id: "r1", name: "bash", arguments: { command: "git log --oneline -10" } },
+              ],
+            },
+            { role: "toolResult", toolCallId: "r1", content: text("1d492c0 Record the redesign integration results\nbb3b03d Adopt the Phase mark"), details: { exitCode: 0 } },
+          ],
+        },
+      ],
+      live: {
+        run: { id: 1 },
+        generation: { message: { content: text("Grouping the commits by area") } },
+        nestedTools: [
+          { callId: "r2", name: "read", arguments: { path: ".agents/CHANGELOG.md" }, status: "running", summary: {} },
+        ],
+      },
+    },
+  ],
+  [
     "4",
     {
       title: "Audit service units",
@@ -105,15 +134,25 @@ function state(id) {
     auth: { connected: true, state: "connected", events: [] },
     anthropicAuth: { connected: false, state: "idle", events: [] },
     models: [
-      { id: "gpt-6-sol", name: "GPT-6 Sol" },
-      { id: "gpt-6-luna", name: "GPT-6 Luna" },
-      { id: "anthropic/claude-opus-5-5", name: "Claude Opus 5.5" },
+      { id: "gpt-6-sol", name: "GPT-6 Sol", provider: "openai", efforts: ["off", "low", "medium", "high", "xhigh", "max"] },
+      { id: "gpt-6-luna", name: "GPT-6 Luna", provider: "openai", efforts: ["off", "low", "medium", "high", "xhigh", "max"] },
+      { id: "gpt-6-astra", name: "GPT-6 Astra", provider: "openai", efforts: ["low", "medium", "high", "xhigh", "max"] },
+      { id: "anthropic/claude-opus-5-5", name: "Claude Opus 5.5", provider: "anthropic", efforts: ["off", "low", "medium", "high", "xhigh", "max"] },
+      { id: "anthropic/claude-haiku-5-5", name: "Claude Haiku 5.5", provider: "anthropic", efforts: ["off", "low", "medium", "high", "xhigh", "max"] },
     ],
+    thinkingLevel: conversation.thinkingLevel ?? "medium",
     extensions: [],
     ...(conversation.child ? { parentConversationId: "1" } : {}),
     view: {
       entries: conversation.entries,
-      docs: { "pi.agent": { model: { provider: "openai", modelId: "gpt-6-sol" } } },
+      docs: {
+        "pi.agent": {
+          model: conversation.model?.startsWith("anthropic/")
+            ? { provider: "anthropic", modelId: conversation.model.slice("anthropic/".length) }
+            : { provider: "openai", modelId: conversation.model || "gpt-6-sol" },
+        },
+        ...(conversation.live ? { "pi.live": conversation.live } : {}),
+      },
     },
   };
 }
@@ -162,6 +201,16 @@ createServer(async (req, res) => {
     const next = String(conversations.size + 1);
     conversations.set(next, { title: "New conversation", running: false, entries: [] });
     return json(res, 201, { conversation: { id: next, title: "New conversation" } });
+  }
+  if (url.pathname === "/api/model") {
+    const conversation = conversations.get(id);
+    if (conversation) conversation.model = String(body.model);
+    return json(res, 200, { model: body.model });
+  }
+  if (url.pathname === "/api/effort") {
+    const conversation = conversations.get(id);
+    if (conversation) conversation.thinkingLevel = String(body.effort);
+    return json(res, 200, { effort: body.effort });
   }
   if (url.pathname === "/api/chat") {
     const conversation = conversations.get(id);

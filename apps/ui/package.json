@@ -11,7 +11,7 @@
     "test:ui": "node tests/live-client-check.mjs && node tests/connections-ui-check.mjs && node tests/claude-ui-check.mjs && node tests/conversations-ui-check.mjs && node tests/images-subthreads-ui-check.mjs && node tests/plugins-activity-ui-check.mjs",
     "lint": "eslint app components lib",
     "check": " npm run typecheck && npm run lint && MARS_BUILD_CHECK=1 npm run build",
-    "test": "node --test tests/tool-adapter.test.mjs tests/live-state.test.mjs tests/connections.test.mjs tests/pi-proxy.test.mjs tests/browser-options.test.mjs tests/dev-origin.test.mjs"
+    "test": "node --test tests/tool-adapter.test.mjs tests/run-steps.test.mjs tests/live-state.test.mjs tests/connections.test.mjs tests/pi-proxy.test.mjs tests/browser-options.test.mjs tests/dev-origin.test.mjs"
   },
   "engines": {
     "node": "24.14.0"

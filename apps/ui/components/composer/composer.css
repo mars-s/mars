@@ -7,15 +7,58 @@
   padding: 12px 24px max(12px, env(safe-area-inset-bottom));
   background: linear-gradient(to bottom, transparent, var(--background) 16px);
 }
+/* Kokonut AI Prompt: a soft outer shell with a header strip around the input surface. */
+.live-prompt-shell {
+  padding: 4px;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.live-prompt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px 0 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.live-prompt-header p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-prompt-header .mars-provider-mark {
+  width: 13px;
+  height: 13px;
+}
+.live-prompt-header button {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.live-prompt-header button:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
 .live-composer {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--composer);
-  padding: 14px 12px 10px 14px;
-  box-shadow: var(--shadow-composer);
+  padding: 14px 10px 10px 12px;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.04),
+    var(--shadow-composer);
   transition:
     border-color 150ms var(--ease-out),
     box-shadow 150ms var(--ease-out);
@@ -29,11 +72,23 @@
     var(--shadow-composer),
     0 0 0 1px color-mix(in srgb, var(--input) 60%, transparent);
 }
-.live-composer-dropzone[data-dragging="true"] .live-composer {
-  border-color: var(--clay);
-  box-shadow:
-    var(--shadow-composer),
-    0 0 0 1px var(--clay);
+.live-composer-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--clay);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--composer) 88%, transparent);
+  color: var(--clay);
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms var(--ease-out);
+}
+.live-composer-dropzone[data-dragging="true"] .live-composer-drop-hint {
+  opacity: 1;
 }
 .live-composer-input {
   display: block;
@@ -59,18 +114,14 @@
 .live-composer-input:disabled::placeholder {
   color: var(--text-faint);
 }
-.live-composer-toolbar,
-.live-composer-right {
+.live-composer-toolbar {
   display: flex;
   align-items: center;
+  gap: 4px;
   min-width: 0;
 }
-.live-composer-toolbar {
-  justify-content: space-between;
-  gap: 8px;
-}
-.live-composer-right {
-  gap: 4px;
+.live-composer-spacer {
+  flex: 1;
 }
 .live-composer-tool {
   display: inline-flex;
@@ -79,8 +130,9 @@
   flex: none;
   width: 32px;
   height: 32px;
+  margin-right: 2px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 999px;
   background: none;
   color: var(--text-muted);
   transition:
@@ -94,32 +146,56 @@
 .live-composer-tool:disabled {
   opacity: 0.5;
 }
+/* Kokonut send: one round button, two faces that crossfade, fills once there is something to send. */
 .live-send {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
   flex: none;
   width: 32px;
   height: 32px;
-  margin-left: 4px;
+  margin-left: 2px;
   border: 0;
-  border-radius: 8px;
-  color: var(--primary-foreground);
-  background: var(--primary);
+  border-radius: 999px;
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   transition:
     transform 120ms var(--ease-out),
     background-color 150ms var(--ease-out),
     color 150ms var(--ease-out);
 }
-.live-send:hover:not(:disabled) {
+.live-send[data-ready] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.live-send[data-ready]:hover:not(:disabled) {
   background: var(--clay-strong);
 }
 .live-send:active:not(:disabled) {
   transform: scale(0.94);
 }
 .live-send:disabled {
-  background: color-mix(in srgb, var(--primary) 45%, var(--composer));
-  color: color-mix(in srgb, var(--primary-foreground) 70%, transparent);
+  cursor: not-allowed;
+}
+.live-send-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity 200ms var(--ease-out),
+    filter 200ms var(--ease-out);
+}
+.live-send-face[data-shown] {
+  opacity: 1;
+  filter: none;
+}
+.live-send-stop {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
 }
 .live-composer-footnote {
   margin: 10px 0 0;
@@ -232,9 +308,12 @@
   .live-composer-wrap {
     padding: 8px 12px max(10px, env(safe-area-inset-bottom));
   }
+  .live-prompt-shell {
+    border-radius: 22px;
+  }
   .live-composer {
     border-radius: 18px;
-    padding: 12px 10px 8px 12px;
+    padding: 12px 8px 8px 10px;
   }
   .live-composer-tool,
   .live-send {
@@ -243,5 +322,11 @@
   }
   .live-composer-footnote {
     margin-top: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-send-face {
+    filter: none;
+    transition: none;
   }
 }

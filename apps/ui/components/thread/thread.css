@@ -179,41 +179,6 @@
   color: var(--green);
 }
 
-/* Streaming indicator: the Phase mark breathing in clay. */
-.live-working {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 0 0 24px;
-  color: var(--text-muted);
-  font-size: 14px;
-}
-.live-working-mark {
-  width: 20px;
-  height: 20px;
-  color: var(--clay);
-  animation: live-working-pulse 1.6s var(--ease-out) infinite;
-}
-@keyframes live-working-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: scale(0.88);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .live-working-mark {
-    animation: none;
-  }
-}
-html[data-reduced-motion="true"] .live-working-mark {
-  animation: none;
-}
-
 /* Markdown. Scoped under .live-assistant so it outranks the legacy chat-thread.css rules. */
 .live-assistant .mars-markdown {
   font-size: 16px;
@@ -417,4 +382,15 @@ html[data-reduced-motion="true"] .live-working-mark {
     gap: 12px;
     font-size: 30px;
   }
+}
+
+/* Kokonut AI State Loading for the run in progress. */
+.live-run-progress {
+  margin: 4px 0 24px;
+}
+.live-run-progress-inner {
+  justify-content: flex-start;
+}
+.live-run-progress-inner > div {
+  max-width: 520px;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Popover } from "radix-ui";
-import { useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { ContextUsage } from "@/lib/pi/live-state";
 import "./context-meter.css";
 
@@ -57,6 +57,18 @@ export function ContextMeter({ context, ...props }: MeterProps & { context: Cont
 
 function Meter({ context, canCompact, onCompact }: MeterProps & { context: MeasuredContext }) {
   const [open, setOpen] = useState(false);
+  // Hovered segment: the bar and legend row light up together (Kokonut meter behaviour).
+  const [active, setActive] = useState<string | null>(null);
+  // Hover intent: open after a short rest, close after the pointer leaves both trigger and panel.
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pinned = useRef(false);
+  const hover = (next: boolean) => {
+    clearTimeout(timer.current);
+    if (pinned.current) return;
+    timer.current = setTimeout(() => setOpen(next), next ? 120 : 220);
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const finePointer = (event: ReactPointerEvent) => event.pointerType === "mouse" || event.pointerType === "pen";
   const { limit, used, compactAt, autoCompact, basis } = context;
   const share = used / limit;
   const free = Math.max(0, limit - used);
@@ -68,11 +80,29 @@ function Meter({ context, canCompact, onCompact }: MeterProps & { context: Measu
       colour: SEGMENT_COLOURS[segment.id] ?? SPARE_COLOURS[index % SPARE_COLOURS.length],
     }));
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        clearTimeout(timer.current);
+        // A click pins the panel open until it is dismissed; hover alone does not.
+        pinned.current = next;
+        if (!next) setActive(null);
+        setOpen(next);
+      }}
+    >
       <Popover.Trigger asChild>
         <button
           type="button"
           className="mars-context-trigger"
+          data-open={open ? "" : undefined}
+          onPointerEnter={(event) => finePointer(event) && hover(true)}
+          onPointerLeave={(event) => finePointer(event) && hover(false)}
+          onFocus={(event) => {
+            if (event.currentTarget.matches(":focus-visible")) {
+              clearTimeout(timer.current);
+              setOpen(true);
+            }
+          }}
           data-level={level(share, compactAt)}
           aria-label={`Context ${percent(share)} full${estimated ? ", estimated" : ""}. Show breakdown`}
         >
@@ -88,6 +118,9 @@ function Meter({ context, canCompact, onCompact }: MeterProps & { context: Measu
           sideOffset={8}
           collisionPadding={12}
           aria-label="Context window"
+          onPointerEnter={(event) => finePointer(event) && hover(true)}
+          onPointerLeave={(event) => finePointer(event) && hover(false)}
+          onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <div className="mars-context-head">
             <p>Context</p>
@@ -97,10 +130,12 @@ function Meter({ context, canCompact, onCompact }: MeterProps & { context: Measu
             </p>
           </div>
           <div className="mars-context-bar">
-            <div className="mars-context-bar-track">
+            <div className="mars-context-bar-track" onPointerLeave={() => setActive(null)}>
               {rows.map((segment) => (
                 <span
                   key={segment.id}
+                  data-dim={active && active !== segment.id ? "" : undefined}
+                  onPointerEnter={() => setActive(segment.id)}
                   style={{ width: `${(segment.tokens / limit) * 100}%`, background: segment.colour }}
                 />
               ))}
@@ -112,7 +147,12 @@ function Meter({ context, canCompact, onCompact }: MeterProps & { context: Measu
           </p>
           <ul className="mars-context-legend">
             {rows.map((segment) => (
-              <li key={segment.id}>
+              <li
+                key={segment.id}
+                data-active={active === segment.id ? "" : undefined}
+                onPointerEnter={() => setActive(segment.id)}
+                onPointerLeave={() => setActive(null)}
+              >
                 <span className="mars-context-swatch" style={{ background: segment.colour }} />
                 <span>{segment.label}</span>
                 <span className="mars-context-num">{formatTokens(segment.tokens)}</span>

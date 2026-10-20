@@ -75,6 +75,17 @@ try {
   assert.ok(["estimated", "reported"].includes(state.context.basis), "live host reports context: " + JSON.stringify(state.context));
   assert.ok(state.context.limit > 0 && state.context.used >= 0 && state.context.compactAt > 0 && state.context.compactAt < 1);
   assert.equal(state.context.segments.reduce((sum, segment) => sum + segment.tokens, 0), state.context.used);
+  const luna = state.models.find((model) => model.id === "gpt-6-luna");
+  assert.ok(luna && luna.provider === "openai" && luna.efforts.includes("medium"), "models carry Pi's supported effort levels");
+  assert.ok(state.models.some((model) => model.provider === "anthropic"), "Claude models are labelled by provider");
+  assert.equal(typeof state.thinkingLevel, "string");
+  const post = (path, body) => request(path, { method: "POST", headers: { ...auth, origin: "http://127.0.0.1:" + port, "content-type": "application/json" }, body: JSON.stringify(body) });
+  const effort = await post("/api/effort", { effort: "high" });
+  assert.equal(effort.status, 200, "effort accepted: " + await effort.clone().text());
+  assert.equal((await (await request("/api/state", { headers: auth })).json()).thinkingLevel, "high");
+  assert.equal((await post("/api/effort", { effort: "ludicrous" })).status, 400, "unsupported effort rejected");
+  assert.equal((await post("/api/model", { model: "anthropic/claude-haiku-4-5" })).status, 200);
+  assert.equal((await (await request("/api/state", { headers: auth })).json()).thinkingLevel, "high", "effort kept when the new model supports it");
   const device = await readFile(join(root, 'data/device-id'), 'utf8');
   const login = await request('/?token=' + encodeURIComponent(token), { headers: { host: publicHost }, redirect: 'manual' });
   assert.equal(login.status, 303);

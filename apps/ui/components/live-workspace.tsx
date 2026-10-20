@@ -222,6 +222,7 @@ export function LiveWorkspace() {
       const scoped = [
         "/api/chat",
         "/api/model",
+        "/api/effort",
         "/api/abort",
         "/api/compact",
         "/api/trial",
