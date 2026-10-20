@@ -3,7 +3,8 @@
 Retrieved 2026-10-20 by scripts/vendor-components.mjs. Hashes are of the upstream file before import-path rewriting.
 Upgrade by rerunning the script, then scripts/theme-vendor.mjs, and reviewing the diff. Full licence texts are in licenses/.
 Local changes after import: palette classes mapped to Mars tokens (theme-vendor.mjs); agent-ui.css variables point at Mars tokens;
-edit-tool.tsx follows data-theme and uses --surface instead of forced black. Mars wrappers live outside components/vendor.
+edit-tool.tsx follows data-theme and uses --surface instead of forced black; bash-tool.tsx
+scrolls long output (240px, pre-wrap) instead of clipping it at 80px and collapsing spaces. Mars wrappers live outside components/vendor.
 
 | Source | Licence |
 | --- | --- |

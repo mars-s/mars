@@ -97,3 +97,17 @@ removed retired8443/8787 routes. TLS owner API probes pass on both active ports.
 Legacy code/data and full Git histories remain backed up privately. No live model
 calls or external messages were made. Full automated results and limitations are
 in docs/MIGRATION-RESULTS.md.
+
+## 2026-10-20 activity lane: Claude-style tool activity and task cards
+
+Tool calls now render as a Claude-style group line ("Ran 1 command, read 1 file,
+searched the web") with the "N actions" count kept beside it. Each call is one
+quiet row with a chevron; expanding it mounts the 21st Bash terminal card, the
+21st Edit diff card (from Pi's details.patch, else edits or write content, inside
+DiffHighlighterReady), or a plain output for read, search, fetch and unknown
+tools. components/ai/tool-adapter.ts maps ToolActivity to those props and is
+covered by tests/tool-adapter.test.mjs (in npm test). Status, durations and exit
+codes come only from Pi data. Workers and workflows are compact task cards with
+StatusMark, model, elapsed time, open-thread links and the existing stop
+controls. Usage with no workers or workflows is a quiet line, hidden in an empty
+chat. The vendored bash card scrolls long output instead of clipping it.

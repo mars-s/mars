@@ -80,7 +80,7 @@ export function BashToolTerminalCard({
           <span className="text-foreground">{command}</span>
         </div>
         {!isPending && step.bashOutput && (
-          <div className="mt-1 text-muted-foreground whitespace-pre-line max-h-[80px] overflow-hidden">
+          <div className="mt-1 text-muted-foreground whitespace-pre-wrap max-h-[240px] overflow-auto">
             {step.bashOutput}
           </div>
         )}
