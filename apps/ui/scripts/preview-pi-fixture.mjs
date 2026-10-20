@@ -197,7 +197,7 @@ createServer(async (req, res) => {
       tools: {
         changes: { available: true },
         files: { available: true },
-        terminal: { available: false, reason: "Fixture: Terminal is not built yet." },
+        terminal: { available: true },
         "side-chat": { available: true },
         page: { available: true },
         browser: { available: false, reason: "Fixture: Browser is not built yet." },
@@ -337,6 +337,76 @@ createServer(async (req, res) => {
       return json(res, 409, { error: "This page changed elsewhere since you opened it.", modified: current?.modified ?? 0 });
     fixturePages.set(name, { text: body.text, modified: Math.max(Date.now(), (current?.modified ?? 0) + 1) });
     return json(res, current ? 200 : 201, summary([name, fixturePages.get(name)]));
+  }
+  // workbench lane: terminal
+  // A fixture shell: it echoes input and answers a few words. Nothing runs on this machine.
+  {
+    const terminal = (globalThis.marsFixtureTerminals ??= new Map());
+    const append = (session, text) => {
+      session.output = Buffer.concat([session.output, Buffer.from(text)]);
+      for (const wake of session.waiters.splice(0)) wake();
+    };
+    const prompt = "\x1b[2mfixture\x1b[0m:workspace $ ";
+    if (url.pathname === "/api/workbench/terminals")
+      return json(res, 200, { sessions: [...terminal.entries()].map(([id, s]) => ({ id, created: s.created, lastActive: s.created, exited: s.exited })) });
+    if (url.pathname === "/api/workbench/terminal" && req.method === "POST") {
+      const id = [...Array(24)].map(() => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+      const session = { created: Date.now(), output: Buffer.alloc(0), line: "", waiters: [], exited: false, exitCode: undefined };
+      terminal.set(id, session);
+      append(session, `Fixture terminal: a stand-in for the Pi host shell. Try "help".\r\n${prompt}`);
+      return json(res, 201, { id });
+    }
+    const match = /^\/api\/workbench\/terminal\/([a-f0-9]{24})(?:\/(input|resize|kill))?$/.exec(url.pathname);
+    if (match) {
+      const session = terminal.get(match[1]);
+      if (!session) return json(res, 404, { error: "Terminal session not found" });
+      const reply = (since) => ({
+        offset: session.output.length,
+        data: session.output.subarray(Math.min(since, session.output.length)).toString("base64"),
+        ...(session.exited ? { exited: true, exitCode: session.exitCode } : {}),
+      });
+      if (!match[2]) {
+        const since = Number(url.searchParams.get("since") || 0);
+        if (session.output.length > since || session.exited) return json(res, 200, reply(since));
+        return new Promise((resolve) => {
+          const done = () => (clearTimeout(timer), resolve(json(res, 200, reply(since))));
+          const timer = setTimeout(done, 20000);
+          session.waiters.push(done);
+        });
+      }
+      if (match[2] === "kill") {
+        session.exited = true;
+        session.exitCode = 129;
+        append(session, "");
+        return json(res, 200, { id: match[1], exited: true, exitCode: 129 });
+      }
+      if (session.exited) return json(res, 409, { error: "This terminal session has ended" });
+      if (match[2] === "resize") {
+        session.size = `${body.rows} ${body.cols}`;
+        return json(res, 200, { cols: body.cols, rows: body.rows });
+      }
+      for (const char of Buffer.from(String(body.data || ""), "base64").toString()) {
+        if (char === "\r") {
+          const command = session.line.trim();
+          session.line = "";
+          const answers = {
+            help: "Fixture commands: help, stty size, date, exit",
+            "stty size": session.size || "24 80",
+            date: "Wed 21 Oct 2026 09:00:00 AEDT (fixture)",
+          };
+          if (command === "exit") {
+            append(session, "\r\nlogout\r\n");
+            session.exited = true;
+            session.exitCode = 0;
+            append(session, "");
+          } else
+            append(session, `\r\n${command ? (answers[command] ?? `fixture: ${command}: not a real shell`) + "\r\n" : ""}${prompt}`);
+        } else if (char === "\x7f") {
+          if (session.line) (session.line = session.line.slice(0, -1)), append(session, "\b \b");
+        } else if (char >= " ") (session.line += char), append(session, char);
+      }
+      return json(res, 200, { accepted: 1 });
+    }
   }
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });
   if (url.pathname === "/api/connections")

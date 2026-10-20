@@ -1,6 +1,7 @@
 "use client";
 
 import type { WorkbenchTab } from "./workbench-state";
+import { TerminalPane } from "./terminal-pane";
 import { toolTitle } from "./tools";
 import { FilesPane } from "./files-pane";
 import { ChangesPane } from "./changes-pane";
@@ -19,7 +20,8 @@ export function PaneFor({ tab }: { tab: WorkbenchTab }) {
       return <PagePane tab={tab} />;
     case "side-chat":
       return <SideChatPane tab={tab} />;
-    // lane: terminal -> case "terminal": return <TerminalPane tab={tab} />;
+    case "terminal":
+      return <TerminalPane tab={tab} />;
     // lane: browser  -> case "browser": return <BrowserPane tab={tab} />;
     default:
       return (

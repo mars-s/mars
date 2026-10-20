@@ -23,7 +23,7 @@ export function createWorkbench({ work, send, jsonBody, tools = {}, extensionUis
       // lane: changes. git can be missing at runtime.
       changes: tools.changes ? ((await tools.changes.available()).reason ?? "") : "Changes is not built into this host yet.",
       files: tools.files ? "" : "Files is not built into this host yet.",
-      terminal: tools.terminal ? ((await hasPython()) ? "" : "python3 with the pty module was not found on the host.") : "Terminal is not built into this host yet.",
+      terminal: tools.terminal ? (await tools.terminal.available()).reason : "Terminal is not built into this host yet.", // lane: terminal (the module probes python3 and pty)
       "side-chat": "",
       page: tools.pages ? "" : "Pages are not built into this host yet.",
       browser: tools.browser ? "" : "Browser is not built into this host yet.",
