@@ -29,23 +29,48 @@ export function parseCapabilities(value: unknown): Capabilities {
   ) as Capabilities;
 }
 
-export type FileEntry = { name: string; type: "file" | "dir" | "link"; size: number; modified: number };
+/** A workspace-relative path the host returned; anything absolute or with `..` is dropped. */
+const relPath = (value: unknown) => {
+  const path = str(value);
+  return path.startsWith("/") || path.includes("\0") || path.split("/").some((part) => part === "..") ? "" : path;
+};
+
+export type LinkTarget = { type: "dir" | "file"; path: string } | { type: "outside" | "missing" };
+export type FileEntry = {
+  name: string;
+  type: "file" | "dir" | "link";
+  size: number;
+  modified: number;
+  hidden: boolean;
+  /** Only for links: where the link resolves inside the workspace, or why it cannot be opened. */
+  target?: LinkTarget;
+};
 export type Listing = { path: string; entries: FileEntry[]; truncated: boolean };
+function parseLinkTarget(value: unknown): LinkTarget {
+  const row = record(value);
+  const path = relPath(row.path);
+  if ((row.type === "dir" || row.type === "file") && (path || row.path === "")) return { type: row.type, path };
+  return { type: row.type === "missing" ? "missing" : "outside" };
+}
 export function parseListing(value: unknown): Listing {
   const row = record(value);
   return {
-    path: str(row.path),
+    path: relPath(row.path),
     truncated: row.truncated === true,
     entries: list(row.entries)
       .map(record)
       .flatMap((entry) => {
         const name = str(entry.name);
         const type = entry.type === "dir" || entry.type === "link" ? entry.type : "file";
-        return name && !name.includes("/") ? [{ name, type, size: num(entry.size), modified: num(entry.modified) } as FileEntry] : [];
+        if (!name || name.includes("/") || name === "." || name === "..") return [];
+        const parsed: FileEntry = { name, type, size: num(entry.size), modified: num(entry.modified), hidden: name.startsWith(".") };
+        if (type === "link") parsed.target = parseLinkTarget(entry.target);
+        return [parsed];
       }),
   };
 }
 
+const IMAGE_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
 export type FileContent = {
   path: string;
   size: number;
@@ -53,25 +78,38 @@ export type FileContent = {
   kind: "text" | "image" | "binary";
   text: string;
   truncated: boolean;
+  /** Sniffed by the host from the bytes; empty unless kind is image. */
+  mime: string;
 };
 export function parseFile(value: unknown): FileContent {
   const row = record(value);
   const kind = row.kind === "image" || row.kind === "binary" ? row.kind : "text";
+  const mime = str(row.mime);
   return {
-    path: str(row.path),
+    path: relPath(row.path),
     size: num(row.size),
     modified: num(row.modified),
     kind,
     text: kind === "text" ? str(row.text) : "",
-    truncated: row.truncated === true,
+    truncated: kind === "text" && row.truncated === true,
+    mime: kind === "image" && (IMAGE_MIME as readonly string[]).includes(mime) ? mime : "",
   };
 }
 
 export type SearchHit = { path: string; type: "file" | "dir" };
-export function parseSearch(value: unknown): SearchHit[] {
-  return list(record(value).results)
-    .map(record)
-    .flatMap((hit) => (str(hit.path) ? [{ path: str(hit.path), type: hit.type === "dir" ? "dir" : "file" } as SearchHit] : []));
+export type SearchResult = { results: SearchHit[]; truncated: boolean; timedOut: boolean };
+export function parseSearch(value: unknown): SearchResult {
+  const row = record(value);
+  return {
+    truncated: row.truncated === true,
+    timedOut: row.timedOut === true,
+    results: list(row.results)
+      .map(record)
+      .flatMap((hit) => {
+        const path = relPath(hit.path);
+        return path ? [{ path, type: hit.type === "dir" ? "dir" : "file" } as SearchHit] : [];
+      }),
+  };
 }
 
 export type Repo = { path: string; branch: string; ahead: number; behind: number; dirty: boolean };

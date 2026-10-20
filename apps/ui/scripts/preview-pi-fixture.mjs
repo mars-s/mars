@@ -196,7 +196,7 @@ createServer(async (req, res) => {
     return json(res, 200, {
       tools: {
         changes: { available: false, reason: "Fixture: Changes is not built yet." },
-        files: { available: false, reason: "Fixture: Files is not built yet." },
+        files: { available: true },
         terminal: { available: false, reason: "Fixture: Terminal is not built yet." },
         "side-chat": { available: true },
         page: { available: false, reason: "Fixture: Pages are not built yet." },
@@ -210,6 +210,60 @@ createServer(async (req, res) => {
         { kind: "page", title: "Release plan (fixture)", name: "release-plan" },
       ],
     });
+  // workbench lane: files
+  {
+    const PNG = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAhklEQVR42u2ZuRGAMBDE3CWlUCvVQAcE53u8O9IMuRRhr9cCALDiua/375OUPjYmKj4ekiU+ElIl3xJRLV8a0SVfEtEtnx4hHTAlnxYhHTAtvx1BwGTAKfLhCAIIIIAAAmz+BRwlOJFyH+BOLB4gP6tYDFsW06LFuGsxr9s8cNg8MQEAhPkAQyuN/whBKW0AAAAASUVORK5CYII=",
+      "base64",
+    );
+    const files = {
+      "README.md": "# Fixture workspace\n\nThis tree is **fixture data** from the preview host, not a real Pi workspace.\n\n- [Release notes](notes/release.md)\n- [Deploy script](scripts/deploy.sh)\n\n| Item | State |\n| --- | --- |\n| Files pane | Fixture |\n\n![Fixture mark](assets/mark.png)\n",
+      "notes/release.md": "# Release plan (fixture)\n\n1. Merge the workbench lanes.\n2. Run the gate.\n\n> Fixture text only.\n",
+      "notes/ideas.txt": "Fixture idea list\n- tree keyboard\n- quick open\n",
+      "scripts/deploy.sh": "#!/usr/bin/env bash\n# Fixture deploy script\nset -euo pipefail\ncd \"$(dirname \"$0\")/..\"\nnpm ci\nnpm run build\necho \"fixture deploy done\"\n",
+      "src/index.ts": "// Fixture source file\nexport function greet(name: string) {\n  return `Hello, ${name}`;\n}\n",
+      ".env.example": "# Fixture\nMARS_PI_TOKEN=\n",
+    };
+    const binaries = { "assets/mark.png": PNG, "assets/archive.zip": Buffer.alloc(48 * 1024) };
+    const dirs = ["", "assets", "notes", "scripts", "src", "node_modules"];
+    const now = Date.parse("2026-10-20T09:30:00+11:00");
+    const children = (dir) => {
+      const prefix = dir ? `${dir}/` : "";
+      const names = new Map();
+      for (const path of [...dirs.filter(Boolean), ...Object.keys(files), ...Object.keys(binaries)]) {
+        if (!path.startsWith(prefix) || path === dir) continue;
+        const [name, ...rest] = path.slice(prefix.length).split("/");
+        if (!names.has(name)) names.set(name, rest.length || dirs.includes(prefix + name) ? "dir" : "file");
+      }
+      return [...names].map(([name, type]) => {
+        const path = prefix + name;
+        const size = type === "dir" ? 0 : (files[path]?.length ?? binaries[path].length);
+        return { name, type, size, modified: now, hidden: name.startsWith(".") };
+      }).sort((a, b) => Number(b.type === "dir") - Number(a.type === "dir") || a.name.localeCompare(b.name));
+    };
+    const rel = url.searchParams.get("path") || "";
+    if (url.pathname === "/api/workbench/files") {
+      if (!dirs.includes(rel)) return json(res, 404, { error: "Fixture: that folder does not exist." });
+      return json(res, 200, { path: rel, entries: children(rel), truncated: false });
+    }
+    if (url.pathname === "/api/workbench/file") {
+      if (rel in files) return json(res, 200, { path: rel, size: files[rel].length, modified: now, kind: "text", text: files[rel], truncated: false });
+      if (rel === "assets/mark.png") return json(res, 200, { path: rel, size: PNG.length, modified: now, kind: "image", mime: "image/png" });
+      if (rel in binaries) return json(res, 200, { path: rel, size: binaries[rel].length, modified: now, kind: "binary" });
+      return json(res, 404, { error: "Fixture: that file does not exist." });
+    }
+    if (url.pathname === "/api/workbench/raw") {
+      if (rel !== "assets/mark.png") return json(res, 415, { error: "Fixture: only images can be shown directly." });
+      res.writeHead(200, { "content-type": "image/png", "content-length": PNG.length });
+      return res.end(PNG);
+    }
+    if (url.pathname === "/api/workbench/search") {
+      const q = (url.searchParams.get("q") || "").toLowerCase().trim();
+      const all = [...Object.keys(files), ...Object.keys(binaries)];
+      const results = q ? all.filter((path) => path.split("/").pop().toLowerCase().includes(q)).map((path) => ({ path, type: "file" })) : [];
+      return json(res, 200, { query: q, results, truncated: false, timedOut: false });
+    }
+  }
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });
   if (url.pathname === "/api/connections")
     return json(res, 200, {
