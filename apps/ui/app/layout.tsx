@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     "A personal workspace for conversations, files and durable tasks. A Next.js client for your Pi agent.",
   applicationName: "Mars",
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#141414" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#262624" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
