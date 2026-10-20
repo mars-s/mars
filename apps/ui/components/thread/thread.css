@@ -1,3 +1,4 @@
+/* Conversation column: Claude's 768px reading measure with 24px gutters. */
 .live-thread {
   flex: 1;
   min-height: 0;
@@ -5,55 +6,143 @@
 .live-viewport {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  scroll-padding-block: 28px;
+  scroll-padding-block: 32px;
 }
 .live-transcript {
-  width: min(100%, 820px);
+  width: min(100%, 816px);
   margin: 0 auto;
-  padding: 28px 32px 0;
+  padding: 32px 24px 8px;
   flex: 1;
 }
+
+/* Empty conversation: greeting and composer sit together around 38% height. */
 .live-thread-empty .live-transcript {
-  flex: 0;
-  margin-top: auto;
+  flex: 0 0 auto;
+  margin-top: max(16px, calc(38dvh - 116px));
+  padding-top: 0;
 }
 .live-thread-empty .live-composer-wrap {
   margin-bottom: auto;
   padding-top: 0;
 }
+.live-welcome {
+  padding: 0 0 28px;
+}
+.live-welcome h1 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(32px, 4vw, 40px);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-wrap: balance;
+}
+.live-welcome-mark {
+  width: 1em;
+  height: 1em;
+  color: var(--clay);
+}
+
+/* Turns */
 .live-message {
-  margin-bottom: 30px;
-  line-height: 1.75;
-  font-size: 15px;
+  margin-bottom: 28px;
   overflow-wrap: anywhere;
 }
 .live-user {
   display: flex;
-  justify-content: flex-end;
-  padding-left: 40px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 .live-user-bubble {
-  max-width: 90%;
-  padding: 12px 18px;
-  border-radius: 17px;
-  background: var(--surface-raised);
+  max-width: 85%;
+  padding: 10px 16px;
+  border-radius: 16px;
+  background: var(--user-bubble);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
   white-space: pre-wrap;
 }
+.live-message-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 85%;
+}
+.live-message-images a {
+  display: block;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: border-color 160ms var(--ease-out);
+}
+.live-message-images a:hover {
+  border-color: var(--text-faint);
+}
+.live-message-images img {
+  display: block;
+  width: auto;
+  max-width: min(240px, 60vw);
+  height: 120px;
+  object-fit: cover;
+}
 .live-assistant {
-  padding: 0 7px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.65;
 }
-.live-assistant .mars-markdown {
-  font-size: 15px;
-  line-height: 1.8;
+/* Pi splits one turn into a segment per tool round. Only the final segment reserves an
+   action row; earlier segments keep copy as a hover and focus overlay (in flow on touch). */
+@media (hover: hover) {
+  .live-assistant:has(+ .live-assistant) {
+    position: relative;
+    margin-bottom: 20px;
+  }
+  .live-assistant:has(+ .live-assistant) .live-actions {
+    position: absolute;
+    right: 0;
+    bottom: -4px;
+    margin: 0;
+    border-radius: 8px;
+    background: var(--background);
+  }
 }
+
+/* Outcome notes stay quiet and inline. */
+.live-outcome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.live-outcome svg {
+  color: var(--red);
+}
+
+/* Action row: shown on the latest reply, on hover or focus otherwise, always on touch. */
 .live-actions {
   display: flex;
-  gap: 4px;
-  margin-top: 7px;
+  gap: 2px;
+  margin: 8px 0 0 -6px;
   opacity: 0;
+  transition: opacity 160ms var(--ease-out);
 }
+.live-assistant.is-last .live-actions,
 .live-assistant:hover .live-actions,
 .live-assistant:focus-within .live-actions {
   opacity: 1;
@@ -63,67 +152,269 @@
     opacity: 1;
   }
 }
+.live-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
+}
+.live-action:hover {
+  background: var(--accent);
+  color: var(--text);
+}
+.live-action-done,
+.live-action[data-copied] .live-action-copy {
+  display: none;
+}
+.live-action[data-copied] .live-action-done {
+  display: block;
+  color: var(--green);
+}
+
+/* Streaming indicator: the Phase mark breathing in clay. */
 .live-working {
   display: flex;
-  gap: 9px;
+  gap: 10px;
   align-items: center;
+  margin: 0 0 24px;
   color: var(--text-muted);
-  padding: 5px 7px 18px;
-  font-size: 12px;
+  font-size: 14px;
 }
-@media (max-width: 760px) {
-  .live-transcript {
-    padding: 15px 20px 0;
+.live-working-mark {
+  width: 20px;
+  height: 20px;
+  color: var(--clay);
+  animation: live-working-pulse 1.6s var(--ease-out) infinite;
+}
+@keyframes live-working-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
-  .live-message {
-    font-size: 14px;
+  50% {
+    opacity: 0.45;
+    transform: scale(0.88);
   }
-  .live-user {
-    padding-left: 15px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-working-mark {
+    animation: none;
   }
+}
+html[data-reduced-motion="true"] .live-working-mark {
+  animation: none;
 }
 
-.live-message-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* Markdown. Scoped under .live-assistant so it outranks the legacy chat-thread.css rules. */
+.live-assistant .mars-markdown {
+  font-size: 16px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
 }
-.live-message-images img {
-  max-width: min(240px, 60vw);
-  max-height: 220px;
-  object-fit: contain;
-  border-radius: 10px;
+.live-assistant .mars-markdown > :first-child {
+  margin-top: 0;
 }
-.live-message-images {
-  margin-bottom: 8px;
+.live-assistant .mars-markdown > :last-child {
+  margin-bottom: 0;
 }
-
-/* Empty-conversation greeting (desktop; mobile overrides moved below). */.live-welcome {
-  padding: 28px 0 35px;
-  text-align: center;
+.live-assistant .mars-markdown p {
+  margin: 0 0 16px;
 }
-.live-welcome h1 {
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-  align-items: center;
-  font:
-    normal clamp(29px, 3.4vw, 43px)/1.2 Georgia,
-    serif;
-  letter-spacing: -0.025em;
+.live-assistant .mars-markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin: 28px 0 10px;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
-.live-welcome svg {
-  color: var(--orange);
+.live-assistant .mars-markdown h1 {
+  font-size: 22px;
 }
-  .live-welcome {
-    padding: 25px 12px;
+.live-assistant .mars-markdown h2 {
+  font-size: 19px;
+}
+.live-assistant .mars-markdown h3 {
+  font-size: 17px;
+}
+.live-assistant .mars-markdown :is(h4, h5, h6) {
+  font-size: 16px;
+}
+.live-assistant .mars-markdown strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.live-assistant .mars-markdown :is(ul, ol) {
+  margin: 0 0 16px;
+  padding-left: 26px;
+}
+.live-assistant .mars-markdown ul {
+  list-style: disc;
+}
+.live-assistant .mars-markdown ol {
+  list-style: decimal;
+}
+.live-assistant .mars-markdown li {
+  margin: 6px 0;
+  padding-left: 4px;
+}
+.live-assistant .mars-markdown li > :is(ul, ol) {
+  margin: 4px 0 0;
+}
+.live-assistant .mars-markdown li > p {
+  margin: 0;
+}
+.live-assistant .mars-markdown li::marker {
+  color: var(--text-muted);
+}
+.live-assistant .mars-markdown blockquote {
+  margin: 0 0 16px;
+  padding: 2px 0 2px 16px;
+  border-left: 1px solid var(--input);
+  color: var(--text-muted);
+}
+.live-assistant .mars-markdown a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--blue) 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 140ms var(--ease-out);
+}
+.live-assistant .mars-markdown a:hover {
+  text-decoration-color: currentColor;
+}
+.live-assistant .mars-markdown hr {
+  margin: 28px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.live-assistant .mars-markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+/* Inline code chip */
+.live-assistant .mars-markdown :not(pre) > code {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+/* Code block: language header with a copy button above the pre. */
+.live-assistant .mars-markdown .mars-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  margin: 4px 0 0;
+  padding: 0 6px 0 14px;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.live-assistant .mars-markdown .mars-code-header > span {
+  font-family: var(--font-mono);
+}
+.live-assistant .mars-markdown .mars-code-header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
+}
+.live-assistant .mars-markdown .mars-code-header button:hover {
+  background: var(--accent);
+  color: var(--text);
+}
+.live-assistant .mars-markdown pre {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.live-assistant .mars-markdown .mars-code-header + pre {
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
+}
+.live-assistant .mars-markdown pre code {
+  font-family: var(--font-mono);
+  color: var(--text);
+  font-variant-ligatures: none;
+}
+
+/* Tables: horizontal rules only, scroll sideways on narrow screens. */
+.live-assistant .mars-markdown .mars-table-wrap {
+  margin: 4px 0 16px;
+  overflow-x: auto;
+}
+.live-assistant .mars-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.live-assistant .mars-markdown :is(th, td) {
+  padding: 8px 16px 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.live-assistant .mars-markdown th {
+  background: none;
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--input);
+}
+.live-assistant .mars-markdown tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .live-transcript {
+    padding: 20px 16px 8px;
+  }
+  .live-user-bubble,
+  .live-message-images {
+    max-width: 90%;
   }
   .live-welcome h1 {
+    flex-direction: column;
+    gap: 12px;
     font-size: 30px;
-    gap: 10px;
   }
-  .live-welcome svg {
-    width: 32px;
-    height: 32px;
-  }
+}
