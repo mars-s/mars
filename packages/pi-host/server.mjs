@@ -13,6 +13,7 @@ import { createVmControl } from "./vm-control.mjs";
 import { createWebSearchExtension } from "./web-search.mjs";
 import { createDevTools } from "./dev-tools.mjs";
 import { createConversationManager } from "./conversations.mjs";
+import { abortKeepingQueue, removeQueued, steerQueued, whenBusy } from "./queue.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
@@ -702,14 +703,22 @@ const server = http.createServer(async (req, res) => {
       if (typeof data.text !== "string" || data.text.length > 100000 || (!data.text.trim() && !data.attachmentIds?.length))
         throw Error("Enter a message or attach an image");
       visionModel((await conversation.agent(context)).model, data.attachmentIds);
+      const busy = whenBusy(data.mode);
       const prepared = await images.content(data.attachmentIds || [], data.text);
       const submission = await conversation.submit(
-        { type: "input", content: prepared.content, entry: { kind: "mars.user", data: { attachments: prepared.attachments } }, requestId: data.requestId || randomUUID() },
+        { type: "input", content: prepared.content, entry: { kind: "mars.user", data: { attachments: prepared.attachments } }, whenBusy: busy, requestId: data.requestId || randomUUID() },
         context,
       );
       // Naming is a convenience: a failure here must not hide the accepted message.
       await conversations.autoTitle(conversation, data.text).catch((error) => console.warn("Mars auto-title:", error.message));
       send(res, 202, { submissionId: submission.id });
+      return;
+    }
+    if (req.method === "POST" && (url.pathname === "/api/queue/steer" || url.pathname === "/api/queue/remove")) {
+      const data = await jsonBody(req);
+      const conversation = await conversations.resolve(data.conversationId);
+      const change = url.pathname.endsWith("/steer") ? steerQueued : removeQueued;
+      send(res, 200, await change({ harness, conversation, submissionId: data.submissionId, context }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/trial") {
@@ -737,8 +746,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/abort") {
       const data = await jsonBody(req);
-      await (await conversations.resolve(data.conversationId)).abort(context, { background: data.background === true });
-      send(res, 200, { aborted: true });
+      const conversation = await conversations.resolve(data.conversationId);
+      send(res, 200, await abortKeepingQueue({ harness, conversation, context, background: data.background === true }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/effort") {

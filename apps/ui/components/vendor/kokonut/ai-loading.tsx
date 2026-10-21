@@ -510,12 +510,12 @@ export default function AILoadingState({
                 is announced as it changes. */}
             <output className="min-w-0 truncate">{title}</output>
             {isActive && (
-              <span className="text-muted-foreground tabular-nums dark:text-muted-foreground">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums dark:text-muted-foreground">
                 {formatDuration(seconds)}
               </span>
             )}
             {isDone && (
-              <span className="text-muted-foreground dark:text-muted-foreground">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground dark:text-muted-foreground">
                 · {steps.length} steps
               </span>
             )}

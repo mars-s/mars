@@ -357,3 +357,12 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - `parseSnapshot` now joins a tool-only assistant turn to the next assistant message (and a live run to the open group), so a run reads "Ran 5 commands, read 1 file, edited 1 file, wrote 1 file · 8 actions · 1 failed" above the final reply. Text keeps its place; the group keeps its first turn's id so it does not remount. The action total only shows when kinds are mixed, since "Ran 3 commands" already counts.
 - Checks: a live-state unit test for merging (and the codemode live-call test updated to expect one group); browser checks live-client, plugins-activity, claude-ui, conversations, images-subthreads, organise, plus plan, side-chats and workbench-ui against the fixture preview, all pass.
 
+
+## 2026-10-21 Queue and steer; run progress full width
+
+- Owner request: messages sent during a reply should queue by default, show above the composer in place of "is working, press Stop", and be steerable like ChatGPT.
+- Host (`queue.mjs`): Pi's inbox is the queue. `/api/chat` takes `mode` ("queue" default as followUp, "steer"). `/api/queue/steer` withdraws a queued followUp and resubmits it as a steer, which Pi places at the running reply's next tool boundary; `/api/queue/remove` withdraws it. Stop keeps queued messages by resubmitting them after the abort.
+- UI: the composer's queue panel lists queued and steering messages with Steer and remove; while running, Enter queues, a Steer button (or Ctrl/Cmd+Shift+Enter) steers, and a neutral queue button sits beside the clay Stop. The assistant-ui queue adapter is attached only while running, so an idle failed send keeps assistant-ui's retry with images (caught by images-subthreads-ui-check when it was always attached).
+- Run progress (side chat agent): `.live-run-progress-inner > div` was capped at 520px inside the 768px column; it now spans the column like the composer (edges equal at 1440 and 1920). The header timer and step count no longer wrap.
+- Checks: `check-queue.mjs` on a real harness with a gated model (queue default, remove, steer reaches the running reply right after its tool, queued message runs after, removed never sent, Stop keeps the queue); `tests/queue-ui-check.mjs` in the browser. Gate: host 36/36, UI unit 81/81, browser checks pass, build passes.
+

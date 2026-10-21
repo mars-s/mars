@@ -123,3 +123,15 @@ resolves one definition per name; arbitrary incompatible task migrations are not
 automatically solved by immutable package hashes. Host code and dependencies are
 ordinary editable source and use systemd restarts, while installed extension
 replacements and Next UI edits can apply live.
+
+## Queue and steer
+
+Pi's native inbox (`pi.inbox`, returned in `view.docs`) is the only queue. While a reply runs, POST /api/chat
+accepts `mode`: `"queue"` (default) submits with `whenBusy: "followUp"`, so the message waits for the reply to end;
+`"steer"` submits with `whenBusy: "steer"`, so Pi places it at the running reply's next tool boundary.
+POST /api/queue/steer `{conversationId, submissionId}` withdraws a queued followUp and resubmits the same content and
+entry as a steer; POST /api/queue/remove withdraws it. Both refuse ids that are no longer queued. POST /api/abort keeps
+queued messages: they are read, the run is aborted (which withdraws them), and they are resubmitted in order, so the
+first starts the next reply. The composer shows the queue above the input with Steer and remove per message; Enter
+queues, the Steer button (or Ctrl/Cmd+Shift+Enter) steers. The assistant-ui queue adapter is attached only while a reply
+runs and keeps no copy of the queue.

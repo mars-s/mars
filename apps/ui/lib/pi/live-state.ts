@@ -175,7 +175,32 @@ export function parseContext(value: unknown): ContextUsage {
     ),
   };
 }
+/**
+ * A message waiting in Pi's inbox while a reply runs. "queue" waits for the reply to finish;
+ * "steer" reaches the running reply at its next tool boundary.
+ */
+export type QueuedMessage = { id: string; mode: "queue" | "steer"; text: string; images: number };
+/** Pi's `pi.inbox` document as the browser sees it (image bytes are already stripped). */
+export function parseQueue(value: unknown): QueuedMessage[] {
+  return list(record(value).items)
+    .map(record)
+    .flatMap((item) => {
+      const id = identifier(item.id);
+      if (!id || (item.mode !== "followUp" && item.mode !== "steer")) return [];
+      const parts = typeof item.content === "string" ? [] : list(item.content).map(record);
+      return [
+        {
+          id,
+          mode: item.mode === "steer" ? ("steer" as const) : ("queue" as const),
+          text: (typeof item.content === "string" ? item.content : text(item.content)).slice(0, 4000),
+          images: parts.filter((part) => part.type === "image").length,
+        },
+      ];
+    });
+}
 export type LiveSnapshot = {
+  /** Messages waiting for the running reply, oldest first. */
+  queue: QueuedMessage[];
   context: ContextUsage;
   parentConversationId: string;
   /** Set when this conversation is a side chat: the conversation it belongs to. */
@@ -488,6 +513,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
     parentConversationId: identifier(data.parentConversationId),
     sideChatOf: identifier(data.sideChatOf),
     plan: parsePlan(data.plan),
+    queue: parseQueue(docs["pi.inbox"]),
     conversationTitle: string(data.conversationTitle),
     subthreads: list(data.subthreads)
       .map(record)

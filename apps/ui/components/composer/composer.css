@@ -330,3 +330,128 @@
     transition: none;
   }
 }
+
+/* Queue and steer (apps/ui/docs/FULL-CONTROL.md): Pi's inbox shown above the composer. */
+.live-queue {
+  padding: 6px 6px 4px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.live-queue-label {
+  margin: 2px 0 4px;
+  font-weight: 500;
+}
+.live-queue ul {
+  display: grid;
+  gap: 2px;
+  max-height: 168px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.live-queue li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 2px 0 4px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  animation: live-queue-in 160ms var(--ease-out);
+}
+@keyframes live-queue-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.live-queue li:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.live-queue-icon {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+.live-queue li[data-mode="steer"] .live-queue-icon {
+  color: var(--clay);
+}
+.live-queue-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-queue-text small,
+.live-queue-state {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.live-queue-state {
+  flex-shrink: 0;
+}
+.live-queue-steer,
+.live-steer {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  transition:
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out);
+}
+.live-queue-steer:hover,
+.live-steer:hover {
+  border-color: var(--input);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.live-steer {
+  height: 32px;
+  padding: 0 12px;
+}
+.live-queue-remove {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-muted);
+}
+.live-queue-remove:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+.live-send.live-queue-send[data-ready] {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  color: var(--text);
+}
+.live-send.live-queue-send[data-ready]:hover {
+  background: color-mix(in srgb, var(--text) 22%, transparent);
+}
+@media (pointer: coarse) {
+  .live-queue-remove,
+  .live-queue-steer {
+    min-width: 36px;
+    height: 36px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-queue li {
+    animation: none;
+  }
+}
+

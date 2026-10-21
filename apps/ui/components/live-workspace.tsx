@@ -7,9 +7,11 @@ import {
   type AppendMessage,
   type Attachment,
   type AttachmentAdapter,
+  type ExternalThreadQueueAdapter,
+  type QueueItemState,
 } from "@assistant-ui/react";
 import { MotionConfig } from "motion/react";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   parseSnapshot,
   parseConversations,
@@ -19,6 +21,7 @@ import {
   type ConversationSummary,
   type LiveMessage,
   type LiveSnapshot,
+  type QueuedMessage,
 } from "@/lib/pi/live-state";
 import { createImageAdapter } from "@/lib/pi/image-attachments";
 import "./shared.css";
@@ -47,19 +50,46 @@ function createDraft(onError: (message: string) => void): ConversationDraft {
   };
   return draft;
 }
+const queueItem = (message: QueuedMessage): QueueItemState => ({
+  id: message.id,
+  prompt: message.text,
+  parts: [{ type: "text", text: message.text || (message.images ? "Image" : "") }],
+});
 function ConversationRuntime({
   snapshot,
   onNew,
   onCancel,
+  onQueue,
   draft,
   children,
 }: {
   snapshot: LiveSnapshot | null;
-  onNew: (message: AppendMessage) => Promise<void>;
+  onNew: (message: AppendMessage, mode?: "queue" | "steer") => Promise<void>;
   onCancel: () => Promise<void>;
+  onQueue: (submissionId: string, change: "steer" | "remove") => Promise<void>;
   draft: ConversationDraft;
   children: ReactNode;
 }) {
+  // Pi's inbox is the queue (docs: apps/ui/docs/FULL-CONTROL.md "Queue and steer"). This adapter
+  // only lets the composer send while a reply runs and shows what Pi has queued; it keeps no copy.
+  const queued = snapshot?.queue;
+  const restore = useRef<(message: AppendMessage) => void>(() => {});
+  const queue = useMemo<ExternalThreadQueueAdapter>(() => {
+    const deliver = (message: AppendMessage, mode?: "queue" | "steer") =>
+      void onNew(message, mode).catch(() => restore.current(message));
+    return {
+      items: (queued ?? []).filter((item) => item.mode === "queue").map(queueItem),
+      steerItems: (queued ?? []).filter((item) => item.mode === "steer").map(queueItem),
+      enqueue: (message) => deliver(message),
+      // assistant-ui sends here whenever a reply runs; only an explicit steer interrupts.
+      steer: (message) => deliver(message, message.steer === true ? "steer" : "queue"),
+      move: (id, placement) => {
+        if (placement.lane === "steer") void onQueue(id, "steer").catch(() => undefined);
+      },
+      edit: () => {},
+      remove: (id) => void onQueue(id, "remove").catch(() => undefined),
+    };
+  }, [queued, onNew, onQueue]);
   const runtime = useExternalStoreRuntime({
     adapters: { attachments: draft.adapter },
     messages: snapshot?.messages ?? EMPTY_MESSAGES,
@@ -67,7 +97,21 @@ function ConversationRuntime({
     isRunning: snapshot?.running ?? false,
     onNew,
     onCancel,
+    // Only while a reply runs: an idle send keeps assistant-ui's own retry, which restores
+    // both the text and the images of a message the host did not confirm.
+    queue: snapshot?.running ? queue : undefined,
   });
+  // A message the host did not accept goes back into an empty composer so it is not lost.
+  restore.current = (message) => {
+    const composer = runtime.thread.composer;
+    if (composer.getState().text.trim()) return;
+    composer.setText(
+      message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n"),
+    );
+  };
   useEffect(() => {
     runtime.thread.composer.setText(draft.text);
     const restored = draft.attachments;
@@ -243,6 +287,8 @@ export function LiveWorkspace() {
         "/api/trial",
         "/api/workers/stop",
         "/api/workflows/stop",
+        "/api/queue/steer",
+        "/api/queue/remove",
       ].includes(path);
       setPendingCount((count) => count + 1);
       setActionError("");
@@ -309,7 +355,7 @@ export function LiveWorkspace() {
       setConversations(before);
     }
   };
-  const onNew = async (message: AppendMessage) => {
+  const onNew = async (message: AppendMessage, mode?: "queue" | "steer") => {
     const conversationId = selected.current;
     const text = message.content
       .filter((part) => part.type === "text")
@@ -337,7 +383,7 @@ export function LiveWorkspace() {
       previous?.text === deliveryKey ? previous : { text: deliveryKey, id: crypto.randomUUID() };
     requestKeys.current.set(conversationId, request);
     try {
-      await action("/api/chat", { text, attachmentIds, requestId: request.id });
+      await action("/api/chat", { text, attachmentIds, requestId: request.id, ...(mode ? { mode } : {}) });
       requestKeys.current.delete(conversationId);
     } catch {
       throw new MessageNotSentError(
@@ -394,6 +440,9 @@ export function LiveWorkspace() {
                 key={selectedId || "root"}
                 snapshot={snapshot}
                 onNew={onNew}
+                onQueue={async (submissionId, change) => {
+                  await action(`/api/queue/${change}`, { submissionId });
+                }}
                 onCancel={async () => {
                   await action("/api/abort");
                 }}

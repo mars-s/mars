@@ -391,7 +391,8 @@
 .live-run-progress-inner {
   justify-content: flex-start;
 }
+/* Span the message column like the composer; the vendor list caps itself at max-w-sm. */
 .live-run-progress-inner > div {
-  max-width: 520px;
+  max-width: none;
 }
 
