@@ -126,8 +126,9 @@ registry.install(createWorkflowExtension({ models, loadImages: images.content, a
 const late = {};
 // Side chats: the agent opens, lists and messages its own (docs/WORKBENCH.md).
 registry.install(createSideChatExtension({
-  createConversation: (options) => late.conversations.create(options),
   harness: () => late.harness,
+  // New side chats get the same tools and workspace as any new conversation.
+  defaultAgent: { cwd: WORK, modelTools: discovery.modelTools },
 }));
 // The agent can hand the owner a working download link for a workspace file. It checks
 // the path exactly like the Files pane and never returns the file's contents.

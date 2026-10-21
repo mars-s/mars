@@ -241,9 +241,12 @@ disabled or removed says so instead of loading.
 
 ## Side chats belong to their parent
 
-A side chat is an ordinary ownerless Pi conversation plus a native document
-`mars.side-chat` (`{ parentId }`, latest-only) naming the conversation it was opened
-from. Pi stays the only store: the link lives in Pi, so the UI, the HTTP API and the
+A side chat is an ordinary ownerless Pi conversation plus two native documents,
+written in the one commit that creates it: `mars.side-chat` (`{ parentId }`) on the
+child and `mars.side-chat-index` (`{ children }`, newest last) on the parent. The parent
+is checked inside that commit, so a crash or a race can never leave a half-linked or
+doubly nested side chat. Forks start with neither document. At most 200 side chats
+per parent. Pi stays the only store: the link lives in Pi, so the UI, the HTTP API and the
 agent all see the same thing.
 
 - `POST /api/conversations { title?, provider?, modelId?, parentId? }`: with `parentId`
@@ -251,8 +254,9 @@ agent all see the same thing.
   conversation and writes the link in the same request. Answers
   `{ conversation: { id, title, parentId } }`.
 - `GET /api/conversations` and `GET /api/state` `conversations`: top-level rows only.
-  Each row has `sideChats: [{ id, title, running }]`, newest first, at most 20.
-  A side chat never appears as its own Recents row.
+  Each row has `sideChats: [{ id, title, running }]`, the newest 20 read from the
+  parent's index (no scan), plus `sideChatTotal` when there are more. A side chat never
+  appears as its own Recents row. Listing is read-only.
 - `GET /api/state` for a side chat includes `parentConversationId` and `sideChatOf`, so
   the sidebar keeps it nested under its parent while open.
 - Sidebar: side chats sit indented under their parent with a small side-chat glyph,
@@ -263,7 +267,8 @@ Agent tools (deferred, discovered on demand like the worker tools):
 - `side_chat_open { title?, task? }`: opens a side chat of the calling conversation,
   optionally sends `task` as its first message, and returns `{ id, title }`. It does not
   wait for an answer.
-- `side_chat_list {}`: the calling conversation's side chats, `{ id, title, running }`.
+- `side_chat_list { offset? }`: the calling conversation's side chats,
+  `{ items: [{ id, title, running }], total }`, newest first, 20 per page.
 - `side_chat_send { sideChatId, text }`: sends text to one of the caller's own side
   chats and returns at once. A side chat that is not the caller's is refused.
 
@@ -276,11 +281,14 @@ Agent tools (deferred, discovered on demand like the worker tools):
   filename*=UTF-8''<name>`, `x-content-type-options: nosniff` and
   `content-security-policy: sandbox`, so nothing in it can run in the Mars origin.
   Folders, FIFOs and devices are refused.
-- Files pane: a Download button in the viewer header for every file, including the
-  binary-file view, and a "Download" item on each file row's context action.
+- Files pane: a Download button in the viewer header for every file, and a labelled
+  one in the binary-file view.
+- Hard-linked files (`nlink > 1`) are refused: a hard link inside WORK can name a file
+  that also lives outside it, which no path check can see. `filename*` follows RFC 5987.
 - Agent tool `workspace_file_link { path }` (deferred): checks the path the same way
   and returns `{ path, size, url }` with the relative download URL, so the agent can
-  hand the owner a working download link in chat. It never returns file contents.
+  hand the owner a working download link in chat. It never returns file contents, and
+  its errors are plain reasons without host paths.
 
 ## UI files
 

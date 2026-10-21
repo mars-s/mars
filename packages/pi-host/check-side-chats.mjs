@@ -10,7 +10,7 @@ import { AssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { Harness, LiveDoc, createRegistry } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { createConversationManager } from './conversations.mjs';
-import { createSideChatExtension, listSideChats } from './side-chats.mjs';
+import { SIDE_CHAT_MAX, SIDE_CHAT_PAGE, SideChatDoc, SideChatIndexDoc, createSideChatExtension, listSideChats } from './side-chats.mjs';
 
 const seen = [];
 const models = {
@@ -35,7 +35,7 @@ const models = {
 };
 
 const late = {};
-const extension = createSideChatExtension({ createConversation: (options) => late.manager.create(options), harness: () => late.harness });
+const extension = createSideChatExtension({ harness: () => late.harness, defaultAgent: {} });
 const registry = createRegistry();
 registry.install(extension);
 const dir = await mkdtemp(join(tmpdir(), 'mars-side-chats-'));
@@ -79,11 +79,13 @@ try {
   const research = await harness.conversation(Number(opened.id), context);
   for (let n = 0; n < 50 && !seen.includes('Find three names'); n++) await new Promise((resolve) => setTimeout(resolve, 20));
   assert.ok(seen.includes('Find three names'), 'the first task was sent to the new side chat');
-  const listed = (await listSideChats({ harness, parentId: String(parent.id), context })).map((row) => row.id);
+  const listed = (await listSideChats({ harness, parentId: String(parent.id), context })).items.map((row) => row.id);
   assert.deepEqual(listed.sort(), [String(side.id), opened.id].sort(), 'the agent-opened side chat is nested under its parent');
 
   assert.equal((await say(parent, 'CALL side_chat_list {}')).status, 'done');
-  assert.deepEqual(JSON.parse((await toolResult(parent)).text).map((row) => row.id).sort(), listed.sort());
+  const toolList = JSON.parse((await toolResult(parent)).text);
+  assert.deepEqual(toolList.items.map((row) => row.id).sort(), listed.sort());
+  assert.equal(toolList.total, 2);
 
   assert.equal((await say(parent, `CALL side_chat_send ${JSON.stringify({ sideChatId: opened.id, text: 'And a fourth' })}`)).status, 'done');
   assert.equal(JSON.parse((await toolResult(parent)).text).sent, true);
@@ -99,11 +101,42 @@ try {
   await say(research, 'CALL side_chat_open {}');
   assert.ok((await toolResult(research)).error, 'a side chat cannot open side chats of its own');
 
-  // Mutation guard for ownership: the open tool must not depend on luck for its parent.
-  assert.equal(String((await harness.snapshot((await import('./side-chats.mjs')).SideChatDoc, research.id, context)).parentId), String(parent.id));
+  assert.equal(String((await harness.snapshot(SideChatDoc, research.id, context)).parentId), String(parent.id));
+
+  // Second review: listing is read-only, creation is one commit, paging and the cap hold.
+  const docsBefore = (await harness.commit((tx) => tx.scanConversations({ order: 'descending' }, 100), context)).items.length;
+  const unlinked = await manager.create({ title: 'Plain' });
+  await manager.list();
+  assert.equal((await harness.snapshot(SideChatDoc, unlinked.id, context)), undefined, 'listing Recents never writes a side-chat document');
+  assert.equal((await harness.commit((tx) => tx.scanConversations({ order: 'descending' }, 100), context)).items.length, docsBefore + 1);
+
+  const busy = await manager.create({ title: 'Busy parent' });
+  const made = [];
+  for (let n = 0; n < SIDE_CHAT_PAGE + 5; n++) made.push(String((await manager.create({ title: `S${n}`, parentId: String(busy.id) })).id));
+  const busyRow = (await manager.list()).find((row) => row.id === String(busy.id));
+  assert.equal(busyRow.sideChats.length, SIDE_CHAT_PAGE, 'Recents shows the newest page');
+  assert.equal(busyRow.sideChatTotal, SIDE_CHAT_PAGE + 5, 'and says how many there are in all');
+  assert.equal(busyRow.sideChats[0].title, `S${SIDE_CHAT_PAGE + 4}`, 'newest first');
+  const older = await listSideChats({ harness, parentId: String(busy.id), context, offset: SIDE_CHAT_PAGE });
+  assert.deepEqual(older.items.map((row) => row.title), ['S4', 'S3', 'S2', 'S1', 'S0'], 'older side chats stay reachable by offset');
+  const index = await harness.snapshot(SideChatIndexDoc, busy.id, context);
+  assert.deepEqual(index.children, made, 'the index lists exactly the side chats created');
+
+  // A fork of a parent does not inherit its side chats.
+  const wrote = await (await (await harness.conversation(busy.id, context)).submit({ type: 'write', entry: { kind: 'test.marker', data: {} } }, context)).wait(context);
+  const forked = await manager.fork({ conversationId: String(busy.id), entryId: wrote.entry, title: 'Fork of busy' });
+  assert.deepEqual((await manager.list()).find((row) => row.id === String(forked.id)).sideChats, [], 'a fork starts with no side chats');
+
+  // The cap: a flood stops at SIDE_CHAT_MAX with a clear refusal.
+  const flood = await manager.create({ title: 'Flooded' });
+  for (let n = 0; n < SIDE_CHAT_MAX; n++) await manager.create({ parentId: String(flood.id) });
+  await assert.rejects(manager.create({ parentId: String(flood.id) }), /already has 200 side chats/);
+  const started = Date.now();
+  await manager.list();
+  assert.ok(Date.now() - started < 1500, `Recents stays fast with ${SIDE_CHAT_MAX + SIDE_CHAT_PAGE + 10} side chats (${Date.now() - started} ms)`);
   const live = await harness.snapshot(LiveDoc, research.id, context);
   assert.equal(live?.run, undefined);
-  console.log('PASS side chats: native parent link, nested rows only, selectedThread parent, refusals leave no orphan, agent open with first task, list, send, cross-conversation refusal, one level only');
+  console.log('PASS side chats: native parent link, nested rows only, selectedThread parent, refusals leave no orphan, agent open with first task, list with total, send, cross-conversation refusal, one level only, read-only listing, newest page plus total, offset paging, exact index, forks start empty, 200 cap, fast Recents');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

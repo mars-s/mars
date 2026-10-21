@@ -159,6 +159,7 @@ export function LiveWorkspace() {
                 provider: "",
                 running: next.running,
                 sideChats: [],
+                sideChatTotal: 0,
               },
             ],
       );

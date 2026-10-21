@@ -203,12 +203,17 @@ export function createFiles({ work }) {
     let streaming = false;
     try {
       if (info.size > FILE_LIMITS.raw) throw fail("Downloads are limited to 20 MiB.", 413);
+      // A hard link inside WORK can name a file that also lives outside it, which no path
+      // check can see. Downloads (the route that hands bytes off the machine) refuse them.
+      if (info.nlink > 1) throw fail("This file is hard-linked elsewhere, so it cannot be downloaded from the workbench.", 403);
       const name = target.relative.split("/").pop() || "download";
       const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, "_");
+      // RFC 5987: encodeURIComponent leaves ' ( ) * as they are, which attr-char forbids.
+      const encoded = encodeURIComponent(name).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
       res.writeHead(200, {
         "content-type": "application/octet-stream",
         "content-length": info.size,
-        "content-disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+        "content-disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`,
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
         "content-security-policy": "default-src 'none'; sandbox",
@@ -222,9 +227,17 @@ export function createFiles({ work }) {
 
   /** What the agent tool reports: the checked path, its size and a download URL. */
   async function link(rel) {
-    const { handle, info, target } = await openInside(work, rel);
+    let opened;
+    try {
+      opened = await openInside(work, rel);
+    } catch (failure) {
+      // Plain reasons only: never the absolute workspace path or raw system errors.
+      throw publicError(failure);
+    }
+    const { handle, info, target } = opened;
     await handle.close();
     if (info.size > FILE_LIMITS.raw) throw fail("Downloads are limited to 20 MiB.", 413);
+    if (info.nlink > 1) throw fail("This file is hard-linked elsewhere, so it cannot be downloaded from the workbench.", 403);
     return { path: target.relative, size: info.size, url: `/api/workbench/download?path=${encodeURIComponent(target.relative)}` };
   }
 

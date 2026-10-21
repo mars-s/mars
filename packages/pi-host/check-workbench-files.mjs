@@ -142,7 +142,20 @@ try {
   const linked = await files.link("notes/plan.md");
   assert.deepEqual(linked, { path: "notes/plan.md", size: Buffer.byteLength("# Plan\n\nShip the files pane.\n"), url: "/api/workbench/download?path=notes%2Fplan.md" });
   assert.equal((await request(linked.url, { raw: true })).buffer.toString(), "# Plan\n\nShip the files pane.\n", "the link downloads the file");
-  for (const bad of ["../secret.txt", "escape/secret.txt", "notes", "huge.bin"]) await assert.rejects(files.link(bad), `link refuses ${bad}`);
+  for (const bad of ["../secret.txt", "escape/secret.txt", "notes", "huge.bin", "missing.txt"]) {
+    const error = await files.link(bad).then(() => null, (failure) => failure);
+    assert.ok(error, `link refuses ${bad}`);
+    assert.ok(!error.message.includes(work) && !error.message.includes("ENOENT"), `link errors are plain: ${error.message}`);
+  }
+  // Hard links can name files outside WORK that no path check sees: downloads refuse them.
+  const { link: hardLink } = await import("node:fs/promises");
+  await hardLink(join(outside, "secret.txt"), join(work, "hard.txt"));
+  assert.equal((await request("/api/workbench/download?path=hard.txt")).status, 403, "a hard-linked file is not downloaded");
+  await assert.rejects(files.link("hard.txt"), /hard-linked/);
+  // RFC 5987 filename*: ' ( ) * are percent-encoded.
+  await writeFile(join(work, "it's (v2)*.txt"), "x");
+  const odd = await request(`/api/workbench/download?path=${encodeURIComponent("it's (v2)*.txt")}`, { raw: true });
+  assert.match(odd.headers["content-disposition"], /filename\*=UTF-8''it%27s%20%28v2%29%2A\.txt$/);
 } finally {
   await host.stop();
 }

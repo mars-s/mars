@@ -109,7 +109,7 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
               )}
             </button>
             {conversation.id === rootId && <ChildNavigation />}
-            <SideChats parentId={conversation.id} sideChats={conversation.sideChats} />
+            <SideChats parentId={conversation.id} sideChats={conversation.sideChats} total={conversation.sideChatTotal} />
           </div>
         ))}
       </div>
@@ -138,7 +138,15 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
  * Side chats nested under the conversation they were opened from (docs/WORKBENCH.md).
  * The open side chat stays listed even before the next conversations refresh.
  */
-function SideChats({ parentId, sideChats }: { parentId: string; sideChats: { id: string; title: string; running: boolean }[] }) {
+function SideChats({
+  parentId,
+  sideChats,
+  total,
+}: {
+  parentId: string;
+  sideChats: { id: string; title: string; running: boolean }[];
+  total: number;
+}) {
   const { snapshot, selectedId, extensionsOpen, selectConversation } = useWorkspace();
   const rows = [...sideChats];
   if (snapshot?.sideChatOf === parentId && !rows.some((row) => row.id === snapshot.conversationId))
@@ -165,6 +173,11 @@ function SideChats({ parentId, sideChats }: { parentId: string; sideChats: { id:
           </button>
         </li>
       ))}
+      {total > rows.length && (
+        <li className="live-side-chat-more">
+          {total - rows.length} older side {total - rows.length === 1 ? "chat" : "chats"} (ask Mars to list them)
+        </li>
+      )}
     </ul>
   );
 }

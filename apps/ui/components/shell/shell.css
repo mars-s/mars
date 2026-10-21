@@ -196,6 +196,11 @@
 .live-side-chat[aria-current="page"] .live-side-chat-icon {
   color: var(--text-muted);
 }
+.live-side-chat-more {
+  padding: 4px 12px 6px 44px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
 .live-subthread small {
   flex-shrink: 0;
   color: var(--text-faint);

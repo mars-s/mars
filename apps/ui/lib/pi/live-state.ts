@@ -94,6 +94,8 @@ export type ConversationSummary = {
   running: boolean;
   /** Side chats opened from this conversation, newest first (docs/WORKBENCH.md). */
   sideChats: SideChatSummary[];
+  /** How many side chats exist in all, when more than the listed page. */
+  sideChatTotal: number;
 };
 export type WorkerSummary = {
   id: string;
@@ -248,6 +250,7 @@ export function parseConversations(value: unknown): ConversationSummary[] {
                   const sideId = identifier(side.id);
                   return sideId ? [{ id: sideId, title: string(side.title) || "Side chat", running: side.running === true }] : [];
                 }),
+              sideChatTotal: Number.isInteger(row.sideChatTotal) ? Number(row.sideChatTotal) : 0,
             },
           ]
         : [];

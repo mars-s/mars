@@ -388,6 +388,8 @@ test("conversation rows carry nested side chats, and a side chat's state names i
     { id: "9", title: "Side chat", running: false },
   ]);
   assert.deepEqual(rows[1].sideChats, [], "rows without side chats get an empty list");
+  assert.equal(parseConversations([{ id: "3", sideChatTotal: 25 }])[0].sideChatTotal, 25);
+  assert.equal(rows[1].sideChatTotal, 0);
 });
 
 test("a side chat snapshot keeps its parent for sidebar nesting", () => {
