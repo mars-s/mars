@@ -337,8 +337,11 @@ test("codemode history and live nested calls retain real action outcomes", () =>
     ["complete", "failed"],
   );
   assert.equal(state.messages[0].tools[0].children[1].output, "Failed");
-  assert.equal(state.messages[1].tools[0].name, "host_write");
-  assert.equal(state.messages[1].tools[0].state, "running");
+  // The live call continues the same activity group rather than opening a new one.
+  assert.equal(state.messages.length, 1);
+  assert.equal(state.messages[0].running, true);
+  assert.equal(state.messages[0].tools[1].name, "host_write");
+  assert.equal(state.messages[0].tools[1].state, "running");
 });
 
 test("context usage passes through Pi numbers and never invents a window", () => {
@@ -424,4 +427,32 @@ test("plans parse to steps with counts; unknown statuses read as pending; empty 
   });
   assert.equal(parsePlan({ steps: [] }), null);
   assert.equal(parsePlan(null), null);
+});
+
+test("a run of tool-only model turns joins the next assistant message as one activity group", () => {
+  const call = (id) => ({ role: "assistant", content: [{ type: "toolCall", id, name: "bash", arguments: { command: id } }] });
+  const result = (id) => ({ role: "toolResult", toolCallId: id, content: [{ type: "text", text: "ok" }] });
+  const state = parseSnapshot(
+    snapshot([
+      { id: 1, model: [{ role: "user", content: "Check the host" }] },
+      { id: 2, model: [{ role: "assistant", content: [{ type: "text", text: "Looking." }, { type: "toolCall", id: "a", name: "bash", arguments: {} }] }, result("a")] },
+      { id: 3, model: [call("b"), result("b")] },
+      { id: 4, model: [call("c"), result("c")] },
+      { id: 5, model: [{ role: "assistant", content: [{ type: "text", text: "All healthy." }] }] },
+      { id: 6, model: [{ role: "user", content: "And again" }] },
+      { id: 7, model: [call("d"), result("d")] },
+    ], { run: { taskId: 9 } }),
+  );
+  assert.deepEqual(
+    state.messages.map((m) => [m.role, m.text, m.tools.map((t) => t.id).join(","), m.running]),
+    [
+      ["user", "Check the host", "", false],
+      ["assistant", "Looking.", "a", false],
+      ["assistant", "All healthy.", "b,c", false],
+      ["user", "And again", "", false],
+      ["assistant", "", "d", true],
+    ],
+    "text keeps its place; tool-only turns merge forward, and a live run continues the open group",
+  );
+  assert.equal(state.messages[2].id, "3:0", "the group keeps the id of its first turn, so it does not remount");
 });

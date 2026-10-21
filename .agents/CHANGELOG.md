@@ -350,3 +350,10 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - `check-workbench-terminal.mjs`: Debian's /bin/sh is dash, where `set +H` is an error that drops the rest of its line, so the first echo never ran and the check failed in deploy staging. `set +H` is now sent on its own line.
 - Host checks: 35 of 35 pass on Bot Box.
 
+
+## 2026-10-21 One activity group per run of tool steps
+
+- Owner report: a long agent run showed a dozen "Ran 1 command · 1 action" rows. Each model turn that only called tools was its own assistant message with its own activity disclosure.
+- `parseSnapshot` now joins a tool-only assistant turn to the next assistant message (and a live run to the open group), so a run reads "Ran 5 commands, read 1 file, edited 1 file, wrote 1 file · 8 actions · 1 failed" above the final reply. Text keeps its place; the group keeps its first turn's id so it does not remount. The action total only shows when kinds are mixed, since "Ran 3 commands" already counts.
+- Checks: a live-state unit test for merging (and the codemode live-call test updated to expect one group); browser checks live-client, plugins-activity, claude-ui, conversations, images-subthreads, organise, plus plan, side-chats and workbench-ui against the fixture preview, all pass.
+

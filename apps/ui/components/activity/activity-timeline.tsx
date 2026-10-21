@@ -152,6 +152,8 @@ export function ActivityTimeline({ tools }: { tools: readonly unknown[] }) {
   if (!views.length) return null;
   const failed = views.filter((view) => view.status === "failed").length;
   const active = views.findLast((view) => view.status === "running");
+  // "Ran 3 commands" already says how many; the total only helps when kinds are mixed.
+  const mixed = new Set(views.map((view) => view.category)).size > 1;
   return (
     <details className="live-activity" data-active={active ? "" : undefined}>
       <summary>
@@ -164,7 +166,7 @@ export function ActivityTimeline({ tools }: { tools: readonly unknown[] }) {
         )}
         <ChevronRight size={14} className="live-chevron" aria-hidden />
         <small>
-          <span>{actionCount(views.length)}</span>
+          {mixed && <span>{actionCount(views.length)}</span>}
           {failed > 0 && <span className="live-activity-failed">{failed} failed</span>}
         </small>
       </summary>

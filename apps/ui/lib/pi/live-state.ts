@@ -77,6 +77,9 @@ export type LiveMessage = {
   running: boolean;
   outcome?: "error" | "cancelled";
 };
+/** An assistant message with tool calls and nothing else, which the next step can join. */
+const toolOnly = (message: LiveMessage) =>
+  message.role === "assistant" && message.tools.length > 0 && !message.text && !message.outcome && !message.running;
 export type LoginState = {
   connected: boolean;
   state: string;
@@ -414,8 +417,17 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
             : undefined;
       const content = text(message.content) || string(message.errorMessage);
       const images = message.role === "user" ? parseImages(record(entry.data).attachments) : [];
-      if (content || tools.length || outcome || images.length)
-        messages.push({
+      if (!(content || tools.length || outcome || images.length)) return;
+      // A model turn that only called tools joins the next assistant message, so a long run
+      // of steps reads as one activity group instead of one "Ran 1 command" row per step.
+      const previous = messages.at(-1);
+      if (message.role === "assistant" && previous && toolOnly(previous)) {
+        previous.tools.push(...tools);
+        previous.text = content;
+        previous.outcome = outcome;
+        return;
+      }
+      messages.push({
           id: `${String(entry.id)}:${index}`,
           role: message.role,
           text: content,
@@ -457,7 +469,12 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
         else parent.children.push(activity);
       } else liveTools.push(activity);
     }
-  if (running && (partialText || liveTools.length))
+  const previous = messages.at(-1);
+  if (running && previous && toolOnly(previous)) {
+    previous.tools.push(...liveTools);
+    previous.text = partialText;
+    previous.running = true;
+  } else if (running && (partialText || liveTools.length))
     messages.push({
       id: "live-generation",
       role: "assistant",
