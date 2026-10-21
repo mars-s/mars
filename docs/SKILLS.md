@@ -18,8 +18,9 @@ The folders on disk are the only store. Mars rereads them at most every 15 secon
 
 ## How the agent uses them
 
-- Every turn the prompt carries a short Skills section: each skill's name and the start of its
-  description, at most 12,000 characters, then "N more: call skill_list".
+- Every turn the prompt carries a short Skills section: each skill's name and the first 80
+  characters of its description, at most 16,000 characters (about 150 skills), then "N more:
+  call skill_list".
 - `skill_read({ name })` loads SKILL.md and lists the other files; `skill_read({ name, file })`
   reads one of them. Paths and symlinks that leave the skill folder are refused.
 - `/name` in a message asks for that skill.

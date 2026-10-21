@@ -78,7 +78,7 @@ try {
   // The prompt list stays bounded with a large collection.
   for (let n = 0; n < 400; n++) await put(join(work, `skills/bulk-${n}/SKILL.md`), skill(`bulk-${n}`, 'Use when ' + 'something long happens '.repeat(20)));
   const big = await skills.catalogue();
-  assert.ok(big.length < 13500, 'catalogue is bounded: ' + big.length);
+  assert.ok(big.length < 17500, 'catalogue is bounded: ' + big.length);
   assert.match(big, /more: call skill_list/);
   console.log('PASS skills: front matter, first folder wins, search, bounded prompt list with /name hint, read SKILL.md and files, path and symlink escapes refused, create own only, install from git and a local folder with replace and skips, refusals');
 } catch (error) {

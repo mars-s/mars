@@ -15,8 +15,9 @@ const fail = (message, status = 400) => Object.assign(new Error(message), { stat
 export const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const SKILL_TEXT_MAX = 60000;
 const FILE_TEXT_MAX = 60000;
-const CATALOGUE_MAX = 12000;
-const LINE_DESCRIPTION_MAX = 120;
+// About 4,000 tokens: room for roughly 150 skills at one short line each.
+const CATALOGUE_MAX = 16000;
+const LINE_DESCRIPTION_MAX = 80;
 
 /** The folders searched, first wins on a name clash: Mars's own, then the shared user folders. */
 export function skillRoots({ work, env = process.env, home = env.HOME || homedir() }) {
