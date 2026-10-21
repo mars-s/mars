@@ -61,7 +61,8 @@ export function installModelBudget(models, { maxConcurrent = 4, maxOutputTokens 
     const output = createAssistantMessageEventStream();
     const entry = {
       model, context, output, timestamp: Date.now(),
-      options: { ...options, maxTokens: Math.min(options.maxTokens ?? maxOutputTokens, maxOutputTokens) },
+      // Never above the configured cap, nor above what the model itself can produce.
+      options: { ...options, maxTokens: Math.min(options.maxTokens ?? maxOutputTokens, maxOutputTokens, model?.maxTokens > 0 ? model.maxTokens : Infinity) },
       abort: undefined,
     };
     entry.abort = () => {

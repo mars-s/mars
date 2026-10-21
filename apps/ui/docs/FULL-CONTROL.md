@@ -110,8 +110,8 @@ policies are outside this host's control. The blocked request was not retried.
 
 Retrieval is lexical search/range access, not a vector database. The sidebar shows
 a bounded latest page plus root; older native chats have cursor pagination through
-the API. Native model dispatch defaults to four concurrent requests and8192 output
-tokens each, configurable by service environment. There is no whole-run billing
+the API. Native model dispatch defaults to four concurrent requests and 32,000 output
+tokens each (never above the model's own limit; thinking counts), configurable by service environment. There is no whole-run billing
 cap, and shell-launched model clients do not pass through this adapter. Tool-search
 schemas persist until reset. Independent OS jobs use existing systemd-run,
 status and cancellation commands rather than a second scheduler. Long jobs need

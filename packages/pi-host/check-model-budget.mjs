@@ -14,7 +14,7 @@ const models = {
   marker: true,
   streamSimple(received, context, options) {
     assert.equal(this.marker, true, "original Models receiver is preserved");
-    assert.equal(received, model);
+    assert.equal(received.id, model.id);
     if (context.throw) throw Error("provider threw");
     active++;
     peak = Math.max(peak, active);
@@ -114,6 +114,12 @@ await check("synchronous provider error releases slot and later requests dispatc
   assert.equal(calls.at(-1).options.maxTokens, 8192);
   calls.at(-1).finish();
   assert.equal((await good.result()).stopReason, "stop");
+  // A model that can only produce 1000 tokens is never asked for more.
+  const small = models.streamSimple({ ...model, maxTokens: 1000 }, {});
+  await turns();
+  assert.equal(calls.at(-1).options.maxTokens, 1000);
+  calls.at(-1).finish();
+  await small.result();
 });
 await check("host configuration overrides defaults and pre-abort never dispatches", async () => {
   let called = false;

@@ -388,3 +388,8 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - Side chats: work given by the parent's agent flags the side chat (`mars.side-chat-notify`); its next final answer writes one model-visible `mars.side-chat-done` entry into the parent (keyed for replay). The owner's own messages never notify. New `side_chat_read`. The UI shows the note as "Side chat "X" finished."
 - Checks: `check-project.mjs` (real harness, prompt sections asserted from the system messages Pi sends), `check-side-chats.mjs` (note once, not for owner messages, side_chat_read), a live-state unit test. Tool quality: 44 Mars tools pass.
 
+
+## 2026-10-22 Output cap fits thinking models
+
+- Overnight helpers on Opus with high effort stopped after one step: every response ran into the 8,192-token output cap while thinking (thinking counts), so nothing was written. Default `models.maxOutputTokens` is now 32,000, and the budget never asks a model for more than its own `maxTokens`. `check-model-budget.mjs` covers the model limit; `check-config.mjs` the new default.
+

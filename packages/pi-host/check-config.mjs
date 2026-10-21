@@ -13,13 +13,13 @@ try {
 
   // Shipped defaults are what a fresh clone gets.
   let result = await loadConfig({ env: {}, dir });
-  assert.deepEqual(result.config.models, { concurrency: 4, maxOutputTokens: 8192 });
+  assert.deepEqual(result.config.models, { concurrency: 4, maxOutputTokens: 32000 });
   assert.equal(summary(result), "default:true,user:false,env:false");
 
   // A personal layer overrides only what it names.
   await write({ models: { concurrency: 16 } });
   result = await loadConfig({ env: {}, dir });
-  assert.deepEqual(result.config.models, { concurrency: 16, maxOutputTokens: 8192 });
+  assert.deepEqual(result.config.models, { concurrency: 16, maxOutputTokens: 32000 });
   assert.equal(summary(result), "default:true,user:true,env:false");
 
   // Environment remains the highest-precedence operator override.
