@@ -66,8 +66,9 @@ export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/
               detail = payload.d.user.username ?? '';
               state = 'running';
             } else if (payload.t === 'RESUMED') state = 'running';
-            else if (payload.t === 'MESSAGE_CREATE') {
+            else if (payload.t === 'MESSAGE_CREATE' || payload.t === 'MESSAGE_UPDATE') {
               const message = payload.d;
+              const edited = payload.t === 'MESSAGE_UPDATE';
               if (message.author?.bot || !message.content) break;
               // In a server, only messages that @mention the bot are for Mars; the mention is removed.
               const mention = new RegExp(`<@!?${account}>`, 'g');
@@ -75,10 +76,11 @@ export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/
               const text = message.guild_id ? message.content.replace(mention, '').trim() : message.content;
               if (!text) break;
               const event = {
-                channel: 'discord', account, eventId: String(message.id),
+                channel: 'discord', account, eventId: edited ? `${message.id}-edit-${message.edited_timestamp ?? payload.s}` : String(message.id),
                 sender: { id: String(message.author.id), name: message.author.username ?? '' },
                 chat: { id: String(message.channel_id), type: message.guild_id ? 'group' : 'dm' },
                 text,
+                ...(edited ? { edited: true } : {}),
               };
               inbound = inbound.then(() => receive(event)).catch((error) => { detail = String(error.message).slice(0, 200); });
             }

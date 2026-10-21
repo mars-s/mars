@@ -37,14 +37,14 @@ export function createTelegramAdapter({ token, baseUrl = 'https://api.telegram.o
       while (!signal.aborted) {
         let updates;
         try {
-          updates = await call('getUpdates', { offset, timeout: pollTimeoutSeconds, allowed_updates: ['message'] }, signal);
+          updates = await call('getUpdates', { offset, timeout: pollTimeoutSeconds, allowed_updates: ['message', 'edited_message'] }, signal);
         } catch (error) {
           if (signal.aborted) return;
           if (error.retryAfterMs) { await sleep(error.retryAfterMs, signal); continue; }
           throw error;
         }
         for (const update of updates) {
-          const message = update.message;
+          const message = update.message ?? update.edited_message;
           if (message?.text && message.from && !message.from.is_bot) {
             await receive({
               channel: 'telegram', account, eventId: String(update.update_id),
@@ -52,6 +52,7 @@ export function createTelegramAdapter({ token, baseUrl = 'https://api.telegram.o
               chat: { id: String(message.chat.id), type: message.chat.type === 'private' ? 'dm' : 'group' },
               ...(message.is_topic_message && message.message_thread_id ? { thread: String(message.message_thread_id) } : {}),
               text: message.text,
+              ...(update.edited_message ? { edited: true } : {}),
             });
           }
           offset = update.update_id + 1; // acknowledged on the next poll

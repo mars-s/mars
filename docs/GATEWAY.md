@@ -96,6 +96,8 @@ the gateway records the failure, marks the adapter `failed` and restarts it with
 - The gateway also records accepted event keys in `mars.gateway` (latest 2000) so a repeat
   is recognised before routing, for example after `/new` rebinds the chat. A repeat is
   audited as `duplicate` and acknowledged without a reply.
+- An edited message (Telegram `edited_message`, Discord `MESSAGE_UPDATE`) is audited as
+  `edited` and never submitted again: the original was already answered.
 - Messages to a busy conversation use Pi's default `whenBusy: "followUp"`: they queue in
   that conversation's inbox and run after the current answer, in order. They never touch
   any other conversation. `/steer <text>` is explicit and uses `whenBusy: "steer"`.

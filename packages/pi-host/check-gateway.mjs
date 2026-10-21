@@ -129,6 +129,19 @@ try {
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'echo: Only once please').length, 1, 'and is answered once');
   assert.ok(seen.length >= before + 1);
 
+  // 4b. Edits: an edited message is recorded, never submitted again.
+  const editCalls = seen.length;
+  telegram.edit({ from: OWNER_TG, text: 'Only once please (edited)' });
+  await until(async () => (await gateway.status()).audit.some((a) => a.decision === 'edited' && a.channel === 'telegram'), 'telegram edit audited');
+  assert.equal(seen.length, editCalls, 'an edited Telegram message never reaches the model');
+
+  // 4c. Reconnect: two failed polls in a row; the supervisor restarts the adapter and no message is lost.
+  telegram.failPolls(2);
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  telegram.message({ from: OWNER_TG, text: 'after the outage' });
+  await until(() => sentTo(OWNER_TG).includes('echo: after the outage'), 'message after polling failures');
+  assert.ok((await gateway.status()).adapters.find((a) => a.channel === 'telegram').failures >= 1, 'the failed polls were seen and recovered');
+
   // 5. Busy conversation: a second message queues behind the first; another conversation is untouched.
   let release;
   gates.set('Hold on', new Promise((resolve) => { release = resolve; }));
@@ -233,6 +246,12 @@ try {
   discord.message({ author: OWNER_DC, channel: '700000000000000003', guild: '800000000000000001', text: '<@900000000000000001> what time is it' });
   await until(() => discord.sent.some((m) => m.content === 'echo: what time is it'), 'a server message that mentions the bot, without the mention');
   assert.ok(!seen.includes('chatting to friends, not Mars'), 'server messages without a mention are ignored');
+  const dcEditCalls = seen.length;
+  const original = discord.sent.length;
+  discord.edit({ author: OWNER_DC, channel: '700000000000000001', id: '1200000000000009999', text: 'hi from discord, edited' });
+  await until(async () => (await gateway.status()).audit.some((a) => a.decision === 'edited' && a.channel === 'discord'), 'discord edit audited');
+  assert.equal(seen.length, dcEditCalls, 'an edited Discord message never reaches the model');
+  assert.equal(discord.sent.length, original);
   const identifies = discord.connections.filter((c) => c.op === 'identify').length;
   discord.drop();
   await until(() => discord.connections.some((c) => c.op === 'resume'), 'discord resume');
@@ -291,7 +310,7 @@ try {
   assert.equal(seen.filter((t) => t === 'SLOW 600 across a restart').length, 1, 'a redelivery after restart submits once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'slow: across a restart').length, 1, 'and is answered once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'echo: queued before restart').length, 1, 'the queued reply is sent once');
-  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, /steer joins the running answer, typing refreshed while answering and stopped after, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord without privileged intents, server messages only when mentioned, resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
+  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, edits recorded and never resent, Telegram polling outage recovered by the supervisor, busy queue in order without touching another conversation, /steer joins the running answer, typing refreshed while answering and stopped after, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord without privileged intents, server messages only when mentioned, resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

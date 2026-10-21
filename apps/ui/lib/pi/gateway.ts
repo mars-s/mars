@@ -80,6 +80,7 @@ export const DECISION_LABELS: Record<string, string> = {
   accepted: "Message sent to Mars",
   duplicate: "Repeat ignored",
   command: "Command",
+  edited: "Edit ignored",
   denied: "Unknown sender, code sent",
   paired: "Sender approved",
   pairing_rejected: "Pairing rejected",

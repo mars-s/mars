@@ -268,6 +268,13 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     const base = { channel: event.channel, sender: event.sender.id, route, eventId: event.eventId };
     if (doc.seen.includes(key)) { await audit({ ...base, decision: 'duplicate' }); return { status: 'duplicate' }; }
     const allowed = (doc.allow[event.channel] ?? []).includes(event.sender.id);
+    // An edited message is never sent again: the model already answered the original, and
+    // resending would run it twice. It is only recorded.
+    if (event.edited) {
+      await commit(async (tx) => { const draft = await tx.doc(GatewayDoc); draft.seen.push(key); if (draft.seen.length > SEEN_LIMIT) draft.seen.splice(0, draft.seen.length - SEEN_LIMIT); });
+      await audit({ ...base, decision: allowed ? 'edited' : 'denied', ...(allowed ? {} : { pairing: 'ignored_edit' }) });
+      return { status: 'edited' };
+    }
     if (!allowed) return pairing(event, route, base, key);
     const remember = async (extra = {}) => commit(async (tx) => {
       const draft = await tx.doc(GatewayDoc);

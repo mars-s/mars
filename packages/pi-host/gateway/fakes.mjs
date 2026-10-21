@@ -13,7 +13,7 @@ export async function fakeTelegram({ token, botId = 999 }) {
   const updates = []; // { update_id, message }
   const sent = [];
   const actions = [];
-  let nextUpdate = 100, nextMessage = 1, rateLimitNext = 0, forbiddenChats = new Set(), acknowledged = 0;
+  let nextUpdate = 100, nextMessage = 1, rateLimitNext = 0, forbiddenChats = new Set(), acknowledged = 0, failPolls = 0;
   const waiting = new Set();
   const server = http.createServer(async (req, res) => {
     const [, bot, method] = req.url.split('/');
@@ -21,6 +21,7 @@ export async function fakeTelegram({ token, botId = 999 }) {
     const data = await body(req);
     if (method === 'getMe') return json(res, 200, { ok: true, result: { id: botId, is_bot: true, username: 'mars_test_bot' } });
     if (method === 'getUpdates') {
+      if (failPolls > 0) { failPolls--; return json(res, 502, { ok: false, error_code: 502, description: 'Bad Gateway' }); }
       acknowledged = Math.max(acknowledged, data.offset ?? 0);
       // A forced redelivery is sent once whatever the offset, as after a lost acknowledgement.
       const ready = () => updates.filter((u) => u.forced || u.update_id >= (data.offset ?? 0));
@@ -55,6 +56,16 @@ export async function fakeTelegram({ token, botId = 999 }) {
       waiting.clear();
       return update.update_id;
     },
+    /** The user edits a message they sent: an edited_message update. */
+    edit({ from, chat = from, text, messageId = 1 }) {
+      const update = { update_id: nextUpdate++, edited_message: { message_id: messageId, edit_date: 1, from: { id: Number(from), is_bot: false, username: 'user' + from }, chat: { id: Number(chat), type: chat === from ? 'private' : 'group' }, text } };
+      updates.push(update);
+      for (const wake of waiting) wake();
+      waiting.clear();
+      return update.update_id;
+    },
+    /** The next `times` getUpdates calls fail with 502, as a dropped connection would. */
+    failPolls(times = 1) { failPolls = times; },
     /** Re-deliver an update that was already delivered, as Telegram does after a missed ack. */
     redeliver(updateId) {
       const original = updates.find((u) => u.update_id === updateId);
@@ -118,6 +129,10 @@ export async function fakeDiscord({ token, botId = '900000000000000001' }) {
       }
     });
   });
+  /** The author edits a message: MESSAGE_UPDATE with edited_timestamp. */
+  function edit({ author, channel, text, id, guild }) {
+    return dispatch('MESSAGE_UPDATE', { id, channel_id: channel, author: { id: author, username: 'user' + author.slice(-3) }, content: text, edited_timestamp: new Date().toISOString(), ...(guild ? { guild_id: guild } : {}) });
+  }
   function dispatch(t, d) {
     const frame = { op: 0, t, s: ++seq, d };
     backlog.push(frame);
@@ -138,6 +153,7 @@ export async function fakeDiscord({ token, botId = '900000000000000001' }) {
       const old = socket; socket = null; old?.terminate();
       return messages.map((m) => this.message(m));
     },
+    edit,
     rateLimit(times = 1) { rateLimitNext = times; },
     forbid(channel) { forbiddenChannels.add(String(channel)); },
     disablePrivileged() { privileged = false; },
