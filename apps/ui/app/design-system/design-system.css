@@ -189,3 +189,26 @@ html:has(.ds-frame), body:has(.ds-frame) { overflow: auto; height: auto; }
   width: auto !important;
   max-width: none;
 }
+
+/* Gateway specimen */
+.ds-gateway {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.ds-gateway-recents {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--sidebar);
+}
+.ds-gateway-settings {
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .ds-gateway {
+    grid-template-columns: 1fr;
+  }
+}

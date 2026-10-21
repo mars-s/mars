@@ -63,7 +63,7 @@ const conversations = new Map([
     },
   ],
   ["2", { title: "New conversation", running: false, entries: [] }],
-  ["3", { title: "Weekly reading list", running: false, entries: [] }],
+  ["3", { title: "Weekly reading list", running: false, channel: "telegram", entries: [{ id: 31, model: [{ role: "user", content: text("Add the Hindsight paper to my reading list") }, { role: "assistant", content: text("Added. It is third on this week's list.") }] }] }],
   [
     "7",
     {
@@ -116,6 +116,26 @@ const conversations = new Map([
   ],
 ]);
 
+const gatewayStart = Date.parse("2026-10-22T09:00:00Z");
+const freshGateway = () => ({
+  adapters: [
+    { channel: "api", state: "running", detail: "", failures: 0 },
+    { channel: "telegram", state: "running", detail: "@mars_fixture_bot", failures: 0 },
+    { channel: "discord", state: "failed", detail: "Discord closed the connection (4014): enable the Message Content intent in the Developer Portal", failures: 3 },
+  ],
+  bindings: [{ route: "telegram:999:dm:5550001", channel: "telegram", conversationId: "3", title: "Weekly reading list" }],
+  pairings: [{ code: "K7QX2M9P", channel: "telegram", sender: "5550002", name: "sam_k", expiresAt: new Date(gatewayStart + 3600000).toISOString() }],
+  allowed: { telegram: ["5550001"], api: ["owner"] },
+  outbox: 0,
+  audit: [
+    { at: new Date(gatewayStart + 300000).toISOString(), channel: "telegram", decision: "denied" },
+    { at: new Date(gatewayStart + 240000).toISOString(), channel: "telegram", decision: "accepted", conversationId: "3" },
+    { at: new Date(gatewayStart + 120000).toISOString(), channel: "telegram", decision: "duplicate" },
+    { at: new Date(gatewayStart + 60000).toISOString(), channel: "discord", decision: "adapter_failed" },
+  ],
+});
+let gateway = freshGateway();
+
 function state(id) {
   const conversation = conversations.get(id) ?? conversations.get("1");
   return {
@@ -131,6 +151,7 @@ function state(id) {
         id: key,
         title: row.title,
         running: row.running,
+        ...(row.channel ? { channel: row.channel } : {}),
         sideChats: [...conversations].filter(([, side]) => side.sideOf === key).reverse().map(([sideId, side]) => ({ id: sideId, title: side.title, running: side.running })),
       })),
     subthreads: id === "1" ? [{ id: "4", conversationId: "1", title: "Audit service units", status: "running", modelId: "gpt-6-sol", provider: "openai" }] : [],
@@ -484,6 +505,19 @@ createServer(async (req, res) => {
       return res.end(file[1]);
     }
   }
+  // Gateway (docs/GATEWAY.md): Telegram linked to conversation 3, one pending pairing.
+  if (url.pathname === "/api/gateway/pairings" && req.method === "POST") {
+    gateway.pairings = gateway.pairings.filter((p) => p.code !== body.code);
+    if (body.approve) gateway.audit.unshift({ at: new Date().toISOString(), channel: "telegram", decision: "paired" });
+    return json(res, 200, { channel: "telegram", sender: "5550002", approved: !!body.approve });
+  }
+  if (url.pathname === "/api/gateway/bindings/delete" && req.method === "POST") {
+    gateway.bindings = gateway.bindings.filter((b) => b.route !== body.route);
+    return json(res, 200, { unbound: body.route });
+  }
+  // Tests reset the fixture gateway first, so one run's approval does not leak into the next.
+  if (url.pathname === "/api/gateway/fixture-reset" && req.method === "POST") return json(res, 200, (gateway = freshGateway()));
+  if (url.pathname === "/api/gateway") return json(res, 200, gateway);
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });
   if (url.pathname === "/api/connections")
     return json(res, 200, {

@@ -160,6 +160,7 @@ export function LiveWorkspace() {
                 running: next.running,
                 sideChats: [],
                 sideChatTotal: 0,
+                channel: "",
               },
             ],
       );

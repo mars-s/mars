@@ -113,7 +113,13 @@ export type ConversationSummary = {
   sideChats: SideChatSummary[];
   /** How many side chats exist in all, when more than the listed page. */
   sideChatTotal: number;
+  /** Chat app this conversation was started from or linked to (docs/GATEWAY.md), or "". */
+  channel: GatewayChannel | "";
 };
+export const GATEWAY_CHANNELS = ["telegram", "discord", "api"] as const;
+export type GatewayChannel = (typeof GATEWAY_CHANNELS)[number];
+const gatewayChannel = (value: unknown): GatewayChannel | "" =>
+  (GATEWAY_CHANNELS as readonly unknown[]).includes(value) ? (value as GatewayChannel) : "";
 export type WorkerSummary = {
   id: string;
   conversationId: string;
@@ -270,6 +276,7 @@ export function parseConversations(value: unknown): ConversationSummary[] {
                   return sideId ? [{ id: sideId, title: string(side.title) || "Side chat", running: side.running === true }] : [];
                 }),
               sideChatTotal: Number.isInteger(row.sideChatTotal) ? Number(row.sideChatTotal) : 0,
+              channel: gatewayChannel(row.channel),
             },
           ]
         : [];

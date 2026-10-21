@@ -161,6 +161,18 @@
 .live-conversation {
   gap: 8px;
 }
+/* Chat app a conversation came from (docs/GATEWAY.md): quiet, after the title. */
+.live-channel-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
 .live-running-dot {
   flex-shrink: 0;
   width: 6px;

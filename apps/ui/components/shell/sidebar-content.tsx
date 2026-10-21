@@ -4,6 +4,7 @@ import { useId } from "react";
 import { Blocks, MessageSquare, MessageSquareDashed, PanelLeft, Plus, X } from "lucide-react";
 import { MarsMark } from "@/components/mars-mark";
 import { useWorkspace } from "@/components/workspace-context";
+import { ChannelMark } from "./channel-mark";
 import { ChildNavigation } from "./child-navigation";
 import { setSidebarCollapsed } from "./sidebar-collapse";
 
@@ -101,6 +102,7 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
               onClick={() => selectConversation(conversation.id)}
             >
               <span className="live-nav-label">{conversation.title}</span>
+              {conversation.channel && <ChannelMark channel={conversation.channel} label />}
               {conversation.running && (
                 <>
                   <span className="live-running-dot" aria-hidden="true" />

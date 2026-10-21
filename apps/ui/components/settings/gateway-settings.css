@@ -1,0 +1,120 @@
+.gateway-settings h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.gateway-settings .connection-settings-intro {
+  margin-bottom: 16px;
+}
+.gateway-list {
+  display: grid;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.gateway-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 0;
+}
+.gateway-row + .gateway-row {
+  border-top: 1px solid var(--border);
+}
+.gateway-row-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.gateway-row-text strong,
+.gateway-row-text .gateway-link {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gateway-row-text span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A failure reason is the one thing to read in full: let it wrap. */
+.gateway-row-text span.gateway-row-detail {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.gateway-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.gateway-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.gateway-link:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.gateway-row-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+.gateway-state {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.gateway-state[data-state="running"] {
+  color: var(--green);
+}
+.gateway-state[data-state="failed"] {
+  color: var(--red);
+}
+.gateway-pairings {
+  border-color: color-mix(in srgb, var(--clay) 45%, var(--border));
+}
+.gateway-audit {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.gateway-audit li {
+  display: grid;
+  grid-template-columns: 64px 72px 1fr;
+  gap: 8px;
+  color: var(--text-muted);
+}
+.gateway-audit li span:last-child {
+  color: var(--text);
+}
+.gateway-audit li[data-decision="delivery_failed"] span:last-child,
+.gateway-audit li[data-decision="adapter_failed"] span:last-child {
+  color: var(--red);
+}
+@media (max-width: 640px) {
+  .gateway-row {
+    flex-wrap: wrap;
+  }
+  .gateway-row-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

@@ -16,6 +16,7 @@ import { createConversationManager } from "./conversations.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
+import { createGatewayExtension, gatewayRoute, startGateway, withChannels } from "./gateway/host.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -135,6 +136,7 @@ registry.install(createSideChatExtension({
 registry.install(createWorkspaceFilesExtension({ files: () => late.workbenchTools.files }));
 registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
+registry.install(createGatewayExtension({ gateway: () => late.gateway }));
 const extensions = new ExtensionStore(registry);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();
@@ -377,6 +379,13 @@ async function providerReady(view) {
         !!(await credentials.read(selected.provider));
 }
 harness.resume();
+// Chat clients (docs/GATEWAY.md). Staging and tool dumps never start platform adapters,
+// except a check that points them at a fake platform on loopback (MARS_GATEWAY_FAKE=1).
+const fakeGateway = process.env.MARS_GATEWAY_FAKE === "1" && /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.MARS_TELEGRAM_API || "");
+const gatewayHost = await startGateway({ harness, conversations, context,
+  env: (STAGING && !fakeGateway) || process.env.MARS_DUMP_TOOLS ? {} : process.env, discordToken: connections.getDiscordToken(),
+  ready: async (id) => (await providerReady(await conversations.state(id))) ? null : "Mars cannot answer yet: connect the selected model provider in Mars Settings, then send your message again." });
+late.gateway = gatewayHost.gateway;
 async function evaluationStatus() {
   try {
     return JSON.parse(await readFile(ROOT + "/evidence/evaluation.json", "utf8"));
@@ -559,7 +568,7 @@ const server = http.createServer(async (req, res) => {
       const cursor = url.searchParams.get("cursor");
       const page = await conversations.listPage({ limit: Number(url.searchParams.get("limit") || 100),
         cursor: cursor ? JSON.parse(Buffer.from(cursor, "base64url").toString()) : undefined });
-      send(res, 200, { conversations: page.items, rootId: String(root.id),
+      send(res, 200, { conversations: await withChannels(harness, context, page.items), rootId: String(root.id),
         nextCursor: page.next ? Buffer.from(JSON.stringify(page.next)).toString("base64url") : null }); return;
     }
     if (url.pathname === "/api/conversations" && req.method === "POST") {
@@ -611,7 +620,7 @@ const server = http.createServer(async (req, res) => {
         pid: process.pid,
         conversationId: String(conversation.id),
         selectedConversationId: String(conversation.id),
-        conversations: await conversations.list(),
+        conversations: await withChannels(harness, context, await conversations.list()),
         workers: (await listWorkers({ harness, conversationId: conversation.id, context })).filter(worker => !worker.workflowId),
         usage: state.docs?.["pi.usage"],
         evaluation: await evaluationStatus(),
@@ -641,6 +650,7 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    if (await gatewayRoute({ req, url, res, send, jsonBody, ...gatewayHost })) return;
     if (url.pathname === "/api/connections" && req.method === "GET") {
       send(res, 200, connectionStatus());
       return;
@@ -700,6 +710,7 @@ const server = http.createServer(async (req, res) => {
         { type: "input", content: prepared.content, entry: { kind: "mars.user", data: { attachments: prepared.attachments } }, requestId: data.requestId || randomUUID() },
         context,
       );
+      await gatewayHost.gateway.watchSubmission(conversation.id, submission.id);
       send(res, 202, { submissionId: submission.id });
       return;
     }
@@ -813,6 +824,7 @@ for (const signal of ["SIGTERM", "SIGINT"])
     closing = true;
     oauth.close();
     server.close();
+    await gatewayHost.gateway.close();
     await harness.close(context);
     process.exit(0);
   });
