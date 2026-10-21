@@ -47,17 +47,26 @@ const TASKS = [
 ];
 const toTool = (row) => ({ type: "function", function: { name: row.name, description: row.description, parameters: row.parameters ?? { type: "object", properties: {} } } });
 
+// A small model sometimes repeats itself until the server gives up; cap each reply at 400
+// tokens and 120 s and count a capped reply as no call, as harness/runner.mjs does.
 async function ask(tools, task) {
-  const response = await fetch("http://127.0.0.1:11434/api/chat", {
-    method: "POST",
-    body: JSON.stringify({
-      model: MODEL, stream: false, tools, options: { temperature: 0.7, seed: Math.floor(Math.random() * 1e9) },
-      messages: [
-        { role: "system", content: "You are an assistant with tools. Use exactly one tool call to do the user's request." },
-        { role: "user", content: task },
-      ],
-    }),
-  });
+  let response;
+  try {
+    response = await fetch("http://127.0.0.1:11434/api/chat", {
+      method: "POST",
+      signal: AbortSignal.timeout(120000),
+      body: JSON.stringify({
+        model: MODEL, stream: false, tools, options: { temperature: 0.7, seed: Math.floor(Math.random() * 1e9), num_predict: 400 },
+        messages: [
+          { role: "system", content: "You are an assistant with tools. Use exactly one tool call to do the user's request." },
+          { role: "user", content: task },
+        ],
+      }),
+    });
+  } catch (error) {
+    if (error.name === "TimeoutError" || error.cause?.code === "UND_ERR_HEADERS_TIMEOUT") return { name: null, args: null };
+    throw error;
+  }
   const data = await response.json();
   const call = data.message?.tool_calls?.[0]?.function;
   if (!call) return { name: null, args: null };
