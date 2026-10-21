@@ -29,7 +29,8 @@ const webToken = (await readFile(join(base, 'data/data/web-token'), 'utf8')).tri
 const uiDir = process.env.MARS_GATEWAY_UI_DIR || fileURLToPath(new URL('../../../apps/ui/', import.meta.url));
 // Pass MARS_GATEWAY_UI_DIR to run the UI from another checkout (for example a worktree)
 // when a dev server already holds this checkout's .next lock.
-const ui = spawn(process.execPath, ['scripts/next.mjs', 'dev'], { cwd: uiDir, stdio: ['ignore', 'pipe', 'pipe'],
+// Webpack rather than Turbopack: Turbopack does not follow a node_modules symlink in a worktree.
+const ui = spawn(process.execPath, [fileURLToPath(new URL('../../../node_modules/next/dist/bin/next', import.meta.url)), 'dev', '--webpack', '--hostname', '127.0.0.1', '--port', String(uiPort)], { cwd: uiDir, stdio: ['ignore', 'pipe', 'pipe'],
   env: { ...process.env, MARS_PI_ORIGIN: `http://127.0.0.1:${hostPort}`, MARS_PI_TOKEN: webToken, MARS_UI_PORT: String(uiPort) } });
 let uiLog = '';
 ui.stdout.on('data', (d) => (uiLog += d));

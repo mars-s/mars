@@ -34,6 +34,9 @@ try {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const title = `Trip plan ${Date.now() % 100000}`;
+  // /new starts a fresh conversation even if this chat was used before; its title is the argument.
+  await control("message", { from: owner, text: `/new ${title}` });
+  await until(async () => (await sent()).some((t) => t.startsWith("Started a new conversation")), "/new reply");
   await control("message", { from: owner, text: title });
   await until(async () => (await sent()).includes("echo: " + title), "Telegram answer");
 
