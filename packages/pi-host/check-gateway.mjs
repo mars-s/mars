@@ -71,7 +71,7 @@ const discord = await fakeDiscord({ token: DC_TOKEN });
 let host = await open();
 const workersOf = async (id) => (String(id) === String(statusWorkersFor) ? [{ title: 'Review a.ts', status: 'running' }, { title: 'Done job', status: 'completed' }] : []);
 let statusWorkersFor = null;
-let gateway = createGateway({ harness: host.harness, conversations: host.conversations, context, backoff: { firstMs: 20, maxMs: 100 }, workersOf });
+let gateway = createGateway({ harness: host.harness, conversations: host.conversations, context, backoff: { firstMs: 20, maxMs: 100 }, workersOf, typingEveryMs: 100 });
 const api = createApiAdapter();
 gateway.addAdapter(api);
 gateway.addAdapter(createTelegramAdapter({ token: TG_TOKEN, baseUrl: telegram.baseUrl, pollTimeoutSeconds: 1 }));
@@ -141,8 +141,15 @@ try {
   assert.ok(!seen.includes('Queued behind'), 'the queued message waits for the busy run');
   const inbox = await until(async () => (await host.harness.snapshot(InboxDoc, Number(conversationId), context))?.items?.length && (await host.harness.snapshot(InboxDoc, Number(conversationId), context)), 'queued in the inbox');
   assert.deepEqual(inbox.items.map((item) => item.mode), ['followUp'], 'a chat message to a busy conversation is a follow-up, never a steer');
+  const typingBefore = telegram.actions.length;
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  assert.ok(telegram.actions.length - typingBefore >= 3, 'typing is refreshed while a long answer runs');
   release();
   await until(() => sentTo(OWNER_TG).includes('echo: Queued behind'), 'queued message answered after');
+  await gateway.settle();
+  const typingAfter = telegram.actions.length;
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(telegram.actions.length, typingAfter, 'and stops once answered');
   const order = sentTo(OWNER_TG);
   assert.ok(order.indexOf('echo: Hold on') < order.indexOf('echo: Queued behind'), 'in order');
 
@@ -279,7 +286,7 @@ try {
   assert.equal(seen.filter((t) => t === 'SLOW 600 across a restart').length, 1, 'a redelivery after restart submits once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'slow: across a restart').length, 1, 'and is answered once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'echo: queued before restart').length, 1, 'the queued reply is sent once');
-  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, /steer joins the running answer, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
+  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, /steer joins the running answer, typing refreshed while answering and stopped after, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

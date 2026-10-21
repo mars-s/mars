@@ -60,7 +60,7 @@ function answerText(entry) {
  * example no model provider is signed in); then nothing is submitted. `workersOf(id)` lists
  * the conversation's helper models ({ title, status }) for /status.
  */
-export function createGateway({ harness, conversations, context, now = Date.now, log = () => {}, backoff = { firstMs: 1000, maxMs: 60000 }, ready = async () => null, workersOf = async () => [] }) {
+export function createGateway({ harness, conversations, context, now = Date.now, log = () => {}, backoff = { firstMs: 1000, maxMs: 60000 }, ready = async () => null, workersOf = async () => [], typingEveryMs = 4000 }) {
   const adapters = new Map(); // channel -> { adapter, state, detail, failures, controller }
   const waiters = new Map(); // submission id -> promise
   let closed = false;
@@ -171,6 +171,23 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     })().catch((error) => log('gateway follow: ' + error.message)).finally(() => waiters.delete(submissionId));
     waiters.set(submissionId, promise);
     return promise;
+  }
+
+  /**
+   * Show the platform's typing indicator until `until` settles. Telegram's lasts about 5 s
+   * and Discord's about 10 s, so it is refreshed every `typingEveryMs`. Best effort only.
+   */
+  function showTyping(channel, route, until) {
+    const typing = adapters.get(channel)?.adapter.typing;
+    if (!typing) return;
+    let done = false;
+    until.finally(() => { done = true; });
+    (async () => {
+      while (!done && !closed) {
+        await Promise.resolve(typing(target(route))).catch(() => {});
+        await Promise.race([until, new Promise((resolve) => setTimeout(resolve, typingEveryMs))]);
+      }
+    })();
   }
 
   async function bind(route, conversationId, channel) {
@@ -286,9 +303,8 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     }, context);
     await remember({ [submission.id]: String(conversationId) });
     await audit({ ...base, decision: 'accepted', conversationId: String(conversationId), submissionId: submission.id });
-    const typing = adapters.get(event.channel)?.adapter.typing;
-    if (typing) Promise.resolve().then(() => typing(target(route))).catch(() => {});
-    follow(conversationId, submission.id);
+    const waiting = follow(conversationId, submission.id);
+    showTyping(event.channel, route, waiting);
     return { status: 'accepted', conversationId: String(conversationId), submissionId: submission.id };
   }
 
