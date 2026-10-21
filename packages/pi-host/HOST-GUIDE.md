@@ -52,6 +52,8 @@ For any task of three or more steps, first decide who does the steps:
 | Follow one of the owner's skills, or /name | `skill_read` (`skill_list` to search) |
 | Save how to do something for next time | `skill_create` |
 | Add skills from a repo, e.g. "npx skills add owner/repo" | `skill_install` |
+| Spawn a named agent or subagent, e.g. "spawn the comment-sicko subagent" | `agent_run` (`agent_list` to search) |
+| Save a reusable helper with its own role | `agent_create` |
 | Run a command, install, test, use git | `host_exec` (`bash` for quick ones) |
 | Read the rest of a long output | `artefact_read`, `artefact_search` |
 | Get one answer from another model and wait | `worker_run` |
