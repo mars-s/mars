@@ -228,6 +228,11 @@ try {
   // 11. Discord: DM, reply, reconnect with resume (no second identify), 429 and 403.
   discord.message({ author: OWNER_DC, channel: '700000000000000001', text: 'hi from discord' });
   await until(() => discord.sent.some((m) => m.content === 'echo: hi from discord'), 'discord reply');
+  assert.equal(discord.connections.find((c) => c.op === 'identify').intents, 4609, 'Discord asks for no privileged intent by default');
+  discord.message({ author: OWNER_DC, channel: '700000000000000003', guild: '800000000000000001', text: 'chatting to friends, not Mars' });
+  discord.message({ author: OWNER_DC, channel: '700000000000000003', guild: '800000000000000001', text: '<@900000000000000001> what time is it' });
+  await until(() => discord.sent.some((m) => m.content === 'echo: what time is it'), 'a server message that mentions the bot, without the mention');
+  assert.ok(!seen.includes('chatting to friends, not Mars'), 'server messages without a mention are ignored');
   const identifies = discord.connections.filter((c) => c.op === 'identify').length;
   discord.drop();
   await until(() => discord.connections.some((c) => c.op === 'resume'), 'discord resume');
@@ -236,7 +241,7 @@ try {
   await until(() => discord.sent.some((m) => m.content === 'echo: after resume'), 'discord reply after resume and 429');
   assert.equal(discord.connections.filter((c) => c.op === 'identify').length, identifies, 'a reconnect resumes instead of identifying again');
   discord.forbid('700000000000000002');
-  discord.message({ author: OWNER_DC, channel: '700000000000000002', guild: '800000000000000001', text: 'no permission here' });
+  discord.message({ author: OWNER_DC, channel: '700000000000000002', guild: '800000000000000001', text: '<@900000000000000001> no permission here' });
   await until(async () => (await gateway.status()).audit.some((a) => a.decision === 'delivery_failed' && a.channel === 'discord'), 'discord 403 recorded');
 
   // 11b. A crashing adapter is restarted by the supervisor and never stops the others.
@@ -286,7 +291,7 @@ try {
   assert.equal(seen.filter((t) => t === 'SLOW 600 across a restart').length, 1, 'a redelivery after restart submits once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'slow: across a restart').length, 1, 'and is answered once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'echo: queued before restart').length, 1, 'the queued reply is sent once');
-  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, /steer joins the running answer, typing refreshed while answering and stopped after, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
+  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, /steer joins the running answer, typing refreshed while answering and stopped after, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord without privileged intents, server messages only when mentioned, resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

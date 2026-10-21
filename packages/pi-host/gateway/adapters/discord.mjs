@@ -2,11 +2,16 @@
 // Node's built-in WebSocket (Hello, jittered heartbeat, Identify, Resume) plus REST with
 // fetch. No library. Replies use a deterministic nonce with enforce_nonce, so a retried
 // send returns the first message instead of posting twice.
-const INTENTS = 1 | 512 | 4096 | 32768; // GUILDS, GUILD_MESSAGES, DIRECT_MESSAGES, MESSAGE_CONTENT
+// GUILDS, GUILD_MESSAGES, DIRECT_MESSAGES. MESSAGE_CONTENT (32768) is privileged and must be
+// enabled in the Developer Portal; without it Discord still sends the text of DMs and of
+// messages that @mention the bot, which is all the adapter reads (docs/research/telegram-discord.md).
+const BASE_INTENTS = 1 | 512 | 4096;
+const MESSAGE_CONTENT = 32768;
 const NO_RECONNECT = new Set([4004, 4010, 4011, 4012, 4013, 4014]);
 const FRESH_SESSION = new Set([4007, 4009]);
 
-export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/v10', gatewayUrl, fetch: fetcher = globalThis.fetch, WebSocketImpl = globalThis.WebSocket, random = Math.random }) {
+export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/v10', gatewayUrl, fetch: fetcher = globalThis.fetch, WebSocketImpl = globalThis.WebSocket, random = Math.random, messageContent = false }) {
+  const intents = BASE_INTENTS | (messageContent ? MESSAGE_CONTENT : 0);
   if (typeof token !== 'string' || token.length < 50 || /\s/.test(token)) throw Error('Invalid Discord bot token format');
   let state = 'starting', detail = '', account = '';
   let session = null; // { id, resumeUrl, seq }
@@ -47,7 +52,7 @@ export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/
             const interval = payload.d.heartbeat_interval;
             heartbeat = setTimeout(() => { beat(); heartbeat = setInterval(beat, interval); }, Math.floor(interval * random()));
             if (session?.id) sendOp(6, { token, session_id: session.id, seq: session.seq });
-            else sendOp(2, { token, intents: INTENTS, properties: { os: process.platform, browser: 'mars', device: 'mars' } });
+            else sendOp(2, { token, intents, properties: { os: process.platform, browser: 'mars', device: 'mars' } });
             break;
           }
           case 11: acked = true; break;
@@ -64,11 +69,16 @@ export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/
             else if (payload.t === 'MESSAGE_CREATE') {
               const message = payload.d;
               if (message.author?.bot || !message.content) break;
+              // In a server, only messages that @mention the bot are for Mars; the mention is removed.
+              const mention = new RegExp(`<@!?${account}>`, 'g');
+              if (message.guild_id && !mention.test(message.content)) break;
+              const text = message.guild_id ? message.content.replace(mention, '').trim() : message.content;
+              if (!text) break;
               const event = {
                 channel: 'discord', account, eventId: String(message.id),
                 sender: { id: String(message.author.id), name: message.author.username ?? '' },
                 chat: { id: String(message.channel_id), type: message.guild_id ? 'group' : 'dm' },
-                text: message.content,
+                text,
               };
               inbound = inbound.then(() => receive(event)).catch((error) => { detail = String(error.message).slice(0, 200); });
             }

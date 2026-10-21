@@ -105,7 +105,7 @@ export async function fakeDiscord({ token, botId = '900000000000000001' }) {
       const { op, d } = JSON.parse(String(raw));
       if (op === 1) ws.send(JSON.stringify({ op: 11 }));
       if (op === 2) {
-        connections.push({ op: 'identify' });
+        connections.push({ op: 'identify', intents: d.intents });
         if (d.token !== token) return ws.close(4004, 'Authentication failed');
         if ((d.intents & 32768) && !privileged) return ws.close(4014, 'Disallowed intent(s)');
         sessionCounter++;

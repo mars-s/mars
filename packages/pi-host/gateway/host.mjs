@@ -27,7 +27,7 @@ export async function startGateway({ harness, conversations, context, env = proc
     configured.push('telegram');
   }
   if (env.MARS_GATEWAY_DISCORD === '1' && (env.MARS_DISCORD_TOKEN || discordToken)) {
-    gateway.addAdapter(createDiscordAdapter({ token: env.MARS_DISCORD_TOKEN || discordToken, ...(env.MARS_DISCORD_API ? { apiUrl: env.MARS_DISCORD_API } : {}) }));
+    gateway.addAdapter(createDiscordAdapter({ token: env.MARS_DISCORD_TOKEN || discordToken, messageContent: env.MARS_DISCORD_MESSAGE_CONTENT === '1', ...(env.MARS_DISCORD_API ? { apiUrl: env.MARS_DISCORD_API } : {}) }));
     configured.push('discord');
   }
   for (const [channel, ids] of [['telegram', env.MARS_TELEGRAM_OWNER], ['discord', env.MARS_DISCORD_OWNER]])
