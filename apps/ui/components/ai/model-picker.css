@@ -225,6 +225,12 @@
     display: none;
   }
 }
+/* A narrow composer (workbench open beside it) drops the effort label before the model name. */
+@container composer-toolbar (max-width: 360px) {
+  .mars-model-trigger-effort {
+    display: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .mars-model-menu {
     animation: none;
