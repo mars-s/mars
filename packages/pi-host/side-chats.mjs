@@ -4,6 +4,7 @@
 // `mars.side-chat-index` on the parent lists its children. Pi stays the only store, so the
 // UI, the HTTP API and the agent all read the same link, and a crash can never leave a
 // half-linked side chat.
+import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { Type } from '@earendil-works/pi-ai';
 import { LiveDoc, configure, defineDoc, defineExtension, defineTool } from '@earendil-works/pi-durable';
 import { nativeTitleDoc } from './orchestration.mjs';
@@ -15,6 +16,47 @@ export const SideChatDoc = defineDoc({ kind: 'mars.side-chat', version: 1, scope
 // side_chat_open finds the side chat it made even if the host stopped before the memo.
 // A fork of a parent starts with no side chats of its own.
 export const SideChatIndexDoc = defineDoc({ kind: 'mars.side-chat-index', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ children: [], requests: {} }) });
+/**
+ * Set on a side chat when its parent's agent gives it work (side_chat_open with a task, or
+ * side_chat_send). When that side chat next finishes an answer, the parent gets one note in its
+ * context ("Side chat X finished: ...") and the flag clears. The owner chatting in a side chat
+ * directly never notifies the parent.
+ */
+export const SideChatNotifyDoc = defineDoc({ kind: 'mars.side-chat-notify', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ pending: false }) });
+export const SIDE_CHAT_DONE = 'mars.side-chat-done';
+const REPLY_EXCERPT = 4000;
+const textOf = (message) => (Array.isArray(message?.content) ? message.content.filter((part) => part.type === 'text').map((part) => part.text).join('\n') : typeof message?.content === 'string' ? message.content : '').trim();
+
+/**
+ * Tell the parent that a side chat it gave work to has finished: clear the flag and write one
+ * model-visible entry into the parent, keyed so a replay never writes it twice.
+ */
+export async function notifyParent({ harness, sideChatId, taskId, answer, context }) {
+  const id = nativeId(String(sideChatId));
+  const cleared = await harness.commit(async (tx) => {
+    const flag = await tx.doc(SideChatNotifyDoc, id);
+    if (!flag.pending) return undefined;
+    flag.pending = false;
+    const link = await tx.doc(SideChatDoc, id);
+    const label = await tx.doc(nativeTitleDoc, id);
+    return { parentId: link.parentId, title: label.title || 'Side chat' };
+  }, context);
+  if (!cleared?.parentId) return false;
+  const parent = await harness.conversation(nativeId(cleared.parentId), context);
+  if (!parent) return false;
+  const excerpt = answer.length > REPLY_EXCERPT ? answer.slice(0, REPLY_EXCERPT) + '…' : answer;
+  await parent.submit({
+    type: 'write',
+    requestId: `side-chat-done:${sideChatId}:${taskId}`,
+    entry: {
+      kind: SIDE_CHAT_DONE,
+      data: { sideChatId: String(sideChatId), title: cleared.title },
+      model: [{ role: 'user', content: [{ type: 'text', text: `[Side chat "${cleared.title}" (id ${sideChatId}) finished. Its answer:]\n${excerpt || '(no text)'}\n[Use side_chat_read for the full answer, or side_chat_send to continue it.]` }], timestamp: Date.now() }],
+    },
+  }, context);
+  return true;
+}
+
 /** Rows shown under a parent at once; older ones are counted, and paged by side_chat_list. */
 export const SIDE_CHAT_PAGE = 20;
 /** Hard cap per parent: beyond this, opening another is refused (prompt-injection floods). */
@@ -129,6 +171,7 @@ Example: await tools.side_chat_open({ title: "Release names", task: "Suggest thr
           }
           if (args.task) {
             const child = await api.conversation(nativeId(id), ctx);
+            await getHarness().commit(async (tx) => { (await tx.doc(SideChatNotifyDoc, nativeId(id))).pending = true; }, ctx);
             await child.submit({ type: 'input', content: args.task, requestId: `side-chat-open:${api.taskId}:${api.callId}` }, ctx);
           }
           return { id, title, parentId: String(api.conversationId) };
@@ -162,10 +205,56 @@ Example: await tools.side_chat_send({ sideChatId: "42", text: "Make them shorter
         }),
         async (args, api, ctx) => {
           const child = await ownSideChat(api, args.sideChatId, ctx);
+          await getHarness().commit(async (tx) => { (await tx.doc(SideChatNotifyDoc, child.id)).pending = true; }, ctx);
           const submission = await child.submit({ type: 'input', content: args.text, whenBusy: 'followUp', requestId: `side-chat-send:${api.taskId}:${api.callId}` }, ctx);
           return { sent: true, sideChatId: args.sideChatId, submissionId: String(submission.id) };
         },
       ),
+      tool(
+        'side_chat_read',
+        `Read a side chat's latest answer and whether it is still working.
+Use it after a "[Side chat ... finished]" note, or to check on a side chat you gave work to. It returns the newest answer (up to 20000 characters) and running; it does not wait. Only this conversation's side chats can be read.
+Example: await tools.side_chat_read({ sideChatId: "42" })`,
+        Type.Object({
+          sideChatId: Type.String({ minLength: 1, maxLength: 20, description: 'Side chat id from side_chat_open or side_chat_list, e.g. "42".' }),
+        }),
+        Type.Object({
+          sideChatId: Type.String({ description: 'The side chat id.' }),
+          title: Type.String({ description: 'Title shown in the sidebar.' }),
+          running: Type.Boolean({ description: 'True while it is still answering.' }),
+          answer: Type.String({ description: 'Its newest answer text, or "" if it has not answered yet.' }),
+          truncated: Type.Boolean({ description: 'True when the answer was cut at 20000 characters.' }),
+        }),
+        async (args, api, ctx) => {
+          const child = await ownSideChat(api, args.sideChatId, ctx);
+          const [label, live] = await Promise.all([getHarness().snapshot(nativeTitleDoc, child.id, ctx), getHarness().snapshot(LiveDoc, child.id, ctx)]);
+          const view = await (await getHarness().conversation(child.id, ctx)).viewState(ctx);
+          let answer = '';
+          try {
+            const messages = view.value.entries.flatMap((entry) => entry.model ?? []);
+            for (let i = messages.length - 1; i >= 0 && !answer; i--) if (messages[i].role === 'assistant') answer = textOf(messages[i]);
+          } finally {
+            view.dispose();
+          }
+          return { sideChatId: String(args.sideChatId), title: label?.title || 'Side chat', running: !!live?.run, answer: answer.slice(0, 20000), truncated: answer.length > 20000 };
+        },
+      ),
     ],
+    hooks: [{
+      task: 'pi.generation',
+      handlers: {
+        // A final answer (no tool calls) from a side chat with work from its parent: notify the
+        // parent after this commit, never delaying the side chat itself.
+        afterResponse: async (message, api, ctx) => {
+          if (message.stopReason !== 'stop') return;
+          const flag = await api.snapshot(SideChatNotifyDoc, api.conversationId, ctx);
+          if (!flag?.pending) return;
+          const sideChatId = String(api.conversationId);
+          const taskId = String(api.taskId);
+          const answer = textOf(message);
+          setImmediate(() => { notifyParent({ harness: getHarness(), sideChatId, taskId, answer, context: BACKGROUND_CONTEXT }).catch(() => {}); });
+        },
+      },
+    }],
   });
 }

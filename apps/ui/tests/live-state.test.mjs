@@ -456,3 +456,13 @@ test("a run of tool-only model turns joins the next assistant message as one act
   );
   assert.equal(state.messages[2].id, "3:0", "the group keeps the id of its first turn, so it does not remount");
 });
+
+test("a side chat's finished note shows as a short line, not as the owner speaking", () => {
+  const state = parseSnapshot(
+    snapshot([
+      { id: 1, model: [{ role: "user", content: "Start research" }] },
+      { id: 2, kind: "mars.side-chat-done", data: { sideChatId: "8", title: "Research" }, model: [{ role: "user", content: "[Side chat finished]" }] },
+    ]),
+  );
+  assert.deepEqual(state.messages.map((m) => [m.role, m.text]), [["user", "Start research"], ["assistant", "Side chat “Research” finished."]]);
+});

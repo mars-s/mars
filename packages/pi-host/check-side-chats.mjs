@@ -10,7 +10,7 @@ import { AssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { Harness, LiveDoc, createRegistry } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { createConversationManager } from './conversations.mjs';
-import { SIDE_CHAT_MAX, SIDE_CHAT_PAGE, SideChatDoc, SideChatIndexDoc, createSideChat, createSideChatExtension, listSideChats } from './side-chats.mjs';
+import { SIDE_CHAT_DONE, SIDE_CHAT_MAX, SIDE_CHAT_PAGE, SideChatDoc, SideChatIndexDoc, SideChatNotifyDoc, createSideChat, createSideChatExtension, listSideChats } from './side-chats.mjs';
 
 const seen = [];
 const models = {
@@ -82,6 +82,28 @@ try {
   const listed = (await listSideChats({ harness, parentId: String(parent.id), context })).items.map((row) => row.id);
   assert.deepEqual(listed.sort(), [String(side.id), opened.id].sort(), 'the agent-opened side chat is nested under its parent');
 
+  // The parent hears once when the side chat it gave work to finishes.
+  const doneEntries = async () => {
+    const view = await parent.viewState(context);
+    try { return view.value.entries.filter((entry) => entry.kind === SIDE_CHAT_DONE); } finally { view.dispose(); }
+  };
+  for (let n = 0; n < 100 && !(await doneEntries()).length; n++) await new Promise((resolve) => setTimeout(resolve, 20));
+  const done = await doneEntries();
+  assert.equal(done.length, 1, 'one finished note in the parent');
+  assert.equal(done[0].data.sideChatId, opened.id);
+  assert.match(done[0].model[0].content[0].text, /Side chat "Research" .*finished/);
+  assert.equal((await harness.snapshot(SideChatNotifyDoc, research.id, context)).pending, false, 'the flag clears');
+  // The owner typing in the side chat directly does not notify the parent.
+  await (await research.submit({ type: 'input', content: 'owner question' }, context)).wait(context);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal((await doneEntries()).length, 1, 'no note for the owner\'s own messages');
+  assert.equal((await say(parent, `CALL side_chat_read ${JSON.stringify({ sideChatId: opened.id })}`)).status, 'done');
+  const readText = (await toolResult(parent)).text;
+  let readBack;
+  try { readBack = JSON.parse(readText); } catch { assert.fail('side_chat_read returned: ' + readText.slice(0, 600)); }
+  assert.equal(readBack.answer, 'ok');
+  assert.equal(readBack.running, false);
+
   assert.equal((await say(parent, 'CALL side_chat_list {}')).status, 'done');
   const toolList = JSON.parse((await toolResult(parent)).text);
   assert.deepEqual(toolList.items.map((row) => row.id).sort(), listed.sort());
@@ -145,7 +167,7 @@ try {
   assert.ok(Date.now() - started < 1500, `Recents stays fast with ${SIDE_CHAT_MAX + SIDE_CHAT_PAGE + 10} side chats (${Date.now() - started} ms)`);
   const live = await harness.snapshot(LiveDoc, research.id, context);
   assert.equal(live?.run, undefined);
-  console.log('PASS side chats: native parent link, nested rows only, selectedThread parent, refusals leave no orphan, agent open with first task, list with total, send, cross-conversation refusal, one level only, replay by request key, read-only listing, newest page plus total, offset paging, exact index, forks start empty, 200 cap, fast Recents');
+  console.log('PASS side chats: native parent link, nested rows only, selectedThread parent, refusals leave no orphan, agent open with first task, list with total, send, cross-conversation refusal, one level only, replay by request key, read-only listing, newest page plus total, offset paging, exact index, forks start empty, 200 cap, fast Recents, parent notified once when its side chat finishes (not for owner messages), side_chat_read');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

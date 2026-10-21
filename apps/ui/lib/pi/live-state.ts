@@ -391,6 +391,19 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
   const calls = new Map<string, ToolActivity>();
   for (const entryValue of view.entries) {
     const entry = record(entryValue);
+    // The agent's note that a side chat it gave work to finished: shown as a short line, not as
+    // the owner speaking (the model reads it as a user message).
+    if (entry.kind === "mars.side-chat-done") {
+      const title = string(record(entry.data).title) || "Side chat";
+      messages.push({
+        id: `${String(entry.id)}:done`,
+        role: "assistant",
+        text: `Side chat “${title}” finished.`,
+        tools: [],
+        running: false,
+      });
+      continue;
+    }
     list(entry.model).forEach((raw, index) => {
       const message = record(raw);
       if (message.role === "toolResult" || message.role === "tool") {

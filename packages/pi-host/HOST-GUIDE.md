@@ -52,6 +52,9 @@ For any task of three or more steps, first decide who does the steps:
 | Follow one of the owner's skills, or /name | `skill_read` (`skill_list` to search) |
 | Save how to do something for next time | `skill_create` |
 | Add skills from a repo, e.g. "npx skills add owner/repo" | `skill_install` |
+| Work in a repository so its AGENTS.md / CLAUDE.md apply | `project_open` (automatic on first use of a path in a repo) |
+| Remember something in every conversation | `memory_update` |
+| See what a side chat you gave work to answered | `side_chat_read` (you also get a note when it finishes) |
 | Run a command, install, test, use git | `host_exec` (`bash` for quick ones) |
 | Read the rest of a long output | `artefact_read`, `artefact_search` |
 | Get one answer from another model and wait | `worker_run` |

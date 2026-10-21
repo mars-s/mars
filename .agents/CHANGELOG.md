@@ -380,3 +380,11 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - Side chats and sub-threads (workers) can be archived and renamed (side chats) from a row menu; only top-level chats join groups. `mars.conversation-organise` moved to `organise-doc.mjs` so side chats and orchestration read it without an import cycle; side chat rows and sub-thread rows carry `archived`. Archived nested rows fold into an "N archived" toggle; the open one stays visible.
 - Checks: `check-organise.mjs` (side chat archive, group refused, parent row marks it); `tests/nested-archive-ui-check.mjs` (listed once, archive both kinds, toggle).
 
+
+## 2026-10-22 Project instructions, memory notes, side chat finished notes
+
+- `project.mjs` (docs/PROJECTS.md): a per-conversation `mars.project` document names the repository; its AGENTS.md and CLAUDE.md enter the prompt as a Project section. Set automatically by the first tool call naming a path in a git repo (cwd, leading cd, or a file tool's path; never switches), or by `project_open`.
+- `memory.mjs`: `workspace/MEMORY.md` notes in a Memory section of every conversation; `memory_update` adds and removes (bounded, deduplicated).
+- Side chats: work given by the parent's agent flags the side chat (`mars.side-chat-notify`); its next final answer writes one model-visible `mars.side-chat-done` entry into the parent (keyed for replay). The owner's own messages never notify. New `side_chat_read`. The UI shows the note as "Side chat "X" finished."
+- Checks: `check-project.mjs` (real harness, prompt sections asserted from the system messages Pi sends), `check-side-chats.mjs` (note once, not for owner messages, side_chat_read), a live-state unit test. Tool quality: 44 Mars tools pass.
+
