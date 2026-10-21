@@ -110,7 +110,41 @@ try {
   assert.ok(capped.json.patch.startsWith("diff --git a/huge.txt"), "patch keeps whole lines from the start");
   assert.equal(capped.json.files.filter((file) => file.status === "?").length, UNTRACKED_CAP, "untracked files capped at 50");
   assert.equal(capped.json.files.find((file) => file.path === "huge.txt").added, 12001, "counts stay exact when the patch is cut");
+
+  // Security review findings, kept as regressions.
+  const { existsSync } = await import("node:fs");
+  const elsewhere = await mkdtemp(join(tmpdir(), "mars elsewhere "));
+  await repo(elsewhere, { "SECRET.txt": "OUTSIDE-SECRET\n" });
+  // A driver named "a=b" once dodged the `-c` override; info/attributes skips .gitattributes.
+  const evil = join(work, "evil-filter");
+  await repo(evil, { "a.txt": "one\n" });
+  const flag = join(elsewhere, "PWNED");
+  await writeFile(join(evil, ".git", "info", "attributes"), "*.txt filter=a=b\n");
+  git(evil, "config", "filter.a=b.clean", `sh -c 'env > "${flag}"; cat'`);
+  git(evil, "config", "filter.a=b.process", `sh -c 'env > "${flag}"; cat'`);
+  await writeFile(join(evil, "a.txt"), "two\n");
+  assert.equal((await request("/api/workbench/changes?repo=evil-filter")).status, 200);
+  assert.equal(existsSync(flag), false, "a filter driver named a=b never runs");
+  // Borrowed git data (linked worktree commondir, alternates) is refused.
+  const borrowed = join(work, "borrowed");
+  await mkdir(join(borrowed, ".git"), { recursive: true });
+  await writeFile(join(borrowed, ".git", "commondir"), join(elsewhere, ".git") + "\n");
+  await writeFile(join(borrowed, ".git", "HEAD"), "ref: refs/heads/main\n");
+  const common = await request("/api/workbench/changes?repo=borrowed");
+  assert.equal(common.status, 403, "commondir is refused");
+  assert.ok(!common.text.includes("OUTSIDE-SECRET"));
+  const alternate = join(work, "alternate");
+  await repo(alternate, { "x.txt": "x\n" });
+  await writeFile(join(alternate, ".git", "objects", "info", "alternates"), join(elsewhere, ".git", "objects") + "\n");
+  assert.equal((await request("/api/workbench/changes?repo=alternate")).status, 403, "alternates are refused");
+  // git errors never echo host paths or config lines.
+  const included = join(work, "included");
+  await repo(included, { "x.txt": "x\n" });
+  await writeFile(join(elsewhere, "conf"), "sk-live-NOT-A-REAL-KEY line\n");
+  git(included, "config", "include.path", join(elsewhere, "conf"));
+  const echoed = await request("/api/workbench/changes?repo=included");
+  assert.ok(!echoed.text.includes(elsewhere) && !echoed.text.includes("sk-live"), "error text stays generic: " + echoed.text);
 } finally {
   await host.stop();
 }
-console.log("PASS workbench changes: owner auth, git-missing reason, repo discovery depth 3, workspace and symlink escape refused, modified/added/deleted/untracked counts, binary flagged, initial commit, repo filters disabled, 1 MiB patch and 50 untracked caps");
+console.log("PASS workbench changes: security regressions (a=b filter name, info/attributes, commondir, alternates, generic git errors), owner auth, git-missing reason, repo discovery depth 3, workspace and symlink escape refused, modified/added/deleted/untracked counts, binary flagged, initial commit, repo filters disabled, 1 MiB patch and 50 untracked caps");

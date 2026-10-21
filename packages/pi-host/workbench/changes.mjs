@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { resolveInside } from "./paths.mjs";
@@ -19,8 +19,10 @@ const SKIP = new Set([".git", "node_modules"]);
 const fail = (message, status) => Object.assign(new Error(message), { status });
 
 // Repo-local config is untrusted: it may name pagers, external diffs, textconv,
-// fsmonitor hooks or clean filters, all of which run commands. These flags and
-// the per-repo filter overrides below switch every one of them off.
+// fsmonitor hooks or clean filters, all of which run commands. These settings and
+// the per-repo filter overrides below switch every one of them off. They are passed
+// as GIT_CONFIG_KEY_n/VALUE_n, never `-c key=value`: git splits `-c` at the first
+// "=", so a driver named "a=b" would dodge a `-c` override.
 const BASE = [
   ["core.pager", "cat"],
   ["diff.external", ""],
@@ -31,13 +33,23 @@ const BASE = [
   ["diff.noprefix", "false"],
   ["diff.mnemonicPrefix", "false"],
   ["diff.relative", "false"],
-].flatMap(([key, value]) => ["-c", `${key}=${value}`]);
+];
+const configEnv = (pairs) => ({
+  GIT_CONFIG_COUNT: String(pairs.length),
+  ...Object.fromEntries(pairs.flatMap(([key, value], index) => [[`GIT_CONFIG_KEY_${index}`, key], [`GIT_CONFIG_VALUE_${index}`, value]])),
+});
 const DIFF = ["--no-color", "--no-renames", "--no-ext-diff", "--no-textconv", "--ignore-submodules=all"];
 
-const baseEnv = () => {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-  return { ...env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", GIT_PAGER: "cat" };
-};
+// git gets a minimal environment, like the terminal: never the owner token or keys.
+const baseEnv = () => ({
+  PATH: process.env.PATH || "/usr/bin:/bin",
+  HOME: process.env.HOME || "/nonexistent",
+  LANG: "C",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_OPTIONAL_LOCKS: "0",
+  GIT_TERMINAL_PROMPT: "0",
+  GIT_PAGER: "cat",
+});
 
 async function pool(items, size, task) {
   const out = new Array(items.length);
@@ -96,6 +108,26 @@ export function parseRawNumstat(text) {
  * Read-only git change sets for workspace repositories (docs/WORKBENCH.md "Changes").
  * Every path goes through resolveInside; git runs via execFile with argument arrays.
  */
+// Files by which a .git directory borrows data from elsewhere: a linked worktree's
+// commondir and gitdir, object alternates and grafts. Any of them could reach outside
+// the workspace, so such repositories are refused rather than followed.
+const BORROWED = ["commondir", "gitdir", "objects/info/alternates", "objects/info/http-alternates", "info/grafts"];
+const OWN = ["objects", "refs", "HEAD", "config", "index", "packed-refs", "info", "logs"];
+
+/** Refuse a .git directory that borrows data or links any of its parts out of itself. */
+async function confineGitDir(dir) {
+  const refuse = (why) => {
+    throw fail(`This repository ${why}, so Changes will not open it.`, 403);
+  };
+  for (const name of BORROWED) if (await lstat(join(dir, name)).catch(() => null)) refuse(`uses ${name}, which can point outside the workspace`);
+  const real = await realpath(dir);
+  for (const name of OWN) {
+    const entry = await lstat(join(dir, name)).catch(() => null);
+    if (entry?.isSymbolicLink()) refuse(`links .git/${name} elsewhere`);
+  }
+  return real;
+}
+
 export function createChanges({ work }) {
   let probe;
   function available() {
@@ -108,7 +140,8 @@ export function createChanges({ work }) {
 
   async function git(repo, args, { maxBuffer = STATUS_BUFFER, codes = [0], overflow = false } = {}) {
     try {
-      const { stdout } = await run("git", [...BASE, ...repo.overrides, ...args], { cwd: repo.absolute, env: repo.env, timeout: TIMEOUT_MS, maxBuffer, encoding: "buffer" });
+      const env = { ...repo.env, ...configEnv([...BASE, ...repo.overrides]) };
+      const { stdout } = await run("git", args, { cwd: repo.absolute, env, timeout: TIMEOUT_MS, maxBuffer, encoding: "buffer" });
       return { stdout, overflowed: false };
     } catch (error) {
       if (error.code === "ENOENT") throw fail("git was not found on the host.", 503);
@@ -118,8 +151,8 @@ export function createChanges({ work }) {
       }
       if (error.killed || error.signal) throw fail("git took longer than 10 seconds.", 504);
       if (codes.includes(error.code)) return { stdout: error.stdout, overflowed: false };
-      const why = String(error.stderr ?? "").trim().split("\n").at(-1) || error.message;
-      throw fail(`git failed: ${why}`.slice(0, 500), 500);
+      // git's own message can quote absolute paths or config lines; keep it off the wire.
+      throw fail("git could not read this repository. Check it with git in the terminal.", 500);
     }
   }
 
@@ -128,6 +161,7 @@ export function createChanges({ work }) {
     const target = await resolveInside(work, rel);
     const dotGit = await lstat(join(target.absolute, ".git")).catch(() => null);
     if (!dotGit?.isDirectory()) throw fail(`No git repository at ${target.relative || "the workspace root"}.`, 404);
+    await confineGitDir(join(target.absolute, ".git"));
     const repo = { ...target, overrides: [], env: { ...baseEnv(), GIT_DIR: join(target.absolute, ".git"), GIT_WORK_TREE: target.absolute } };
     const { stdout } = await git(repo, ["config", "--show-scope", "--includes", "--name-only", "--get-regexp", "^filter\\."], { codes: [1] });
     const drivers = new Set();
@@ -137,7 +171,7 @@ export function createChanges({ work }) {
       if (match && scope !== "global" && scope !== "system") drivers.add(match[1]);
     }
     for (const driver of drivers)
-      repo.overrides.push(...["clean", "smudge", "process"].flatMap((key) => ["-c", `filter.${driver}.${key}=`]), "-c", `filter.${driver}.required=false`);
+      repo.overrides.push(...["clean", "smudge", "process"].map((key) => [`filter.${driver}.${key}`, ""]), [`filter.${driver}.required`, "false"]);
     return repo;
   }
 

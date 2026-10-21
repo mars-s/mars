@@ -229,3 +229,10 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 ## 2026-10-21 Workbench docs
 
 - docs/WORKBENCH.md records the terminal transport decision (Python PTY bridge and long polling, not node-pty and WebSocket), shell hardening, embedded provider mode and design-system specimens. DECISIONS.md gains the terminal ADR; DESIGN.md describes the panes.
+
+## 2026-10-21 Changes pane security fixes (independent review)
+
+- Filter, pager, hook and fsmonitor overrides now go through GIT_CONFIG_KEY_n/VALUE_n. A driver named `a=b` had dodged the `-c` override and ran a repository's clean filter (reproduced, now a regression in check-workbench-changes with a mutation run).
+- git runs with a minimal environment (PATH, HOME, LANG) and GIT_CONFIG_NOSYSTEM, never the owner token or provider keys.
+- Repositories whose .git borrows data (commondir, gitdir, alternates, grafts) or links its parts elsewhere are refused with 403, closing reads outside WORK.
+- git failures return a generic message instead of stderr, which could quote host paths or config lines.
