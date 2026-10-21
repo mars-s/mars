@@ -218,3 +218,10 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - Phone sheet: focus moves into the sheet, the chat behind it is inert, Escape closes it and focus returns to the toggle.
 - Narrow desktop: the pane keeps its 360px minimum (`max(360px, 100% - 420px)`); the separator reports the rendered width and its maximum.
 - `workbench-ui-check` covers each of these, with two mutation runs (shortcut gate, inert) shown to fail.
+
+## 2026-10-21 Workbench panes in /design-system
+
+- `/design-system` now renders every real workbench pane (New tab, Files, Changes, Terminal, Side chat, Page) inside an embedded workbench, switched by a pane picker.
+- `app/design-system/sample-host.ts` answers the workbench routes in-page while the specimens are mounted, so nothing reaches Pi. All data is illustrative.
+- `WorkbenchProvider` takes `initial` and `persist={false}` for embedded specimens: no stored layout, no global shortcuts, no phone sheet.
+- Evidence: `/tmp/mars-workbench-evidence/design-system/` desktop and 390px screenshots for each pane, no page errors, no horizontal overflow.

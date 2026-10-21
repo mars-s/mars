@@ -31,7 +31,7 @@ function tabLabel(tab: WorkbenchTab) {
 }
 
 export function WorkbenchPane() {
-  const { state, dispatch } = useWorkbench();
+  const { state, dispatch, embedded } = useWorkbench();
   const paneRef = useRef<HTMLElement>(null);
   const dragging = useRef<{ startX: number; startWidth: number } | null>(null);
   // Asked only while open; a shortcut pressed while closed opens the New tab, which shows reasons.
@@ -44,6 +44,7 @@ export function WorkbenchPane() {
   // Tool shortcuts (Ctrl, matching the tile hints) open their pane in a new tab. A tool the
   // host cannot run opens the New tab instead, where its reason is shown.
   useEffect(() => {
+    if (embedded) return;
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (!event.ctrlKey || event.metaKey) return;
       if (event.shiftKey && event.key.toLowerCase() === "e") {
@@ -64,12 +65,12 @@ export function WorkbenchPane() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dispatch, state.open, caps.data]);
+  }, [dispatch, state.open, caps.data, embedded]);
 
   // On a phone the workbench is a sheet over the chat: focus moves into it, Escape and
   // Back close it, and focus returns to the toggle that opened it.
   useEffect(() => {
-    if (!state.open || !matchMedia(PHONE_QUERY).matches) return;
+    if (embedded || !state.open || !matchMedia(PHONE_QUERY).matches) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     paneRef.current?.focus({ preventScroll: true });
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -82,7 +83,7 @@ export function WorkbenchPane() {
       window.removeEventListener("keydown", onKey);
       (opener?.isConnected ? opener : document.querySelector<HTMLElement>(".live-workbench-toggle"))?.focus({ preventScroll: true });
     };
-  }, [state.open, dispatch]);
+  }, [state.open, dispatch, embedded]);
 
   useEffect(() => {
     const pane = paneRef.current;
@@ -141,6 +142,7 @@ export function WorkbenchPane() {
         ref={paneRef}
         className="wb-pane"
         tabIndex={-1}
+        data-embedded={embedded ? "" : undefined}
         data-expanded={state.expanded ? "" : undefined}
         aria-label="Workbench"
         style={{ width: state.expanded ? undefined : state.width }}

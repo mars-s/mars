@@ -11,16 +11,30 @@ import {
   type WorkbenchState,
 } from "./workbench-state";
 
-type Workbench = { state: WorkbenchState; dispatch: (action: WorkbenchAction) => void };
+/** `embedded` is a specimen: no stored layout, no global shortcuts, no phone sheet. */
+type Workbench = { state: WorkbenchState; dispatch: (action: WorkbenchAction) => void; embedded: boolean };
 const WorkbenchContext = createContext<Workbench | null>(null);
 
-export function WorkbenchProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reduce, undefined, initialState);
+/**
+ * `initial` plus `persist={false}` gives a self-contained workbench (the /design-system
+ * specimens) that never reads or writes the user's stored layout.
+ */
+export function WorkbenchProvider({
+  children,
+  initial,
+  persist = true,
+}: {
+  children: ReactNode;
+  initial?: WorkbenchState;
+  persist?: boolean;
+}) {
+  const [state, dispatch] = useReducer(reduce, initial, (seed) => seed ?? initialState());
   // Becomes true only after the restored state has rendered, so the first save never
   // overwrites what was stored with the pre-restore default.
   const [loaded, setLoaded] = useState(false);
   // Restore after mount so the server render and first client render agree.
   useEffect(() => {
+    if (!persist) return;
     let saved: string | null = null;
     try {
       saved = localStorage.getItem(STORAGE_KEY);
@@ -29,16 +43,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }
     dispatch({ type: "hydrate", state: parseState(saved) });
     setLoaded(true);
-  }, []);
+  }, [persist]);
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !persist) return;
     try {
       localStorage.setItem(STORAGE_KEY, serialiseState(state));
     } catch {
       /* Not persisted when storage is blocked. */
     }
   }, [state, loaded]);
-  return <WorkbenchContext.Provider value={{ state, dispatch }}>{children}</WorkbenchContext.Provider>;
+  return <WorkbenchContext.Provider value={{ state, dispatch, embedded: !persist }}>{children}</WorkbenchContext.Provider>;
 }
 
 export function useWorkbench(): Workbench {

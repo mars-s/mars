@@ -1,87 +1,103 @@
 "use client";
 
-import { ChevronDown, FileText, Globe, LayoutGrid, Maximize2, Plus, X } from "lucide-react";
-import { TOOLS, toolIcon } from "@/components/workbench/tools";
-import "@/components/workbench/workbench.css";
+import { useState, useSyncExternalStore } from "react";
+import { WorkspaceContext, type Workspace } from "@/components/workspace-context";
+import { WorkbenchPane } from "@/components/workbench/workbench";
+import { WorkbenchProvider } from "@/components/workbench/workbench-context";
+import type { TabTarget, WorkbenchState } from "@/components/workbench/workbench-state";
+import { installSampleHost } from "./sample-host";
 
 /**
- * The workbench header and launcher as drawn in the app, from the same TOOLS list
- * and stylesheet. Static: tiles here do nothing and data is illustrative.
+ * Each workbench pane as it renders in the app: the real components, answered by an
+ * in-page sample host (./sample-host.ts) so nothing reaches Pi. Data is illustrative.
  */
+const SPECIMENS: { label: string; tab: TabTarget }[] = [
+  { label: "New tab", tab: { kind: "launcher" } },
+  { label: "Files", tab: { kind: "files", path: "README.md" } },
+  { label: "Changes", tab: { kind: "changes", repo: "mars" } },
+  { label: "Terminal", tab: { kind: "terminal" } },
+  { label: "Side chat", tab: { kind: "side-chat", conversationId: "902" } },
+  { label: "Page", tab: { kind: "page", name: "release-plan" } },
+];
+
+const noop = () => undefined;
+const sampleWorkspace: Workspace = {
+  snapshot: null,
+  conversations: [
+    { id: "901", title: "Tidy the Pi host deploy script", modelId: "", provider: "", running: false },
+    { id: "902", title: "Name the release", modelId: "", provider: "", running: false },
+  ],
+  selectedId: "901",
+  pending: false,
+  connectionError: "",
+  actionError: "",
+  setActionError: noop,
+  canChat: false,
+  connected: true,
+  hasMessages: false,
+  rootId: undefined,
+  extensionsOpen: false,
+  setExtensionsOpen: noop,
+  sidebarOpen: false,
+  setSidebarOpen: noop,
+  settingsOpen: false,
+  setSettingsOpen: noop,
+  settingsTab: "account",
+  setSettingsTab: noop,
+  refresh: async () => undefined,
+  action: async () => undefined,
+  safely: noop,
+  newConversation: async () => undefined,
+  selectConversation: noop,
+  openSettings: noop,
+};
+
+// The sample host is installed once for the page, before any pane fetches.
+let installed = false;
+const subscribe = () => {
+  if (!installed && typeof window !== "undefined") {
+    installed = true;
+    installSampleHost();
+  }
+  return noop;
+};
+
+function seed(tab: TabTarget): WorkbenchState {
+  const id = `ds-${tab.kind}`;
+  return { open: true, expanded: true, width: 560, tabs: [{ ...tab, id } as WorkbenchState["tabs"][number]], activeId: id };
+}
+
 export function WorkbenchSpecimen() {
-  const tabs = [
-    { id: "a", kind: "launcher" as const, label: "New tab", selected: true },
-    { id: "b", kind: "files" as const, label: "README.md", selected: false },
-  ];
+  const ready = useSyncExternalStore(subscribe, () => installed, () => false);
+  const [current, setCurrent] = useState(0);
+  const specimen = SPECIMENS[current];
   return (
-    <div className="ds-workbench">
-      <section className="wb-pane" aria-label="Workbench specimen" style={{ width: "100%", maxWidth: "none", animation: "none" }}>
-        <header className="wb-header">
-          <div className="wb-tabs" role="tablist" aria-label="Specimen tabs">
-            {tabs.map((tab) => {
-              const Icon = toolIcon(tab.kind);
-              return (
-                <div key={tab.id} className="wb-tab" data-selected={tab.selected ? "" : undefined}>
-                  <button type="button" role="tab" aria-selected={tab.selected} tabIndex={-1}>
-                    <Icon size={14} aria-hidden="true" />
-                    <span>{tab.label}</span>
-                  </button>
-                  <span className="wb-tab-close" aria-hidden="true">
-                    <X size={12} />
-                  </span>
-                </div>
-              );
-            })}
-            <span className="wb-icon" aria-hidden="true">
-              <Plus size={16} />
-            </span>
-          </div>
-          <span className="wb-icon" aria-hidden="true">
-            <Maximize2 size={15} />
-          </span>
-          <span className="wb-icon" aria-hidden="true">
-            <X size={16} />
-          </span>
-        </header>
-        <div className="wb-launcher">
-          <section>
-            <h2>Tools</h2>
-            <div className="wb-tools">
-              {TOOLS.map((tool, index) => (
-                <button key={tool.kind} type="button" className="wb-tool" disabled={index === 1} tabIndex={-1}>
-                  <tool.Icon size={16} aria-hidden="true" />
-                  <span className="wb-tool-name">{tool.title}</span>
-                  {index === 1 ? <small>python3 was not found on the host.</small> : <kbd>{tool.shortcut.label}</kbd>}
-                </button>
-              ))}
-              <button type="button" className="wb-tool" tabIndex={-1}>
-                <LayoutGrid size={16} aria-hidden="true" />
-                <span className="wb-tool-name">More tools…</span>
-                <ChevronDown size={16} aria-hidden="true" />
-              </button>
-            </div>
-          </section>
-          <section>
-            <h2>Suggested</h2>
-            <ul className="wb-suggested">
-              {[
-                { title: "Docs site", detail: "localhost:3100", Icon: Globe },
-                { title: "Release plan", detail: "Page", Icon: FileText },
-              ].map((item) => (
-                <li key={item.title}>
-                  <button type="button" tabIndex={-1}>
-                    <span className="wb-suggested-icon">
-                      <item.Icon size={20} aria-hidden="true" />
-                    </span>
-                    <span className="wb-suggested-title">{item.title}</span>
-                    <small>{item.detail}</small>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
-      </section>
+    <div className="ds-workbench-specimens">
+      <div className="ds-workbench-picker" role="tablist" aria-label="Workbench panes">
+        {SPECIMENS.map((item, index) => (
+          <button
+            key={item.label}
+            type="button"
+            role="tab"
+            aria-selected={index === current}
+            data-selected={index === current ? "" : undefined}
+            onClick={() => setCurrent(index)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="ds-workbench" role="tabpanel" aria-label={`${specimen.label} pane specimen`}>
+        {ready && (
+          <WorkspaceContext.Provider value={sampleWorkspace}>
+            <WorkbenchProvider key={specimen.label} initial={seed(specimen.tab)} persist={false}>
+              <div className="ds-workbench-stage">
+                <WorkbenchPane />
+              </div>
+            </WorkbenchProvider>
+          </WorkspaceContext.Provider>
+        )}
+      </div>
     </div>
   );
 }

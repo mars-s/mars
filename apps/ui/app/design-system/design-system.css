@@ -147,7 +147,45 @@ html:has(.ds-frame), body:has(.ds-frame) { overflow: auto; height: auto; }
 .ds-workbench .wb-launcher {
   padding: 28px 24px 32px;
 }
-.ds-section .ds-workbench h2 {
+.ds-section .ds-workbench .wb-launcher h2 {
   margin: 0 0 14px;
   font: 500 14px/1.4 var(--font-sans);
+}
+.ds-workbench-specimens {
+  display: grid;
+  gap: 12px;
+}
+.ds-workbench-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ds-workbench-picker button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: 500 13px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+.ds-workbench-picker button:hover,
+.ds-workbench-picker button[data-selected] {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+.ds-workbench-picker button:focus-visible {
+  outline: 2px solid var(--clay);
+  outline-offset: 2px;
+}
+.ds-workbench-stage {
+  display: flex;
+  height: 560px;
+}
+.ds-workbench-stage > .wb-pane {
+  flex: 1 1 auto;
+  width: auto !important;
+  max-width: none;
 }
