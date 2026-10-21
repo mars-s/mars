@@ -225,3 +225,7 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - `app/design-system/sample-host.ts` answers the workbench routes in-page while the specimens are mounted, so nothing reaches Pi. All data is illustrative.
 - `WorkbenchProvider` takes `initial` and `persist={false}` for embedded specimens: no stored layout, no global shortcuts, no phone sheet.
 - Evidence: `/tmp/mars-workbench-evidence/design-system/` desktop and 390px screenshots for each pane, no page errors, no horizontal overflow.
+
+## 2026-10-21 Workbench docs
+
+- docs/WORKBENCH.md records the terminal transport decision (Python PTY bridge and long polling, not node-pty and WebSocket), shell hardening, embedded provider mode and design-system specimens. DECISIONS.md gains the terminal ADR; DESIGN.md describes the panes.

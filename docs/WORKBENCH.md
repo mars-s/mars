@@ -42,19 +42,31 @@ type WorkbenchState = {
 State is a reducer in `apps/ui/components/workbench/workbench-state.ts`, persisted
 per browser in localStorage (`mars-workbench-v1`) without secrets or content: only
 kinds, targets and ids. Opening or closing the workbench never remounts the chat,
-so the draft, scroll position and selected conversation survive. Terminal sessions
-live on the host and survive a closed tab until their idle timeout.
+so the draft, scroll position and selected conversation survive. Only the main chat
+runtime is keyed by the selected conversation; the workbench provider sits outside
+it, so switching chats keeps every workbench tab, including side chat. Terminal
+sessions live on the host and survive a closed tab until their idle timeout.
+
+`WorkbenchProvider` also accepts `initial` and `persist={false}`. That embedded mode
+(used by the `/design-system` specimens) never reads or writes stored layout, binds no
+global shortcuts and never becomes the phone sheet.
 
 ## Layout
 
 - Desktop: `main` becomes a two-column grid, chat then a 6px divider then the
   workbench. The divider is a `role="separator"` with `aria-orientation="vertical"`,
   `aria-valuenow` in pixels, dragged with the pointer or moved with Left and Right
-  (Shift for 64px steps), Home and End. Default width 46% of the main area.
+  (Shift for 64px steps), Home and End. `aria-valuenow` reports the rendered width
+  and `aria-valuemax` the space available. The pane keeps a 360px floor
+  (`max(360px, 100% - 420px)`), so at 1024px with the sidebar open the chat gives
+  way rather than the pane dropping below its minimum.
 - Expanded: the workbench takes the main area and the chat collapses to a narrow
   restore strip. Toggle with the header button or Cmd/Ctrl+Shift+E.
 - 768px and narrower: the workbench is a full-screen sheet over the chat with a
-  Back button. No horizontal overflow at 390px.
+  Back button. Focus moves into the sheet, the chat behind it is `inert`, Escape or
+  Back closes it and focus returns to the toggle. No horizontal overflow at 390px.
+- Tool shortcuts (Ctrl, as shown on the tiles) open a tool only when the host
+  reports it available; otherwise they open a New tab, where the reason is shown.
 - Header: tab strip (icon, title, close), a `+` new-tab button, expand and close.
 
 ## Host contract
@@ -140,6 +152,14 @@ one per tab, at most 4 per host, idle timeout 30 minutes, output ring buffer 256
 - `POST /api/workbench/terminal/<id>/kill`: ends the process group.
 - `GET /api/workbench/terminals`: live sessions `{ id, created, lastActive, exited }`.
 
+Why not node-pty and a WebSocket, as first planned: node-pty 1.1.0 failed
+`posix_spawnp` on the owner's Mac and ships no Linux prebuild, and the Next
+development proxy does not forward WebSocket upgrades. A standard-library Python
+bridge plus HTTP long polling works on macOS, Debian and through every proxy in use.
+The shell gets a minimal environment (PATH, HOME, LANG, TERM, SHELL, USER), never the
+owner token. Ending a session sends SIGHUP to every process group on its TTY, then
+SIGKILL after 1 s, so background jobs that ignore hang-ups also end.
+
 Input bytes are never logged. Closing a tab detaches; killing is the explicit
 "End session" action in the pane menu. The shell runs as the host user, the same
 authority the agent's own `host_exec` tool already has.
@@ -189,3 +209,6 @@ stale page save rejected, terminal create/output/resize/kill/idle, service probe
 proxy target refusal, header stripping. UI: unit tests for the reducer and parsers;
 browser fixtures for open/close/resize/keyboard, each pane, mobile 390px overflow.
 The preview fixture serves labelled fixture data for every route.
+`/design-system` renders each real pane on in-page sample data
+(`app/design-system/sample-host.ts`), which answers workbench routes in the page
+and never reaches Pi.

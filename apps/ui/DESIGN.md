@@ -99,6 +99,12 @@ Assistant Markdown headings use sans semibold, not serif.
   heading, two-column 48px tiles on a 4% text tint with keyboard hints, then a
   Suggested grid of 44px icon tiles. Unavailable tiles are disabled and show the
   host's reason. Full-screen sheet with Back at 768px and below.
+- Workbench panes: a 44px toolbar under the tab strip (breadcrumbs, repo picker,
+  session status) with icon buttons on the right. Files is a tree on the left and a
+  reader on the right (stacked under 500px). Changes uses 21st Edit diff cards.
+  Terminal is xterm on `--background` with Mars ANSI colours that follow the theme.
+  Pages edit in 15px sans with Edit and Preview segments. Side chat reuses the main
+  message renderers with a compact composer. `/design-system` shows each pane live.
 - Settings: a centred dialog, 760 × 560px, left tab list (Account,
   Appearance, Connection, Apps) and content on the right, like Claude settings.
   On phones it becomes a full-screen sheet with horizontal tabs.

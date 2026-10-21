@@ -22,3 +22,11 @@ portable root commands, and optional generated Linux user services. New installs
 start with empty private XDG data. Existing installations use explicit MARS_PI_ROOT
 and preserve original secrets/state. Hot reload is for development; production
 start uses a tested build. Host self-deployment keeps staged checks and rollback.
+
+## Workbench terminal uses a Python PTY bridge and long polling
+
+The workbench brief asked for node-pty over a WebSocket. node-pty 1.1.0 failed
+`posix_spawnp` on the owner's Mac and has no Linux prebuild, and the Next dev proxy
+does not forward WebSocket upgrades. The terminal is `python3 pty-bridge.py` per
+session with HTTP long polling (20 s). It works on macOS, Debian and through every
+proxy in use. Evidence: `.agents/goals/workbench-log.tsv`, `check-workbench-terminal.mjs`.
