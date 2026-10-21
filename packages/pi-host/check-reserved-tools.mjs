@@ -41,7 +41,7 @@ try {
  }
  // An already-installed package that now clashes is skipped at boot, never blocking the host.
  {
-  const files={'manifest.json':JSON.stringify({name:'fixture'}),'extension.mjs':`export default {name:'fixture',tools:[{name:'host_deploy',parameters:{type:'object'},execute(){return {output:[]}}}]};`,'client.js':'export function mount(){}'};
+  const files={'manifest.json':JSON.stringify({name:'fixture'}),'extension.mjs':`export default {name:'fixture',tasks:[{name:'fixture.job.v1',version:1,initial:{},phases:{}}],tools:[{name:'host_deploy',parameters:{type:'object'},execute(){return {output:[]}}}]};`,'client.js':'export function mount(){}'};
   const hash=createHash('sha256').update(JSON.stringify(files)).digest('hex');
   const ownFiles={'manifest.json':JSON.stringify({name:'own'}),'extension.mjs':`export default {name:'own',tools:[{name:'own_tool',parameters:{type:'object'},execute(){return {output:[]}}}]};`,'client.js':'export function mount(){}'};
   const ownHash=createHash('sha256').update(JSON.stringify(ownFiles)).digest('hex');
@@ -51,11 +51,13 @@ try {
   }
   await writeFile(join(base,'extensions.json'),JSON.stringify([{name:'fixture',hash},{name:'own',hash:ownHash}]));
   const loaded=[];
-  const store=new ExtensionStore({install(ext){loaded.push(ext.name);}},base,builtIn);
+  const store=new ExtensionStore({install(ext){loaded.push(ext);}},base,builtIn);
   await store.boot();
-  assert.deepEqual(loaded,['own'],'the clashing package is skipped and the others still load');
+  assert.deepEqual(loaded.map(e=>e.name),['fixture','own'],'an installed package with a clashing tool still loads, so its tasks resume');
+  assert.deepEqual(loaded[0].tools.map(t=>t.name),[],'but its clashing tool is left out');
+  assert.equal(loaded[0].tasks[0].name,'fixture.job.v1','its task definitions are still installed');
   assert.equal(store.skipped[0].name,'fixture');
-  assert.match(store.skipped[0].error,/is a Mars tool/);
+  assert.match(store.skipped[0].error,/host_deploy left out/);
  }
  console.log('PASS: installed extensions cannot shadow trusted Discord/UI tool names, any built-in Mars tool such as host_deploy, or a built-in extension name such as host-dev; their own names still install');
 }finally{await rm(base,{recursive:true,force:true});}

@@ -149,7 +149,7 @@ try {
   await until(async () => (await host.harness.snapshot(LiveDoc, Number(conversationId), context))?.run, 'first run started');
   telegram.message({ from: OWNER_TG, text: 'Queued behind' });
   const other = await api.post({ chatId: 'laptop', eventId: 'e1', text: 'Separate work' });
-  await until(() => api.read({ chatId: 'laptop' }).items.some((m) => m.text === 'echo: Separate work'), 'other conversation answered while the first is busy');
+  await until(async () => (await api.read({ chatId: 'laptop' })).items.some((m) => m.text === 'echo: Separate work'), 'other conversation answered while the first is busy');
   assert.notEqual(other.conversationId, conversationId, 'the API chat has its own conversation');
   assert.ok(!seen.includes('Queued behind'), 'the queued message waits for the busy run');
   const inbox = await until(async () => (await host.harness.snapshot(InboxDoc, Number(conversationId), context))?.items?.length && (await host.harness.snapshot(InboxDoc, Number(conversationId), context)), 'queued in the inbox');
@@ -235,8 +235,8 @@ try {
 
   // 10. Long replies are chunked to the platform limit.
   await api.post({ chatId: 'laptop', eventId: 'long1', text: 'LONG 40000' });
-  await until(() => api.read({ chatId: 'laptop' }).items.length >= 4, 'chunked API reply');
-  assert.ok(api.read({ chatId: 'laptop' }).items.every((m) => m.text.length <= 16000));
+  await until(async () => (await api.read({ chatId: 'laptop' })).items.length >= 4, 'chunked API reply');
+  assert.ok((await api.read({ chatId: 'laptop' })).items.every((m) => m.text.length <= 16000));
 
   // 11. Discord: DM, reply, reconnect with resume (no second identify), 429 and 403.
   discord.message({ author: OWNER_DC, channel: '700000000000000001', text: 'hi from discord' });
@@ -252,6 +252,10 @@ try {
   await until(async () => (await gateway.status()).audit.some((a) => a.decision === 'edited' && a.channel === 'discord'), 'discord edit audited');
   assert.equal(seen.length, dcEditCalls, 'an edited Discord message never reaches the model');
   assert.equal(discord.sent.length, original);
+  // Two identical replies within a minute both post: the nonce is the delivery job, not the text.
+  discord.message({ author: OWNER_DC, channel: '700000000000000001', text: 'same again' });
+  discord.message({ author: OWNER_DC, channel: '700000000000000001', text: 'same again' });
+  await until(() => discord.sent.filter((m) => m.content === 'echo: same again').length === 2, 'two identical replies both posted');
   const identifies = discord.connections.filter((c) => c.op === 'identify').length;
   discord.drop();
   await until(() => discord.connections.some((c) => c.op === 'resume'), 'discord resume');
@@ -281,6 +285,15 @@ try {
   const fatal = { channel: 'badtoken', limits: { maxText: 500 }, async start() { throw Object.assign(Error('token rejected'), { fatal: true }); }, async send() { return {}; }, health: () => ({ state: 'stopped' }) };
   gateway.addAdapter(fatal);
   await until(async () => (await gateway.status()).adapters.find((a) => a.channel === 'badtoken')?.state === 'stopped', 'a fatal error stops without retrying');
+
+  // 11c. A Telegram network failure never puts the token in status or the audit log.
+  const leaky = createTelegramAdapter({ token: TG_TOKEN, baseUrl: 'http://127.0.0.1:9', pollTimeoutSeconds: 1, fetch: async (url) => { throw Object.assign(Error('fetch failed'), { cause: Object.assign(Error('connect ECONNREFUSED ' + url), { code: 'ECONNREFUSED' }) }); } });
+  Object.defineProperty(leaky, 'channel', { value: 'telegram-down' });
+  gateway.addAdapter(leaky);
+  await until(async () => (await gateway.status()).adapters.find((a) => a.channel === 'telegram-down')?.failures >= 1, 'failing Telegram adapter reported');
+  const statusText = JSON.stringify(await gateway.status());
+  assert.ok(/network error \(ECONNREFUSED\)/.test(statusText), 'the failure reason is shown');
+  assert.ok(!statusText.includes(TG_TOKEN) && !statusText.includes(TG_TOKEN.split(':')[1]), 'the token is redacted from status and audit');
 
   // 12. Restart: bindings, allowlist, an answer still being written and an unsent reply all
   // survive; a redelivery after restart submits once.

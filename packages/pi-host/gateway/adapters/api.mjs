@@ -1,9 +1,19 @@
 // HTTP API adapter (docs/GATEWAY.md "HTTP API adapter"). Owner-authenticated routes push
-// messages in; replies wait in a bounded in-memory mailbox per chat that the caller polls.
-// The durable copy of every reply is Pi's transcript and the gateway outbox.
-export function createApiAdapter({ limit = 200 } = {}) {
-  const mailboxes = new Map(); // chatId -> { seq, items: [{ seq, text, at }] }
+// messages in; replies wait in a mailbox per chat that the caller polls by sequence number.
+// Mailboxes are a Pi session document, so a restart keeps unread replies and the numbering.
+import { defineDoc } from '@earendil-works/pi-durable';
+
+export const ApiMailboxDoc = defineDoc({ kind: 'mars.gateway-api-mailbox', version: 1, scope: 'session', initial: () => ({ boxes: {} }) });
+
+/** `store` is { harness, context }; without it (unit use) mailboxes live in memory. */
+export function createApiAdapter({ limit = 200, store } = {}) {
+  const memory = { boxes: {} };
   let sink = null;
+  const read = async () => (store ? (await store.harness.snapshot(ApiMailboxDoc, store.context)) ?? { boxes: {} } : memory);
+  const write = async (change) => {
+    if (!store) return change(memory);
+    return store.harness.commit(async (tx) => change(await tx.doc(ApiMailboxDoc)), store.context);
+  };
   return {
     channel: 'api',
     limits: { maxText: 16000 },
@@ -13,12 +23,16 @@ export function createApiAdapter({ limit = 200 } = {}) {
       sink = null;
     },
     async send({ chat, text }) {
-      const box = mailboxes.get(chat.id) ?? { seq: 0, items: [] };
-      box.seq += 1;
-      box.items.push({ seq: box.seq, text, at: new Date().toISOString() });
-      if (box.items.length > limit) box.items.splice(0, box.items.length - limit);
-      mailboxes.set(chat.id, box);
-      return { messageId: String(box.seq) };
+      const seq = await write((doc) => {
+        // Assign, then read back through the draft (the value of `??=` is not the draft).
+        if (!doc.boxes[chat.id]) doc.boxes[chat.id] = { seq: 0, items: [] };
+        const box = doc.boxes[chat.id];
+        box.seq += 1;
+        box.items.push({ seq: box.seq, text, at: new Date().toISOString() });
+        if (box.items.length > limit) box.items.splice(0, box.items.length - limit);
+        return box.seq;
+      });
+      return { messageId: String(seq) };
     },
     health: () => ({ state: sink ? 'running' : 'starting' }),
     /** POST /api/gateway/api/messages */
@@ -30,8 +44,8 @@ export function createApiAdapter({ limit = 200 } = {}) {
       return sink({ channel: 'api', account: 'owner', eventId, sender: { id: sender }, chat: { id: chatId, type: 'dm' }, text });
     },
     /** GET /api/gateway/api/messages?chatId&after */
-    read({ chatId, after = 0 }) {
-      const box = mailboxes.get(chatId) ?? { seq: 0, items: [] };
+    async read({ chatId, after = 0 }) {
+      const box = (await read()).boxes[chatId] ?? { seq: 0, items: [] };
       return { items: box.items.filter((item) => item.seq > Number(after || 0)), last: box.seq };
     },
   };

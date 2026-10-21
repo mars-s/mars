@@ -92,7 +92,7 @@ export function createGateway({ harness, conversations, context, now = Date.now,
       const doc = await tx.doc(GatewayDoc);
       if (once) {
         const key = route + '#' + once;
-        doc.delivered ??= [];
+        if (!doc.delivered) doc.delivered = [];
         if (doc.delivered.includes(key)) return;
         doc.delivered.push(key);
         if (doc.delivered.length > SEEN_LIMIT) doc.delivered.splice(0, doc.delivered.length - SEEN_LIMIT);
@@ -126,7 +126,7 @@ export function createGateway({ harness, conversations, context, now = Date.now,
       const { adapter } = adapters.get(job.route.split(':')[0]);
       let outcome;
       try {
-        const sent = await adapter.send({ ...target(job.route), text: job.text });
+        const sent = await adapter.send({ ...target(job.route), text: job.text, jobId: `${job.route}#${job.id}` });
         outcome = { done: true, messageId: sent?.messageId };
       } catch (error) {
         outcome = { error };
@@ -341,7 +341,9 @@ export function createGateway({ harness, conversations, context, now = Date.now,
       const index = doc.pairings.findIndex((p) => p.code === String(code).toUpperCase() && p.expiresAt > now());
       if (index < 0) return null;
       const [pairing] = doc.pairings.splice(index, 1);
-      if (approve) (doc.allow[pairing.channel] ??= []).includes(pairing.sender) || doc.allow[pairing.channel].push(pairing.sender);
+      // Assign, then read back through the draft: on a Pi draft, the value of `x ??= v` is the
+      // plain v, and edits made through it are lost.
+      if (approve) { if (!doc.allow[pairing.channel]) doc.allow[pairing.channel] = []; if (!doc.allow[pairing.channel].includes(pairing.sender)) doc.allow[pairing.channel].push(pairing.sender); }
       return { ...pairing };
     });
     if (!found) throw Object.assign(Error('Unknown or expired pairing code'), { status: 404 });
@@ -354,7 +356,8 @@ export function createGateway({ harness, conversations, context, now = Date.now,
   async function allow(channel, sender) {
     await commit(async (tx) => {
       const doc = await tx.doc(GatewayDoc);
-      (doc.allow[channel] ??= []).includes(sender) || doc.allow[channel].push(sender);
+      if (!doc.allow[channel]) doc.allow[channel] = [];
+      if (!doc.allow[channel].includes(sender)) doc.allow[channel].push(sender);
     });
   }
 

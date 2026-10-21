@@ -30,6 +30,25 @@ export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/
     throw error;
   }
 
+  /** A MESSAGE_CREATE or MESSAGE_UPDATE frame as an InboundEvent, or null if it is not for Mars. */
+  function toEvent(payload) {
+    const message = payload.d;
+    const edited = payload.t === 'MESSAGE_UPDATE';
+    if (message.author?.bot || !message.content) return null;
+    // In a server, only messages that @mention the bot are for Mars; the mention is removed.
+    const mention = new RegExp(`<@!?${account}>`, 'g');
+    if (message.guild_id && !mention.test(message.content)) return null;
+    const text = message.guild_id ? message.content.replace(mention, '').trim() : message.content;
+    if (!text) return null;
+    return {
+      channel: 'discord', account, eventId: edited ? `${message.id}-edit-${message.edited_timestamp ?? payload.s}` : String(message.id),
+      sender: { id: String(message.author.id), name: message.author.username ?? '' },
+      chat: { id: String(message.channel_id), type: message.guild_id ? 'group' : 'dm' },
+      text,
+      ...(edited ? { edited: true } : {}),
+    };
+  }
+
   /** One gateway connection. Resolves when it closes; rejects for an unrecoverable close. */
   function connect(receive, signal, url) {
     return new Promise((resolve, reject) => {
@@ -44,9 +63,12 @@ export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/
       };
       const onAbort = () => { socket.close(1000, 'stopping'); };
       signal.addEventListener('abort', onAbort, { once: true });
+      // The resume sequence only moves past a message once the gateway has recorded it, so a
+      // reconnect after a failed admission replays that message instead of skipping it.
+      let admitFailed = false;
+      const advance = (seq) => { if (seq != null && session && !admitFailed) session.seq = Math.max(session.seq ?? 0, seq); };
       socket.addEventListener('message', (frame) => {
         const payload = JSON.parse(typeof frame.data === 'string' ? frame.data : Buffer.from(frame.data).toString());
-        if (payload.s != null && session) session.seq = payload.s;
         switch (payload.op) {
           case 10: {
             const interval = payload.d.heartbeat_interval;
@@ -66,27 +88,18 @@ export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/
               detail = payload.d.user.username ?? '';
               state = 'running';
             } else if (payload.t === 'RESUMED') state = 'running';
-            else if (payload.t === 'MESSAGE_CREATE' || payload.t === 'MESSAGE_UPDATE') {
-              const message = payload.d;
-              const edited = payload.t === 'MESSAGE_UPDATE';
-              if (message.author?.bot || !message.content) break;
-              // In a server, only messages that @mention the bot are for Mars; the mention is removed.
-              const mention = new RegExp(`<@!?${account}>`, 'g');
-              if (message.guild_id && !mention.test(message.content)) break;
-              const text = message.guild_id ? message.content.replace(mention, '').trim() : message.content;
-              if (!text) break;
-              const event = {
-                channel: 'discord', account, eventId: edited ? `${message.id}-edit-${message.edited_timestamp ?? payload.s}` : String(message.id),
-                sender: { id: String(message.author.id), name: message.author.username ?? '' },
-                chat: { id: String(message.channel_id), type: message.guild_id ? 'group' : 'dm' },
-                text,
-                ...(edited ? { edited: true } : {}),
-              };
-              inbound = inbound.then(() => receive(event)).catch((error) => { detail = String(error.message).slice(0, 200); });
-            }
             break;
           }
         }
+        // Every frame moves the sequence after the frames queued before it; a message frame
+        // moves it only once that message is recorded (see toEvent and receive below).
+        const event = payload.op === 0 && (payload.t === 'MESSAGE_CREATE' || payload.t === 'MESSAGE_UPDATE') ? toEvent(payload) : null;
+        inbound = inbound.then(() => (event ? receive(event) : undefined)).then(() => advance(payload.s), (error) => {
+          // Not recorded: stop advancing and reconnect, so Discord replays it on resume.
+          admitFailed = true;
+          detail = String(error.message).slice(0, 200);
+          socket.close(4000, 'admission failed');
+        });
       });
       socket.addEventListener('close', (closeEvent) => {
         stop();
@@ -125,8 +138,10 @@ export function createDiscordAdapter({ token, apiUrl = 'https://discord.com/api/
         await new Promise((resolve) => setTimeout(resolve, 250 * quick));
       }
     },
-    async send({ chat, text }) {
-      const nonce = 'm' + hash(chat.id + '\n' + text + '\n' + Math.floor(Date.now() / 60000)).slice(0, 20);
+    async send({ chat, text, jobId }) {
+      // The nonce is the durable delivery job, so a retry of the same job returns the first
+      // message and two different replies with the same text both post.
+      const nonce = 'm' + hash(chat.id + '\n' + (jobId ?? text)).slice(0, 20);
       const sent = await rest('POST', `/channels/${chat.id}/messages`, { content: text, nonce, enforce_nonce: true, allowed_mentions: { parse: [] } });
       return { messageId: String(sent.id) };
     },

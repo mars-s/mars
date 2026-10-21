@@ -388,3 +388,14 @@ Surveyed every surface at 1440x900 and 390x844 in dark and light against the pre
 - Installed extensions can no longer replace a built-in Mars tool or extension (for example `host_deploy` or `host-dev`); the names are taken from the registry before installed packages load. A clashing package already on disk is skipped at boot and reported; a tampered one still stops boot. `check-reserved-tools.mjs` covers refusal, skip-at-boot and that an extension's own names still install (mutation-checked).
 - `check-self-edit-deploy.mjs` drives `self_edit_finish` through the real deploy gate (dry run only): exact commit staged, changed file seen, isolated boot, live app untouched, failing checks reported as `staging_failed`.
 - `gateway_status` and `discord_connection_status` now say how they differ. With the same small-model eval (qwen2.5:1.5b, 19 requests x 5, two runs each), fully correct calls went from 58 and 64 to 80 and 78 of 95; `gateway_status` misses went from 10 and 10 to 0 and 0.
+
+## 2026-10-22 Review fixes (independent reviewer on the sweep)
+
+- Staging and checks start only gateway adapters whose API is a fake on loopback (`loopbackGatewayEnv`); before, a fake Telegram could let a real Discord start in staging.
+- Discord: the resume sequence moves past a message only after the gateway records it; a failed admission reconnects and Discord replays it (`check-gateway-discord.mjs`, fails on the old adapter). Reply nonces come from the durable delivery job, so identical replies both post.
+- HTTP API mailboxes are a Pi document, so unread replies and their numbering survive a restart.
+- Fixed a lost-write bug: on a Pi document draft, `x ??= v` returns the plain value, so edits through it were dropped (pairing allowlist, delivered keys, side-chat request keys, API mailboxes).
+- A Telegram network error can no longer put the bot token in status or the audit log.
+- Crash test: SIGKILL the real host mid-answer; after restart the answer is delivered once and a redelivered message is not resubmitted.
+- An installed package that clashes with a newer Mars tool name still loads its tasks and other tools; only the clashing tool is left out.
+- Trust boundary: the protected list moved to `protected-files.mjs` and now covers the harness scorer and task sets, the small-model eval and the decision records; the agent's `host_deploy` refuses a commit that changes a protected file and can no longer skip checks.

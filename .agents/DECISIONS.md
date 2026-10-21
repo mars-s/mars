@@ -54,3 +54,14 @@ docs/research/gateway-designs.md decisions 1 to 15, `check-gateway.mjs`.
 - Page differences recorded rather than adopted: Strands/Cordis (Pi extensions and the
   plugin registry fill those roles), Hindsight memory (not in this sweep), Temporal (Pi
   tasks and workflows cover durable jobs today).
+
+## 22 October 2026: Self-edit trust boundary is enforced in the tools, not the OS
+
+The Project Mars page asks that self-improvement can never modify its evaluator, deploy
+gate, audit trail or approval mechanism. Mars runs the agent as the owner with full shell
+access (owner-authorised VM control, AGENTS.md), so a hard guarantee would need the gate
+files outside its reach. This branch enforces the boundary in the agent's own change and
+deploy tools instead: `self_edit_*` and the agent's `host_deploy` refuse any change to the
+files in `protected-files.mjs`, and `host_deploy` can no longer skip checks. The owner's
+`npm run host:deploy` stays unlimited. Moving the gates to a separate user or CI is left to
+the owner. Evidence: `check-self-edit.mjs`, `check-self-edit-deploy.mjs`.

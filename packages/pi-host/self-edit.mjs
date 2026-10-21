@@ -12,45 +12,10 @@ import { createDevTools, sh } from './dev-tools.mjs';
 
 const HOST = 'packages/pi-host/';
 
-// The files that decide whether a self-edit is acceptable. Any change to them is refused.
-const PROTECTED = [
-  [/^packages\/pi-host\/run-checks\.mjs$/, 'runs the checks and decides pass or fail'],
-  [/^packages\/pi-host\/deploy-watchdog\.sh$/, 'applies a deploy and rolls back an unhealthy host'],
-  [/^packages\/pi-host\/dev-tools\.mjs$/, 'is the deploy gate (staging, checks and the test boot)'],
-  [/^packages\/pi-host\/self-edit\.mjs$/, 'is this guard'],
-  [/^packages\/pi-host\/tool-quality\.mjs$/, 'holds the tool-quality rules'],
-  [/^packages\/pi-host\/security\.mjs$/, 'holds owner authentication, origins and data roots'],
-  [/^packages\/pi-host\/extension-store\.mjs$/, 'decides which extensions and tool names may be installed'],
-  [/^packages\/pi-host\/ui-patches\.mjs$/, 'is the UI patch validation gate'],
-  [/^packages\/pi-host\/workbench\/test-host\.mjs$/, 'is the test host many checks share'],
-  [/^packages\/pi-host\/tsconfig\.json$/, 'holds the names and imports check settings'],
-  [/^scripts\/(check-[^/]*|test-[^/]*|run-script-tests)\.mjs$/, 'is a root gate or its test'],
-  [/^architecture-policy\.json$/, 'holds the workspace boundary rules'],
-  [/^(AGENTS\.md|\.agents\/DECISIONS\.md|\.agents\/verification\.md|docs\/SELF-EDIT\.md)$/, 'holds the rules for changing Mars'],
-  [/^(\.gitignore|\.github\/.*)$/, 'decides what may be committed, or runs CI'],
-];
-const NEVER = [
-  [/(^|\/)node_modules(\/|$)/, 'is installed dependencies, never committed'],
-  [/(^|\/)\.env(\.[^/]+)?$/, 'may hold secrets, never committed'],
-  [/\.(sqlite|db)(-wal|-shm)?$/, 'is a database, never committed'],
-];
-const EXISTING_CHECK = /^packages\/pi-host\/check-[^/]*\.mjs$/;
+import { guardChanges } from './protected-files.mjs';
+export { guardChanges };
 // tsc codes for an unknown name, a missing module or export, and a duplicate declaration.
 const NAME_ERRORS = new Set(['TS2300', 'TS2304', 'TS2305', 'TS2307', 'TS2393', 'TS2451', 'TS2552', 'TS2614', 'TS2724']);
-
-/** Why each change may not be part of a self-edit. `changes` are git name-status rows. */
-export function guardChanges(changes) {
-  const refused = [];
-  for (const { status, path } of changes) {
-    if (path.endsWith('.env.example')) continue;
-    const never = NEVER.find(([pattern]) => pattern.test(path));
-    const rule = PROTECTED.find(([pattern]) => pattern.test(path));
-    if (never) refused.push({ path, reason: path + ' ' + never[1] + '.' });
-    else if (rule) refused.push({ path, reason: path + ' ' + rule[1] + '; only the owner changes it.' });
-    else if (EXISTING_CHECK.test(path) && status !== 'A') refused.push({ path, reason: path + ' is an existing check; a self-edit may add a check but not change or delete one.' });
-  }
-  return refused;
-}
 
 const slug = title => title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
 const tail = (text, n = 1200) => (text.length > n ? '...' + text.slice(-n) : text);
@@ -102,7 +67,7 @@ export function createSelfEdit({
   root = ROOT,
   dir = process.env.MARS_SELF_EDIT_DIR || join(root, 'self-edits'),
   dependencies = DEPENDENCIES,
-  deploy = (args, signal) => createDevTools({ root, appDir: APP, repo, livePort: PORT }).deploy(args, signal),
+  deploy = (args, signal) => createDevTools({ root, appDir: APP, repo, livePort: PORT }).deploy({ ...args, agentDeploy: true }, signal),
 } = {}) {
   const records = join(root, 'data/self-edits');
   let chain = Promise.resolve();

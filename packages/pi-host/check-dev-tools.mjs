@@ -50,6 +50,9 @@ await mkdir(join(app, 'node_modules'), { recursive: true });
 await writeFile(join(app, 'server.mjs'), server('v1'));
 await writeFile(join(app, 'package.json'), '{"dependencies":{}}\n');
 await writeFile(join(app, 'live-only.txt'), 'keep me\n');
+// A real live app already runs the same checks and watchdog it was deployed with.
+await copyFile(join(host, 'run-checks.mjs'), join(app, 'run-checks.mjs'));
+await copyFile(join(host, 'deploy-watchdog.sh'), join(app, 'deploy-watchdog.sh'));
 const port = await freePort();
 
 const fake = join(base, 'bin'); await mkdir(fake);

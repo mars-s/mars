@@ -5,6 +5,16 @@
 import assert from "node:assert/strict";
 import { fakeTelegram } from "./gateway/fakes.mjs";
 import { startHost } from "./workbench/test-host.mjs";
+import { loopbackGatewayEnv } from "./gateway/host.mjs";
+
+// A staged host only starts adapters whose API is a fake on loopback; real ones are dropped.
+{
+  const tg = { MARS_GATEWAY_FAKE: "1", MARS_GATEWAY_TELEGRAM: "1", MARS_TELEGRAM_TOKEN: "t", MARS_TELEGRAM_API: "http://127.0.0.1:5000" };
+  assert.deepEqual(Object.keys(loopbackGatewayEnv({ ...tg, MARS_GATEWAY_DISCORD: "1", MARS_DISCORD_TOKEN: "real" })).sort(), ["MARS_GATEWAY_TELEGRAM", "MARS_TELEGRAM_API", "MARS_TELEGRAM_TOKEN"], "a real Discord is never started beside a fake Telegram");
+  assert.deepEqual(loopbackGatewayEnv({ ...tg, MARS_TELEGRAM_API: "https://api.telegram.org" }), {}, "a real Telegram API is dropped");
+  assert.deepEqual(loopbackGatewayEnv({ ...tg, MARS_TELEGRAM_API: "http://127.0.0.1.evil.com:5000" }), {}, "a look-alike host is dropped");
+  assert.deepEqual(loopbackGatewayEnv({ ...tg, MARS_GATEWAY_FAKE: "0" }), {}, "without MARS_GATEWAY_FAKE nothing starts");
+}
 
 const TG_TOKEN = "123456:" + "B".repeat(30);
 const telegram = await fakeTelegram({ token: TG_TOKEN });
@@ -56,7 +66,7 @@ try {
   const after = (await host.request("/api/gateway")).json;
   assert.ok(after.allowed.telegram.includes("7770002"));
   assert.ok(["not_ready", "duplicate", "denied", "paired"].every((d) => after.audit.some((a) => a.decision === d)), "audit covers every decision");
-  console.log("PASS gateway host: owner auth, token never in status, Telegram conversation in Recents with channel badge, web can open it, HTTP API channel idempotent on eventId, pairing approved over HTTP, audit");
+  console.log("PASS gateway host: staging starts only loopback fake adapters, owner auth, token never in status, Telegram conversation in Recents with channel badge, web can open it, HTTP API channel idempotent on eventId, pairing approved over HTTP, audit");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

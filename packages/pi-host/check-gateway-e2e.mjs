@@ -43,6 +43,9 @@ try {
   // Restart the real process; the chat stays bound, an update redelivered after the restart is ignored.
   const lastUpdate = telegram.message({ from: OWNER, text: "Before the restart" });
   await until(() => sent().includes("echo: Before the restart"), "answer before restart");
+  const apiPost = await host.request("/api/gateway/api/messages", { method: "POST", body: { chatId: "script", eventId: "api-1", text: "before restart via API" } });
+  assert.equal(apiPost.status, 202);
+  await until(async () => (await host.request("/api/gateway/api/messages?chatId=script")).json.items.length, "API reply before restart");
   await host.stop();
   host = await startHost(env, host);
   telegram.redeliver(lastUpdate);
@@ -52,10 +55,29 @@ try {
   assert.equal(texts.at(-1), "After the restart", "after a restart the chat continues the same conversation");
   assert.equal(texts.filter((t) => t === "Before the restart").length, 1, "an update redelivered after the restart is not submitted again");
   assert.equal(sent().filter((t) => t === "echo: Before the restart").length, 1, "nor answered again");
+  // HTTP API replies survive the restart too: the mailbox and its numbering are in Pi.
   const status = (await host.request("/api/gateway")).json;
+  const mailbox = (await host.request("/api/gateway/api/messages?chatId=script")).json;
+  assert.deepEqual(mailbox.items.map((m) => m.text), ["echo: before restart via API"], "an unread API reply is still there after the restart");
+  const next = await host.request("/api/gateway/api/messages", { method: "POST", body: { chatId: "script", eventId: "api-2", text: "after restart via API" } });
+  assert.equal(next.status, 202);
+  const later = await until(async () => { const m = (await host.request(`/api/gateway/api/messages?chatId=script&after=${mailbox.last}`)).json; return m.items.length && m; }, "API reply after restart");
+  assert.equal(later.items[0].seq, mailbox.last + 1, "numbering continues, so a caller polling with after= misses nothing");
   assert.equal(status.bindings.find((b) => b.channel === "telegram")?.conversationId, row.id, "binding kept across the restart");
   assert.ok(status.audit.some((a) => a.decision === "duplicate"), "the redelivery is audited as a duplicate");
-  console.log("PASS gateway end to end on the real host: Telegram starts a conversation, the web chat route continues it with the answer mirrored to Telegram, Telegram continues it again, and after a real restart the binding holds and a redelivered update is ignored");
+  // Crash: kill the process with SIGKILL while an answer is being written. After the restart
+  // Pi resumes the run, the gateway delivers the answer once, and nothing is submitted twice.
+  const slowId = telegram.message({ from: OWNER, text: "SLOW 3000 during a crash" });
+  await until(async () => (await host.request("/api/gateway")).json.audit.some((a) => a.decision === "accepted" && a.eventId === String(slowId)), "slow message admitted");
+  await host.crash();
+  telegram.redeliver(slowId);
+  host = await startHost(env, host);
+  await until(() => sent().includes("echo: during a crash"), "answer delivered after a crash", 20000);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  assert.equal(sent().filter((t) => t === "echo: during a crash").length, 1, "the answer interrupted by a crash is delivered once");
+  const afterCrash = await userTexts(row.id);
+  assert.equal(afterCrash.filter((t) => t === "SLOW 3000 during a crash").length, 1, "the message is in the transcript once, though Telegram redelivered it");
+  console.log("PASS gateway end to end on the real host: Telegram starts a conversation, the web chat route continues it with the answer mirrored to Telegram, Telegram continues it again, and after a real restart the binding holds and a redelivered update is ignored, and unread HTTP API replies and their numbering survive the restart; after a SIGKILL mid-answer the answer is delivered once and the redelivered message is not resubmitted");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

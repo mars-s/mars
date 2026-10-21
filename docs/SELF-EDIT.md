@@ -167,11 +167,24 @@ A refusal returns each file with its reason, and a `next` that says how to undo 
 `git -C <worktree> checkout <base> -- <path>` for a changed file, or delete an added one.
 The owner changes protected files directly, outside the self-edit tools.
 
-This boundary stops the agent weakening its own gates through the self-edit path. It is
-not a sandbox. The agent keeps full owner-authorised shell access, so `host_exec` can
-still edit any file and `host_deploy` can still deploy any commit, the same trust model
-as the UI patch interface. The session record holds `base` outside the worktree, so
-editing the worktree cannot move it.
+The list lives in `packages/pi-host/protected-files.mjs` and covers the deploy gate, the
+watchdog, the checks and their runner, the harness scorer, promotion rule and task sets,
+the small-model eval, the decision records in `.agents/goals/` and the rules files. Two
+paths enforce it:
+
+- `self_edit_check` and `self_edit_finish` refuse a worktree that changes a protected file.
+- `host_deploy` called by the agent (and `self_edit_finish`, which calls it) refuses a commit
+  that changes a protected file in `packages/pi-host` before anything runs, and the tool can
+  no longer skip checks. The owner's own `npm run host:deploy` is not limited.
+
+What this does not do: Mars keeps the owner-authorised shell (`host_exec`, `bash`), so the
+agent can still edit files in the live checkout or the repository's history by hand. It
+cannot get such a change deployed through its own tools, and every check and deploy reads
+the gate files of the commit being staged. A true "can never modify" guarantee needs the
+gates outside the agent's reach (a separate user, read-only mount, or CI the agent cannot
+push to); that is an owner decision recorded in DECISIONS.md, not something this branch
+claims. The session record holds `base` outside the worktree, so editing the worktree
+cannot move it.
 
 ## Type check experiment
 

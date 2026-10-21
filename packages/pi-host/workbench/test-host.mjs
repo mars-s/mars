@@ -62,11 +62,16 @@ export async function startHost(extraEnv = {}, reuse) {
       req.on("error", reject);
       req.end(payload);
     });
+  /** Kill the process at once, as a crash or power loss would: no shutdown code runs. */
+  const crash = async () => {
+    child.kill("SIGKILL");
+    await exited;
+  };
   const stop = async () => {
     child.kill("SIGTERM");
     const timer = setTimeout(() => child.kill("SIGKILL"), 5000);
     await exited;
     clearTimeout(timer);
   };
-  return { base, root, work: join(root, "workspace"), port, uiPort, token, request, stop, log: () => log };
+  return { base, root, work: join(root, "workspace"), port, uiPort, token, request, stop, crash, log: () => log };
 }

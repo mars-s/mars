@@ -11,6 +11,22 @@ import { createDiscordAdapter } from './adapters/discord.mjs';
 const output = (value) => ({ output: [{ type: 'text', text: JSON.stringify(value) }], structuredOutput: value });
 const nativeId = (value) => (typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value);
 
+const LOOPBACK = /^http:\/\/127\.0\.0\.1:\d+(\/|$)/;
+/**
+ * The gateway settings a staging or check host may use: only with MARS_GATEWAY_FAKE=1, and
+ * each adapter only when its API base points at loopback. Everything else is dropped, so a
+ * staged host can never reach real Telegram or Discord.
+ */
+export function loopbackGatewayEnv(env) {
+  if (env.MARS_GATEWAY_FAKE !== '1') return {};
+  const out = {};
+  if (LOOPBACK.test(env.MARS_TELEGRAM_API ?? ''))
+    for (const key of ['MARS_GATEWAY_TELEGRAM', 'MARS_TELEGRAM_TOKEN', 'MARS_TELEGRAM_API', 'MARS_TELEGRAM_OWNER']) if (env[key] !== undefined) out[key] = env[key];
+  if (LOOPBACK.test(env.MARS_DISCORD_API ?? ''))
+    for (const key of ['MARS_GATEWAY_DISCORD', 'MARS_DISCORD_TOKEN', 'MARS_DISCORD_API', 'MARS_DISCORD_OWNER', 'MARS_DISCORD_MESSAGE_CONTENT']) if (env[key] !== undefined) out[key] = env[key];
+  return out;
+}
+
 /**
  * Start the gateway with the HTTP API adapter, plus Telegram and Discord only when the
  * owner turned them on (MARS_GATEWAY_TELEGRAM=1 / MARS_GATEWAY_DISCORD=1) and a token exists.
@@ -18,7 +34,7 @@ const nativeId = (value) => (typeof value === 'string' && /^\d+$/.test(value) ? 
  */
 export async function startGateway({ harness, conversations, context, env = process.env, discordToken, log = console.error, ready, workersOf }) {
   const gateway = createGateway({ harness, conversations, context, log, ready, workersOf });
-  const api = createApiAdapter();
+  const api = createApiAdapter({ store: { harness, context } });
   const configured = [];
   gateway.addAdapter(api);
   await gateway.allow('api', 'owner');
@@ -62,7 +78,7 @@ export async function gatewayRoute({ req, url, res, send, jsonBody, gateway, api
     return true;
   }
   if (url.pathname === '/api/gateway/api/messages' && req.method === 'GET') {
-    send(res, 200, api.read({ chatId: url.searchParams.get('chatId') ?? '', after: url.searchParams.get('after') ?? 0 }));
+    send(res, 200, await api.read({ chatId: url.searchParams.get('chatId') ?? '', after: url.searchParams.get('after') ?? 0 }));
     return true;
   }
   send(res, 404, { error: 'Not found' });

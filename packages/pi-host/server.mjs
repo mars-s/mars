@@ -17,7 +17,7 @@ import { createConversationManager } from "./conversations.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
-import { createGatewayExtension, gatewayRoute, startGateway, withChannels } from "./gateway/host.mjs";
+import { createGatewayExtension, gatewayRoute, loopbackGatewayEnv, startGateway, withChannels } from "./gateway/host.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -96,11 +96,14 @@ const echoModel = STAGING && process.env.MARS_ECHO_MODEL === "1";
 if (echoModel) {
   const { fauxProvider, fauxAssistantMessage } = await import("@earendil-works/pi-ai/providers/faux");
   const echo = fauxProvider({ provider: "echo", models: [{ id: "echo", name: "Echo (checks only)" }] });
-  const reply = (context) => {
+  // "SLOW <ms> <text>" waits before answering, so a check can kill the host mid-answer.
+  const reply = async (context) => {
     const last = context.messages.findLast((m) => m.role === "user");
     const text = typeof last?.content === "string" ? last.content : last?.content?.find?.((c) => c.type === "text")?.text ?? "";
     echo.appendResponses([reply]);
-    return fauxAssistantMessage("echo: " + text);
+    const slow = /^SLOW (\d{1,5}) ([\s\S]*)$/.exec(text);
+    if (slow) await new Promise((resolve) => setTimeout(resolve, Number(slow[1])));
+    return fauxAssistantMessage("echo: " + (slow ? slow[2] : text));
   };
   echo.setResponses([reply]);
   models.setProvider(echo.provider);
@@ -401,11 +404,11 @@ async function providerReady(view) {
         !!(await credentials.read(selected.provider));
 }
 harness.resume();
-// Chat clients (docs/GATEWAY.md). Staging and tool dumps never start platform adapters,
-// except a check that points them at a fake platform on loopback (MARS_GATEWAY_FAKE=1).
-const fakeGateway = process.env.MARS_GATEWAY_FAKE === "1" && /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.MARS_TELEGRAM_API || "");
+// Chat clients (docs/GATEWAY.md). Staging and tool dumps never reach a real platform: a
+// staging check may only start adapters whose API is a fake on loopback (MARS_GATEWAY_FAKE=1).
+const gatewayEnv = process.env.MARS_DUMP_TOOLS ? {} : STAGING ? loopbackGatewayEnv(process.env) : process.env;
 const gatewayHost = await startGateway({ harness, conversations, context,
-  env: (STAGING && !fakeGateway) || process.env.MARS_DUMP_TOOLS ? {} : process.env, discordToken: connections.getDiscordToken(),
+  env: gatewayEnv, discordToken: STAGING ? undefined : connections.getDiscordToken(),
   ready: async (id) => (await providerReady(await conversations.state(id))) ? null : "Mars cannot answer yet: connect the selected model provider in Mars Settings, then send your message again.",
   workersOf: (id) => listWorkers({ harness, conversationId: id, context, limit: 20 }) });
 late.gateway = gatewayHost.gateway;

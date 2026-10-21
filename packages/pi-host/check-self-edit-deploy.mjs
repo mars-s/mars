@@ -54,7 +54,18 @@ try {
   const failed = await call('self_edit_finish', { id: second.id, deploy: 'dry_run' });
   assert.equal(failed.status, 'staging_failed', JSON.stringify(failed));
   assert.match(failed.next, /check-fake\.mjs|fix|Fix/, 'the next step names what to fix');
-  console.log('PASS self-edit with the real deploy gate: dry run stages the exact self-edit commit, sees the changed file, boots it in isolation and leaves the live app and checkout alone; failing staged checks come back as staging_failed with a next step');
+  // The agent's host_deploy refuses a commit that weakens a gate, even outside self_edit_*.
+  await writeFile(join(host, 'run-checks.mjs'), "console.log(JSON.stringify({ ok: true, total: 0, passed: [], failed: [] }));\n");
+  await git(repo, 'commit', '-qam', 'weaken the checks');
+  const hostDeploy = dev.extension.tools.find((t) => t.name === 'host_deploy');
+  const refusedDeploy = (await hostDeploy.execute({ dryRun: true, skipChecks: true }, {}, { abortSignal: new AbortController().signal })).structuredOutput;
+  assert.equal(refusedDeploy.status, 'refused', 'host_deploy from the agent refuses a commit that changes run-checks.mjs: ' + JSON.stringify(refusedDeploy).slice(0, 300));
+  assert.equal(refusedDeploy.refused[0].path, 'packages/pi-host/run-checks.mjs');
+  assert.match(refusedDeploy.next, /only the owner deploys that/);
+  // The owner's own deploy path (npm run host:deploy calls deploy() directly) is not limited.
+  const owner = await dev.deploy({ dryRun: true });
+  assert.equal(owner.status, 'dry_run', 'the owner can still deploy it');
+  console.log('PASS self-edit with the real deploy gate: dry run stages the exact self-edit commit, sees the changed file, boots it in isolation and leaves the live app and checkout alone; failing staged checks come back as staging_failed with a next step; the agent host_deploy refuses a commit that changes run-checks.mjs while the owner deploy is not limited');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

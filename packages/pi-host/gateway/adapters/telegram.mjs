@@ -13,7 +13,14 @@ export function createTelegramAdapter({ token, baseUrl = 'https://api.telegram.o
   const redact = (text) => String(text).split(token).join('[token]');
 
   async function call(method, body, signal) {
-    const response = await fetcher(api(method), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), signal });
+    let response;
+    try {
+      response = await fetcher(api(method), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), signal });
+    } catch (error) {
+      // The token is part of the URL, so a network error may carry it: rebuild the message.
+      if (signal?.aborted) throw error;
+      throw Error(redact(`Telegram ${method}: network error (${error.cause?.code ?? error.name ?? 'unknown'}): ${error.cause?.message ?? error.message}`));
+    }
     const data = await response.json().catch(() => ({ ok: false, description: `HTTP ${response.status}` }));
     if (data.ok) return data.result;
     const error = Error(redact(`Telegram ${method}: ${data.description ?? response.status}`));
