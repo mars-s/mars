@@ -427,3 +427,112 @@
     transition: none !important;
   }
 }
+
+/* Filing: the row menu, group and Archived sections (components/shell/conversation-list.tsx). */
+.live-conversation-row {
+  position: relative;
+}
+.live-conversation-row .live-conversation {
+  padding-right: 34px;
+}
+.live-conversation-menu {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    opacity 120ms var(--ease-out),
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.live-conversation-row:hover .live-conversation-menu,
+.live-conversation-row:focus-within .live-conversation-menu,
+.live-conversation-row:has(.live-conversation[aria-current="page"]) .live-conversation-menu,
+.live-conversation-menu[data-state="open"] {
+  opacity: 1;
+}
+.live-conversation-menu:hover,
+.live-conversation-menu[data-state="open"] {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+}
+@media (hover: none) {
+  .live-conversation-menu {
+    opacity: 1;
+  }
+}
+.live-conversation-menu-content {
+  min-width: 190px;
+  max-width: 260px;
+}
+.live-menu-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-group {
+  margin-top: 14px;
+}
+.live-group + .live-group {
+  margin-top: 2px;
+}
+.live-group-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+.live-group-toggle:hover {
+  background: var(--sidebar-accent);
+  color: var(--text);
+}
+.live-group-chevron {
+  flex-shrink: 0;
+  transition: transform 150ms var(--ease-out);
+}
+.live-group-toggle[aria-expanded="true"] .live-group-chevron {
+  transform: rotate(90deg);
+}
+.live-group-current {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.live-group-rows .live-conversation {
+  padding-left: 30px;
+}
+.live-archived .live-conversation:not([aria-current="page"]) {
+  color: var(--text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-group-chevron {
+    transition: none;
+  }
+}
+

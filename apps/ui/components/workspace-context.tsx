@@ -7,6 +7,9 @@ import type { ConversationSummary, LiveSnapshot } from "@/lib/pi/live-state";
  * The live workspace controller owns Pi state and every server action. Presentation
  * components read it here instead of receiving props through each layer.
  */
+/** A change to how a chat is filed. Only the given fields change; group "" means ungrouped. */
+export type ConversationChange = { title?: string; group?: string; archived?: boolean };
+
 export type Workspace = {
   snapshot: LiveSnapshot | null;
   conversations: ConversationSummary[];
@@ -32,6 +35,7 @@ export type Workspace = {
   safely: (operation: Promise<unknown>) => void;
   newConversation: () => Promise<void>;
   selectConversation: (id: string) => void;
+  organiseConversation: (id: string, change: ConversationChange) => Promise<void>;
   openSettings: (tab?: string) => void;
 };
 

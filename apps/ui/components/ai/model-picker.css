@@ -75,8 +75,10 @@
 .mars-model-menu {
   z-index: 60;
   width: 300px;
-  max-height: min(70dvh, 560px);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  max-height: min(70dvh, 560px, var(--radix-dropdown-menu-content-available-height, 560px));
+  overflow: hidden;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -132,6 +134,16 @@
   display: inline-flex;
   width: 16px;
   color: var(--text);
+}
+.mars-model-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mars-model-separator,
+.mars-effort {
+  flex-shrink: 0;
 }
 .mars-model-separator {
   height: 1px;

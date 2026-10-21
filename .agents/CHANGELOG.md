@@ -334,3 +334,12 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - `plan_update`: steps are trimmed in `preparePlan`, before validation, so a step of only spaces is refused instead of saved as an empty line. `check-plans.mjs` covers it (fails on the old code) and now closes and reopens the store to prove the plan survives a restart.
 - `/design-system` has a Plan specimen (in progress and finished) using the real `PlanCard`. Its styles moved from `thread.css` to `components/ai/plan-card.css`, imported by the component.
 - Correction to the plan entry above: recovery after the workflow_start redirect was not demonstrated; the first call was already right.
+
+## 2026-10-21 Archive, group and rename chats; effort picker reachable
+
+- Owner report: chats could not be archived or grouped, and model effort could not be chosen.
+- Effort: the UI and `/api/state` effort code was already on main, but the live host was still the 2026-10-20 build (33a5ebf6). The 2026-10-21 deploy of e709326e stopped at staging when the service was restarted at 10:13, so `/api/state` sent no `efforts` or `thinkingLevel` and the picker hid its Effort section. Redeploying fixes that. The model menu now scrolls only its list, so Effort stays in view below 20+ models. New chats keep the current effort (`thinking`, clamped by the host to the model's levels).
+- Filing is part of the default product, not a plugin: native per-conversation `mars.conversation-organise` document `{ group, archived }` (fork: initial), rows carry `group` and `archived`, and `POST /api/conversations/organise` changes only the given title, group or archived flag. Workers and side chats are refused (they follow their parent). Untitled chats are named once from their first message; the main conversation keeps its name.
+- Sidebar: each chat has a menu (Rename, Add/Move to group with New group…, Remove from group, Archive/Unarchive). Named groups sit above the default Recents list; Archived is a folded section at the end. Folding is a browser preference. Archived chats still open and run.
+- Checks: `check-organise.mjs` (real harness: rename, group, archive, partial updates, auto-title once, refusals, reopen), a live-state unit test, and `tests/organise-ui-check.mjs` in the browser (archive, unarchive, groups, rename, Effort visible below 24 models, effort sent, new chat keeps effort).
+

@@ -1,27 +1,23 @@
 "use client";
 
 import { useId } from "react";
-import { Blocks, MessageSquare, MessageSquareDashed, PanelLeft, Plus, X } from "lucide-react";
+import { Blocks, MessageSquare, PanelLeft, Plus, X } from "lucide-react";
 import { MarsMark } from "@/components/mars-mark";
 import { useWorkspace } from "@/components/workspace-context";
-import { ChildNavigation } from "./child-navigation";
+import { ConversationList } from "./conversation-list";
 import { setSidebarCollapsed } from "./sidebar-collapse";
 
 /** The navigation shared by the desktop sidebar and the mobile drawer, so both keep one order. */
 export function SidebarContent({ collapsed = false, drawer = false }: { collapsed?: boolean; drawer?: boolean }) {
   const {
     snapshot,
-    conversations,
-    selectedId,
     pending,
     canChat,
-    rootId,
     extensionsOpen,
     setExtensionsOpen,
     setSidebarOpen,
     safely,
     newConversation,
-    selectConversation,
     openSettings,
   } = useWorkspace();
   const accountId = useId();
@@ -91,27 +87,7 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
         </button>
       </nav>
       <div className="live-sidebar-history">
-        {conversations.length > 0 && <p className="live-section-label">Recents</p>}
-        {conversations.map((conversation) => (
-          <div key={conversation.id}>
-            <button
-              type="button"
-              className="live-nav live-conversation"
-              aria-current={!extensionsOpen && selectedId === conversation.id ? "page" : undefined}
-              onClick={() => selectConversation(conversation.id)}
-            >
-              <span className="live-nav-label">{conversation.title}</span>
-              {conversation.running && (
-                <>
-                  <span className="live-running-dot" aria-hidden="true" />
-                  <span className="sr-only">Running</span>
-                </>
-              )}
-            </button>
-            {conversation.id === rootId && <ChildNavigation />}
-            <SideChats parentId={conversation.id} sideChats={conversation.sideChats} total={conversation.sideChatTotal} />
-          </div>
-        ))}
+        <ConversationList />
       </div>
       <button
         type="button"
@@ -131,53 +107,5 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
         </span>
       </button>
     </>
-  );
-}
-
-/**
- * Side chats nested under the conversation they were opened from (docs/WORKBENCH.md).
- * The open side chat stays listed even before the next conversations refresh.
- */
-function SideChats({
-  parentId,
-  sideChats,
-  total,
-}: {
-  parentId: string;
-  sideChats: { id: string; title: string; running: boolean }[];
-  total: number;
-}) {
-  const { snapshot, selectedId, extensionsOpen, selectConversation } = useWorkspace();
-  const rows = [...sideChats];
-  if (snapshot?.sideChatOf === parentId && !rows.some((row) => row.id === snapshot.conversationId))
-    rows.unshift({ id: snapshot.conversationId, title: snapshot.conversationTitle || "Side chat", running: snapshot.running });
-  if (!rows.length) return null;
-  return (
-    <ul className="live-side-chats" aria-label="Side chats">
-      {rows.map((row) => (
-        <li key={row.id}>
-          <button
-            type="button"
-            className="live-nav live-subthread live-side-chat"
-            aria-current={!extensionsOpen && selectedId === row.id ? "page" : undefined}
-            onClick={() => selectConversation(row.id)}
-          >
-            <MessageSquareDashed size={13} aria-hidden="true" className="live-side-chat-icon" />
-            <span className="live-nav-label">{row.title}</span>
-            {row.running && (
-              <>
-                <span className="live-running-dot" aria-hidden="true" />
-                <span className="sr-only">Running</span>
-              </>
-            )}
-          </button>
-        </li>
-      ))}
-      {total > rows.length && (
-        <li className="live-side-chat-more">
-          {total - rows.length} older side {total - rows.length === 1 ? "chat" : "chats"} (ask Mars to list them)
-        </li>
-      )}
-    </ul>
   );
 }

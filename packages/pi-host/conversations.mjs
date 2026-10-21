@@ -1,8 +1,17 @@
 import { listSubthreads, nativeTitleDoc } from './orchestration.mjs';
 import { SIDE_CHAT_PAGE, createSideChat, listSideChats, sideChatParent } from './side-chats.mjs';
-import { AgentDoc, LiveDoc } from '@earendil-works/pi-durable';
+import { AgentDoc, LiveDoc, defineDoc } from '@earendil-works/pi-durable';
 
 export const TitleDoc = nativeTitleDoc;
+/**
+ * How the owner files a top-level conversation in Recents: an optional group name and an
+ * archived flag. Native, per conversation, so Pi stays the only store. A fork starts unfiled.
+ */
+export const OrganiseDoc = defineDoc({ kind: 'mars.conversation-organise', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ group: '', archived: false }) });
+export const GROUP_MAX = 60;
+const fail = (message, status = 400) => Object.assign(new Error(message), { status });
+/** One line of plain text, trimmed and cut to `max` characters. */
+const oneLine = (value, max) => String(value).replace(/\s+/g, ' ').trim().slice(0, max);
 const nativeId = value => typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
 /** Native conversation handles remain the only conversation store. */
 export function createConversationManager({ harness, root, context, defaultAgent }) {
@@ -34,12 +43,20 @@ export function createConversationManager({ harness, root, context, defaultAgent
     }, context);
   }
   async function row(record) {
-    const [label, agent, live] = await Promise.all([
+    const [label, agent, live, filed] = await Promise.all([
       harness.snapshot(TitleDoc, record.id, context),
       harness.snapshot(AgentDoc, record.id, context),
       harness.snapshot(LiveDoc, record.id, context),
+      harness.snapshot(OrganiseDoc, record.id, context),
     ]);
-    return { id: String(record.id), title: label?.title || (record.id === root.id ? 'Main conversation' : 'New conversation'), ...agent?.model, running: !!live?.run };
+    return {
+      id: String(record.id),
+      title: label?.title || (record.id === root.id ? 'Main conversation' : 'New conversation'),
+      ...agent?.model,
+      running: !!live?.run,
+      group: filed?.group || '',
+      archived: filed?.archived === true,
+    };
   }
   /** A top-level row with its newest side chats nested inside it, and how many there are. */
   async function topRow(record) {
@@ -104,6 +121,44 @@ export function createConversationManager({ harness, root, context, defaultAgent
       const conversation = await harness.createConversation({ ownership: { kind: 'ownerless' }, agent }, context);
       await title(conversation, options.title);
       return conversation;
+    },
+    /**
+     * File a top-level conversation: rename it, move it to a group ('' for none) or archive it.
+     * Only the fields given change. Workers and side chats follow their parent instead.
+     */
+    async organise({ conversationId, title: label, group, archived } = {}) {
+      if (!/^\d+$/.test(String(conversationId ?? ''))) throw fail('conversationId must be a conversation id');
+      const conversation = await resolve(String(conversationId));
+      const record = await harness.commit(tx => tx.conversation(conversation.id), context);
+      if (record.owner) throw fail('A worker belongs to its parent and cannot be filed separately');
+      if (await sideChatParent(harness, conversation.id, context)) throw fail('A side chat is filed with its parent conversation');
+      if (label !== undefined && (typeof label !== 'string' || !oneLine(label, 160))) throw fail('title must be non-empty text');
+      if (group !== undefined && typeof group !== 'string') throw fail('group must be text');
+      if (group !== undefined && group.trim().length > GROUP_MAX) throw fail(`group must be at most ${GROUP_MAX} characters`);
+      if (archived !== undefined && typeof archived !== 'boolean') throw fail('archived must be true or false');
+      if (label === undefined && group === undefined && archived === undefined) throw fail('Nothing to change: give title, group or archived');
+      await conversation.commit(async tx => {
+        if (label !== undefined) (await tx.doc(TitleDoc, conversation.id)).title = oneLine(label, 160);
+        if (group !== undefined || archived !== undefined) {
+          const filed = await tx.doc(OrganiseDoc, conversation.id);
+          if (group !== undefined) filed.group = oneLine(group, GROUP_MAX);
+          if (archived !== undefined) filed.archived = archived;
+        }
+      }, context);
+      return row(record);
+    },
+    /** Name an untitled top-level conversation after its first message. Never renames. */
+    async autoTitle(conversation, text) {
+      if (conversation.id === root.id || typeof text !== 'string') return;
+      const words = oneLine(text, 200);
+      if (!words) return;
+      const label = words.length > 60 ? words.slice(0, 60).replace(/\s+\S*$/, '') + '…' : words;
+      const record = await harness.commit(tx => tx.conversation(conversation.id), context);
+      if (record.owner || (await harness.snapshot(TitleDoc, conversation.id, context))?.title) return;
+      await conversation.commit(async tx => {
+        const doc = await tx.doc(TitleDoc, conversation.id);
+        if (!doc.title) doc.title = label;
+      }, context);
     },
     async fork({ conversationId, entryId, title: label }) {
       const source = await resolve(conversationId);

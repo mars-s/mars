@@ -22,7 +22,7 @@ import {
 } from "@/lib/pi/live-state";
 import { createImageAdapter } from "@/lib/pi/image-attachments";
 import "./shared.css";
-import { WorkspaceContext, type Workspace } from "./workspace-context";
+import { WorkspaceContext, type ConversationChange, type Workspace } from "./workspace-context";
 import { Sidebar } from "./shell/sidebar";
 import { MobileNav } from "./shell/mobile-nav";
 import { WorkspaceHeader } from "./shell/header";
@@ -160,6 +160,8 @@ export function LiveWorkspace() {
                 running: next.running,
                 sideChats: [],
                 sideChatTotal: 0,
+                group: "",
+                archived: false,
               },
             ],
       );
@@ -270,8 +272,10 @@ export function LiveWorkspace() {
         ? snapshot.model.split("/")
         : ["openai", snapshot?.model ?? ""];
       const modelId = modelParts.join("/");
+      // The new chat starts on the current model and effort; the host clamps the effort.
+      const thinking = snapshot?.thinkingLevel || undefined;
       const created = parseCreatedConversation(
-        await action("/api/conversations", modelId ? { provider, modelId } : {}),
+        await action("/api/conversations", modelId ? { provider, modelId, thinking } : { thinking }),
       );
       setConversations((rows) =>
         rows.some((row) => row.id === created.id) ? rows : [...rows, created],
@@ -282,6 +286,27 @@ export function LiveWorkspace() {
         setActionError(
           failure instanceof Error ? failure.message : "Could not create a conversation.",
         );
+    }
+  };
+  /** Rename, regroup or archive a top-level chat. Rows update at once and the host confirms. */
+  const organiseConversation = async (id: string, change: ConversationChange) => {
+    const before = conversations;
+    setConversations((rows) =>
+      rows.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              ...(change.title !== undefined ? { title: change.title.trim() || row.title } : {}),
+              ...(change.group !== undefined ? { group: change.group.trim() } : {}),
+              ...(change.archived !== undefined ? { archived: change.archived } : {}),
+            }
+          : row,
+      ),
+    );
+    try {
+      await action("/api/conversations/organise", { conversationId: id, ...change });
+    } catch {
+      setConversations(before);
     }
   };
   const onNew = async (message: AppendMessage) => {
@@ -354,6 +379,7 @@ export function LiveWorkspace() {
     safely,
     newConversation,
     selectConversation,
+    organiseConversation,
     openSettings,
   };
   return (

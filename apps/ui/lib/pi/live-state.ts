@@ -113,6 +113,10 @@ export type ConversationSummary = {
   sideChats: SideChatSummary[];
   /** How many side chats exist in all, when more than the listed page. */
   sideChatTotal: number;
+  /** The owner's group for this chat in Recents, or "" for the default ungrouped list. */
+  group: string;
+  /** Archived chats leave Recents for the Archived section; they still open and run. */
+  archived: boolean;
 };
 export type WorkerSummary = {
   id: string;
@@ -270,6 +274,8 @@ export function parseConversations(value: unknown): ConversationSummary[] {
                   return sideId ? [{ id: sideId, title: string(side.title) || "Side chat", running: side.running === true }] : [];
                 }),
               sideChatTotal: Number.isInteger(row.sideChatTotal) ? Number(row.sideChatTotal) : 0,
+              group: string(row.group).trim(),
+              archived: row.archived === true,
             },
           ]
         : [];

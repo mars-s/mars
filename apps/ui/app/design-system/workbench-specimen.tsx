@@ -27,8 +27,8 @@ const noop = () => undefined;
 const sampleWorkspace: Workspace = {
   snapshot: null,
   conversations: [
-    { id: "901", title: "Tidy the Pi host deploy script", modelId: "", provider: "", running: false, sideChats: [], sideChatTotal: 0 },
-    { id: "902", title: "Name the release", modelId: "", provider: "", running: false, sideChats: [], sideChatTotal: 0 },
+    { id: "901", title: "Tidy the Pi host deploy script", modelId: "", provider: "", running: false, sideChats: [], sideChatTotal: 0, group: "", archived: false },
+    { id: "902", title: "Name the release", modelId: "", provider: "", running: false, sideChats: [], sideChatTotal: 0, group: "", archived: false },
   ],
   selectedId: "901",
   pending: false,
@@ -52,6 +52,7 @@ const sampleWorkspace: Workspace = {
   safely: noop,
   newConversation: async () => undefined,
   selectConversation: noop,
+  organiseConversation: async () => undefined,
   openSettings: noop,
 };
 

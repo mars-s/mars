@@ -392,6 +392,15 @@ test("conversation rows carry nested side chats, and a side chat's state names i
   assert.equal(rows[1].sideChatTotal, 0);
 });
 
+test("conversation rows carry the owner's group and archived flag, defaulting to unfiled", () => {
+  const rows = parseConversations([
+    { id: "1", title: "Filed", group: "  Mars host ", archived: true },
+    { id: "2", title: "Plain" },
+    { id: "3", group: 7, archived: "yes" },
+  ]);
+  assert.deepEqual(rows.map((row) => [row.group, row.archived]), [["Mars host", true], ["", false], ["", false]]);
+});
+
 test("a side chat snapshot keeps its parent for sidebar nesting", () => {
   const snapshot = parseSnapshot({
     runtime: "Pi Durable 1.3.0",

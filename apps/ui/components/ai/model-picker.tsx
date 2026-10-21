@@ -191,33 +191,36 @@ export function ModelPicker({
           sideOffset={8}
           collisionPadding={12}
         >
-          {models.length ? (
-            <DropdownMenu.RadioGroup value={value} onValueChange={onChange}>
-              {models.map((model) => (
-                <DropdownMenu.RadioItem
-                  key={model.id}
-                  value={model.id}
-                  aria-label={model.name}
-                  className="mars-model-option"
-                >
-                  <ProviderMark provider={model.provider} className="mars-model-option-mark" />
-                  <span className="mars-model-option-text">
-                    {model.name}
-                    {describe(model) && <small>{describe(model)}</small>}
-                  </span>
-                  <span className="mars-model-option-check">
-                    <DropdownMenu.ItemIndicator>
-                      <Check aria-hidden="true" size={16} />
-                    </DropdownMenu.ItemIndicator>
-                  </span>
-                </DropdownMenu.RadioItem>
-              ))}
-            </DropdownMenu.RadioGroup>
-          ) : (
-            <DropdownMenu.Item disabled className="mars-model-option">
-              No models available
-            </DropdownMenu.Item>
-          )}
+          {/* Only the model list scrolls, so Effort stays in view below a long list. */}
+          <div className="mars-model-list">
+            {models.length ? (
+              <DropdownMenu.RadioGroup value={value} onValueChange={onChange}>
+                {models.map((model) => (
+                  <DropdownMenu.RadioItem
+                    key={model.id}
+                    value={model.id}
+                    aria-label={model.name}
+                    className="mars-model-option"
+                  >
+                    <ProviderMark provider={model.provider} className="mars-model-option-mark" />
+                    <span className="mars-model-option-text">
+                      {model.name}
+                      {describe(model) && <small>{describe(model)}</small>}
+                    </span>
+                    <span className="mars-model-option-check">
+                      <DropdownMenu.ItemIndicator>
+                        <Check aria-hidden="true" size={16} />
+                      </DropdownMenu.ItemIndicator>
+                    </span>
+                  </DropdownMenu.RadioItem>
+                ))}
+              </DropdownMenu.RadioGroup>
+            ) : (
+              <DropdownMenu.Item disabled className="mars-model-option">
+                No models available
+              </DropdownMenu.Item>
+            )}
+          </div>
           {levels.length > 0 && (
             <>
               <DropdownMenu.Separator className="mars-model-separator" />

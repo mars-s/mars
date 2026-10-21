@@ -568,8 +568,15 @@ const server = http.createServer(async (req, res) => {
       const provider = selection.provider || data.provider;
       const modelId = selection.modelId || data.modelId;
       if ((provider || modelId) && (!provider || !modelId || !models.getModel(provider, modelId))) throw Error("Unknown model");
-      const conversation = await conversations.create({ ...data, ...selection });
+      // A new chat keeps the effort the owner last chose, clamped to what its model supports.
+      const thinking = typeof data.thinking === "string" && data.thinking
+        ? clampThinkingLevel(models.getModel(provider || "openai", modelId || "gpt-6-luna") ?? {}, data.thinking)
+        : undefined;
+      const conversation = await conversations.create({ ...data, ...selection, thinking });
       send(res, 201, { conversation: { id: String(conversation.id), title: data.title || (data.parentId ? "Side chat" : "New conversation"), ...(data.parentId ? { parentId: String(data.parentId) } : {}) } }); return;
+    }
+    if (url.pathname === "/api/conversations/organise" && req.method === "POST") {
+      send(res, 200, { conversation: await conversations.organise(await jsonBody(req)) }); return;
     }
     if (url.pathname === "/api/conversations/fork" && req.method === "POST") {
       const conversation = await conversations.fork(await jsonBody(req));
@@ -700,6 +707,8 @@ const server = http.createServer(async (req, res) => {
         { type: "input", content: prepared.content, entry: { kind: "mars.user", data: { attachments: prepared.attachments } }, requestId: data.requestId || randomUUID() },
         context,
       );
+      // Naming is a convenience: a failure here must not hide the accepted message.
+      await conversations.autoTitle(conversation, data.text).catch((error) => console.warn("Mars auto-title:", error.message));
       send(res, 202, { submissionId: submission.id });
       return;
     }
