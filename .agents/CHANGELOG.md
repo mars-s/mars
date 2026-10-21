@@ -261,3 +261,7 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 ## 2026-10-21 Browser in /design-system
 
 - The `/design-system` pane picker gains Browser (address bar and empty state; the loaded page is shown by `workbench-browser-check` screenshots, because frame navigation cannot be answered in-page). The empty state is centred at 360px with a styled `kbd`. Impeccable detector on changed workbench files: no findings.
+
+## 2026-10-21 Workbench verification notes
+
+- `.agents/verification.md` lists the workbench gate, the host checks and what they do not prove.
