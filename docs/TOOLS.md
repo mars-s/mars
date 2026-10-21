@@ -80,7 +80,8 @@ use it for any task of three or more steps.
 
 - Each call sends the **whole** list, `[{ step, status }]`, status `pending`,
   `in_progress` or `completed`, at most 20 steps of up to 200 characters. At most one
-  step is `in_progress`.
+  step is `in_progress`. Steps are trimmed before validation, so a blank step is
+  refused.
 - The plan is stored in a native per-conversation document (`mars.plan`), so it
   survives a restart, and the latest plan shows in `/api/state` as `plan`.
 - `{ steps: [] }` clears it. It returns `{ steps, done, total, next }`, where `next` is

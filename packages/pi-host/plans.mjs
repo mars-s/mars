@@ -31,7 +31,7 @@ export function preparePlan(args) {
       const step = item.step ?? item.text ?? item.title ?? item.content;
       const raw = typeof item.status === 'string' ? item.status.trim().toLowerCase() : item.status;
       return { step, status: ALIASES[raw] ?? raw ?? 'pending' };
-    }),
+    }).map((item) => (item && typeof item.step === 'string' ? { ...item, step: item.step.trim() } : item)),
   };
 }
 
@@ -65,7 +65,8 @@ Example: await tools.plan_update({ steps: [{ step: "Find the video in the PR", s
         execute: async (args, api, ctx) => {
           if (args.steps.filter((step) => step.status === 'in_progress').length > 1)
             throw Error('Only one step can be "in_progress" at a time. Mark the others "pending" or "completed".');
-          const steps = args.steps.map(({ step, status }) => ({ step: step.trim(), status }));
+          // preparePlan trimmed each step before validation, so a blank step was already refused.
+          const steps = args.steps.map(({ step, status }) => ({ step, status }));
           await api.commit(async (tx) => {
             (await tx.doc(PlanDoc, api.conversationId)).steps = steps;
           }, ctx);

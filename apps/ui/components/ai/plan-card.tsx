@@ -3,6 +3,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type { Plan } from "@/lib/pi/live-state";
+import "./plan-card.css";
 
 /**
  * The agent's checklist (docs/TOOLS.md "plan_update"), shown above the run status: an

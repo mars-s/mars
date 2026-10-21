@@ -10,7 +10,7 @@ import { AssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { Harness, LiveDoc, createRegistry } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { createConversationManager } from './conversations.mjs';
-import { SIDE_CHAT_MAX, SIDE_CHAT_PAGE, SideChatDoc, SideChatIndexDoc, createSideChatExtension, listSideChats } from './side-chats.mjs';
+import { SIDE_CHAT_MAX, SIDE_CHAT_PAGE, SideChatDoc, SideChatIndexDoc, createSideChat, createSideChatExtension, listSideChats } from './side-chats.mjs';
 
 const seen = [];
 const models = {
@@ -127,6 +127,15 @@ try {
   const forked = await manager.fork({ conversationId: String(busy.id), entryId: wrote.entry, title: 'Fork of busy' });
   assert.deepEqual((await manager.list()).find((row) => row.id === String(forked.id)).sideChats, [], 'a fork starts with no side chats');
 
+  // A replay after a stop between the creating commit and the memo reuses the same side chat.
+  const keyed = await manager.create({ title: 'Keyed parent' });
+  const once = await createSideChat({ harness, parentId: String(keyed.id), agent, title: 'Once', context, requestKey: 'task-1:call-1' });
+  const again = await createSideChat({ harness, parentId: String(keyed.id), agent, title: 'Once', context, requestKey: 'task-1:call-1' });
+  assert.equal(String(again.id), String(once.id), 'the same request key returns the side chat it already made');
+  assert.deepEqual((await harness.snapshot(SideChatIndexDoc, keyed.id, context)).children, [String(once.id)], 'and no second side chat exists');
+  const other = await createSideChat({ harness, parentId: String(keyed.id), agent, title: 'Other', context, requestKey: 'task-1:call-2' });
+  assert.notEqual(String(other.id), String(once.id), 'a different call makes a new side chat');
+
   // The cap: a flood stops at SIDE_CHAT_MAX with a clear refusal.
   const flood = await manager.create({ title: 'Flooded' });
   for (let n = 0; n < SIDE_CHAT_MAX; n++) await manager.create({ parentId: String(flood.id) });
@@ -136,7 +145,7 @@ try {
   assert.ok(Date.now() - started < 1500, `Recents stays fast with ${SIDE_CHAT_MAX + SIDE_CHAT_PAGE + 10} side chats (${Date.now() - started} ms)`);
   const live = await harness.snapshot(LiveDoc, research.id, context);
   assert.equal(live?.run, undefined);
-  console.log('PASS side chats: native parent link, nested rows only, selectedThread parent, refusals leave no orphan, agent open with first task, list with total, send, cross-conversation refusal, one level only, read-only listing, newest page plus total, offset paging, exact index, forks start empty, 200 cap, fast Recents');
+  console.log('PASS side chats: native parent link, nested rows only, selectedThread parent, refusals leave no orphan, agent open with first task, list with total, send, cross-conversation refusal, one level only, replay by request key, read-only listing, newest page plus total, offset paging, exact index, forks start empty, 200 cap, fast Recents');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

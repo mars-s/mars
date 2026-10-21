@@ -33,7 +33,8 @@ const registry = createRegistry();
 registry.install(extension);
 const dir = await mkdtemp(join(tmpdir(), 'mars-plans-'));
 const storage = await openNodeSqliteStorage(join(dir, 'test.sqlite'));
-const harness = await Harness.open(storage, { models, registry, settings: { retry: { maxRetries: 0 } } }, context);
+const options = { models, registry, settings: { retry: { maxRetries: 0 } } };
+let harness = await Harness.open(storage, options, context);
 const root = await harness.root(context, { agent: { model: { provider: 'openai', modelId: 'fake' }, modelTools: extension.tools } });
 const say = async (args) => (await root.submit({ type: 'input', content: `CALL plan_update ${JSON.stringify(args)}` }, context)).wait(context);
 const lastResult = async () => {
@@ -83,8 +84,15 @@ try {
   assert.ok(accepts({ steps: [{ text: 'a', status: 'Doing' }] }), 'text for step and "Doing" are accepted');
   assert.ok(accepts({ plan: [{ title: 'a', status: 'complete' }] }), 'plan and title are accepted');
   assert.ok(!accepts({ steps: [{ step: 'a', status: 'maybe' }] }), 'an unknown status is still refused');
+  assert.ok(!accepts({ steps: ['   '] }), 'a blank step is refused, not saved as an empty line');
+  assert.deepEqual(preparePlan({ steps: ['  Run the tests  '] }).steps, [{ step: 'Run the tests', status: 'pending' }], 'steps are trimmed before validation');
   assert.ok(!accepts({ steps: Array.from({ length: PLAN_LIMIT + 1 }, (_, n) => `step ${n}`) }), `more than ${PLAN_LIMIT} steps is refused`);
-  console.log('PASS plans: written by the agent through a real harness, read back for /api/state, progress replaces the list, one step in progress at a time, done and cleared, forgiving input with unknown status and over-long plans still refused');
+  // The plan is in Pi's store, so it is still there after the host closes and reopens.
+  await say({ steps: [{ step: 'Survive a restart', status: 'in_progress' }] });
+  await harness.close(context);
+  harness = await Harness.open(await openNodeSqliteStorage(join(dir, 'test.sqlite')), options, context);
+  assert.deepEqual((await readPlan(harness, root.id, context)).steps, [{ step: 'Survive a restart', status: 'in_progress' }], 'the plan survives a close and reopen');
+  console.log('PASS plans: survives a restart, blank steps refused, written by the agent through a real harness, read back for /api/state, progress replaces the list, one step in progress at a time, done and cleared, forgiving input with unknown status and over-long plans still refused');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

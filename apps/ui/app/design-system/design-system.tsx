@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MarsMark } from "@/components/mars-mark";
+import { PlanCard } from "@/components/ai/plan-card";
 import { ComponentGallery } from "./component-gallery";
 import { WorkbenchSpecimen } from "./workbench-specimen";
 import "./design-system.css";
@@ -255,6 +256,33 @@ export function DesignSystem() {
                 <button type="button" className="ds-icon-btn" aria-label="Retry"><RotateCcw size={15} /></button>
               </div>
             </div>
+          </div>
+        </Section>
+
+        <Section title="Plan" note="The agent's own checklist from plan_update, pinned above the run status. Dashed circle to do, spinner in progress, tick done. A finished plan collapses to its count.">
+          <div className="ds-thread">
+            <PlanCard
+              plan={{
+                steps: [
+                  { step: "Find the video in the GitHub PR", status: "completed" },
+                  { step: "Work out a CDN URL that serves it", status: "in_progress" },
+                  { step: "Add Video.js player to the page", status: "pending" },
+                  { step: "Check it plays in the browser", status: "pending" },
+                ],
+                done: 1,
+                total: 4,
+              }}
+            />
+            <PlanCard
+              plan={{
+                steps: [
+                  { step: "Read the deploy script", status: "completed" },
+                  { step: "Patch the lock check", status: "completed" },
+                ],
+                done: 2,
+                total: 2,
+              }}
+            />
           </div>
         </Section>
 

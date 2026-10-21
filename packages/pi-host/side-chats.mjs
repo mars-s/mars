@@ -10,8 +10,10 @@ import { nativeTitleDoc } from './orchestration.mjs';
 
 // A fork of a side chat is a new top-level conversation: it is not in the parent's index.
 export const SideChatDoc = defineDoc({ kind: 'mars.side-chat', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ parentId: '' }) });
-// Child ids, newest last. A fork of a parent starts with no side chats of its own.
-export const SideChatIndexDoc = defineDoc({ kind: 'mars.side-chat-index', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ children: [] }) });
+// Child ids, newest last, plus `requests`: agent request key -> child id, so a replayed
+// side_chat_open finds the side chat it made even if the host stopped before the memo.
+// A fork of a parent starts with no side chats of its own.
+export const SideChatIndexDoc = defineDoc({ kind: 'mars.side-chat-index', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ children: [], requests: {} }) });
 /** Rows shown under a parent at once; older ones are counted, and paged by side_chat_list. */
 export const SIDE_CHAT_PAGE = 20;
 /** Hard cap per parent: beyond this, opening another is refused (prompt-injection floods). */
@@ -55,20 +57,25 @@ async function checkParentInTx(tx, parentId) {
  * Create a side chat of `parentId` in one commit: the conversation, its agent settings,
  * its title, its link to the parent and the parent's index entry. The parent is checked
  * inside the same commit, so it cannot become a side chat in between.
+ * With `requestKey`, a second call with the same key returns the first side chat's id.
+ * Returns `{ id }`.
  */
-export async function createSideChat({ harness, parentId, agent, title, context }) {
+export async function createSideChat({ harness, parentId, agent, title, context, requestKey }) {
   const parentConversation = await harness.conversation(nativeId(parentId), context);
   if (!parentConversation) throw fail('Parent conversation not found', 404);
   return parentConversation.commit(async (tx) => {
     const parent = await checkParentInTx(tx, parentId);
     const index = await tx.doc(SideChatIndexDoc, parent.id);
+    index.requests ??= {};
+    if (requestKey && index.requests[requestKey]) return { id: index.requests[requestKey] };
     if (index.children.length >= SIDE_CHAT_MAX) throw fail(`This conversation already has ${SIDE_CHAT_MAX} side chats.`, 409);
     const child = await tx.createConversation({ ownership: { kind: 'ownerless' } });
     await configure(tx, child.id, agent);
     (await tx.doc(nativeTitleDoc, child.id)).title = (title?.trim() || 'Side chat').slice(0, 160);
     (await tx.doc(SideChatDoc, child.id)).parentId = String(parent.id);
     index.children.push(String(child.id));
-    return child;
+    if (requestKey) index.requests[requestKey] = String(child.id);
+    return { id: child.id };
   }, context);
 }
 
@@ -109,12 +116,14 @@ Example: await tools.side_chat_open({ title: "Release names", task: "Suggest thr
         }),
         async (args, api, ctx) => {
           const title = (args.title?.trim() || 'Side chat').slice(0, 160);
-          // A replayed call reuses the side chat it already created: creation is one commit,
-          // and its id is memoised before anything else can happen.
+          // A replayed call reuses the side chat it already created. Creation is one commit
+          // that also records this call's key in the parent's index, so even a stop between
+          // that commit and the memo finds the same side chat instead of making a second.
           let id = await api.memo('side-chat', ctx);
           if (id === undefined) {
             const agent = await api.agent(ctx);
-            const child = await createSideChat({ harness: getHarness(), parentId: String(api.conversationId), agent: { ...defaultAgent, model: agent.model }, title, context: ctx });
+            const requestKey = `${api.taskId}:${api.callId}`;
+            const child = await createSideChat({ harness: getHarness(), parentId: String(api.conversationId), agent: { ...defaultAgent, model: agent.model }, title, context: ctx, requestKey });
             id = await api.memo('side-chat', String(child.id), ctx);
           }
           if (args.task) {

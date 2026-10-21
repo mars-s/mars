@@ -266,7 +266,9 @@ Agent tools (deferred, discovered on demand like the worker tools):
 
 - `side_chat_open { title?, task? }`: opens a side chat of the calling conversation,
   optionally sends `task` as its first message, and returns `{ id, title }`. It does not
-  wait for an answer.
+  wait for an answer. A replayed call returns the same side chat: the creating commit
+  also stores the call's key in the parent's index (`requests`), so a stop between that
+  commit and the tool memo cannot make a second one.
 - `side_chat_list { offset? }`: the calling conversation's side chats,
   `{ items: [{ id, title, running }], total }`, newest first, 20 per page.
 - `side_chat_send { sideChatId, text }`: sends text to one of the caller's own side
