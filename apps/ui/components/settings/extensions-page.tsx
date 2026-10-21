@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { record, type LiveSnapshot } from "@/lib/pi/live-state";
 import { PluginManager } from "@/components/settings/plugin-manager";
+import { SkillsSection } from "@/components/settings/skills-section";
 import { useWorkspace } from "@/components/workspace-context";
 import "./extensions.css";
 
@@ -61,6 +62,7 @@ export function ExtensionsPage() {
           );
         }}
       />
+      <SkillsSection />
     </div>
   );
 }

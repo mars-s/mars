@@ -49,6 +49,9 @@ For any task of three or more steps, first decide who does the steps:
 | You want to | Use |
 | --- | --- |
 | Show the owner your steps and tick them off | `plan_update` |
+| Follow one of the owner's skills, or /name | `skill_read` (`skill_list` to search) |
+| Save how to do something for next time | `skill_create` |
+| Add skills from a repo, e.g. "npx skills add owner/repo" | `skill_install` |
 | Run a command, install, test, use git | `host_exec` (`bash` for quick ones) |
 | Read the rest of a long output | `artefact_read`, `artefact_search` |
 | Get one answer from another model and wait | `worker_run` |

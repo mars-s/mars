@@ -366,3 +366,10 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - Run progress (side chat agent): `.live-run-progress-inner > div` was capped at 520px inside the 768px column; it now spans the column like the composer (edges equal at 1440 and 1920). The header timer and step count no longer wrap.
 - Checks: `check-queue.mjs` on a real harness with a gated model (queue default, remove, steer reaches the running reply right after its tool, queued message runs after, removed never sent, Stop keeps the queue); `tests/queue-ui-check.mjs` in the browser. Gate: host 36/36, UI unit 81/81, browser checks pass, build passes.
 
+
+## 2026-10-21 Skills
+
+- Owner request: use their day-to-day skills (pstack, mattpocock/skills, impeccable, taste-skill, emilkowalski/skill) and let Mars add Markdown skills to itself.
+- `skills.mjs` (docs/SKILLS.md): reads SKILL.md folders from Mars's own `workspace/skills`, `MARS_SKILL_DIRS`, `~/.agents/skills` and `~/.claude/skills` (first wins). A bounded prompt section lists names and short descriptions and tells the agent to read a matching skill first and to treat `/name` as a request for it. Tools `skill_list`, `skill_read` (SKILL.md plus files, escapes refused), `skill_create` (own folder only) and `skill_install` (owner/repo, GitHub or git URL, local folder). GET /api/skills; the Extensions page lists skills with search.
+- Checks: `check-skills.mjs` (temporary folders and a local git repo, no network); tool quality passes for all 41 Mars tools; `tests/skills-ui-check.mjs`.
+

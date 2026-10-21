@@ -24,6 +24,7 @@ export function createDiscovery() {
       { name: 'uiPatches', prefix: 'ui_patch_', description: 'Change the Mars interface safely: stage, validate, promote or roll back.' },
       { name: 'discord', prefix: 'discord_', description: "Read the owner's connected Discord server (read-only)." },
       { name: 'plugins', prefix: 'plugin_', description: 'See and switch plugins and their tools on or off.' },
+      { name: 'skills', prefix: 'skill_', description: "Find, read, write and install the owner's Markdown skills (saved instructions for kinds of work)." },
     ],
   });
   const codemode = nativeCode.tools.find(t => t.name === 'codemode');

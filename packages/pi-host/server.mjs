@@ -17,6 +17,7 @@ import { abortKeepingQueue, removeQueued, steerQueued, whenBusy } from "./queue.
 import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
+import { createSkills, createSkillsExtension, skillRoots } from "./skills.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -136,6 +137,8 @@ registry.install(createSideChatExtension({
 registry.install(createWorkspaceFilesExtension({ files: () => late.workbenchTools.files }));
 registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
+const skills = createSkills({ roots: skillRoots({ work: WORK }) });
+registry.install(createSkillsExtension({ skills }));
 const extensions = new ExtensionStore(registry);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();
@@ -521,6 +524,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (await workbench.handle(req, res, url)) return;
+    if (url.pathname === "/api/skills" && req.method === "GET") {
+      send(res, 200, await skills.list(url.searchParams.get("query") || "")); return;
+    }
     if (url.pathname === "/api/plugins" && req.method === "GET") {
       send(res, 200, { plugins: plugins.list() }); return;
     }
