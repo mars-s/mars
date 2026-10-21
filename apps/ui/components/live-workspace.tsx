@@ -318,10 +318,14 @@ export function LiveWorkspace() {
         ? snapshot.model.split("/")
         : ["openai", snapshot?.model ?? ""];
       const modelId = modelParts.join("/");
-      // The new chat starts on the current model and effort; the host clamps the effort.
+      // With a default model set in Settings, the host starts the chat on it; otherwise the new
+      // chat copies the current model and effort (the host clamps the effort).
       const thinking = snapshot?.thinkingLevel || undefined;
       const created = parseCreatedConversation(
-        await action("/api/conversations", modelId ? { provider, modelId, thinking } : { thinking }),
+        await action(
+          "/api/conversations",
+          snapshot?.modelSettings.defaultModel ? {} : modelId ? { provider, modelId, thinking } : { thinking },
+        ),
       );
       setConversations((rows) =>
         rows.some((row) => row.id === created.id) ? rows : [...rows, created],

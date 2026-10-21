@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, LayoutGrid, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
+import { Check, Cpu, LayoutGrid, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectionSettings } from "@/components/settings/connection-settings";
+import { ModelSettingsPanel } from "@/components/settings/model-settings";
 import { ThemeSettings } from "@/components/settings/theme-settings";
 import { useWorkspace } from "@/components/workspace-context";
 import type { LoginState } from "@/lib/pi/live-state";
@@ -14,6 +15,7 @@ import "./settings.css";
 
 const sections: { id: string; label: string; icon: LucideIcon; summary: string }[] = [
   { id: "account", label: "Account", icon: UserRound, summary: "Model accounts Pi signs in to on the host." },
+  { id: "models", label: "Models", icon: Cpu, summary: "Which models new chats and background work use." },
   { id: "appearance", label: "Appearance", icon: Palette, summary: "How Mars looks on this device." },
   { id: "connection", label: "Connection", icon: Server, summary: "The Pi host this workspace talks to." },
   { id: "apps", label: "Apps", icon: LayoutGrid, summary: "Private connections Pi can use." },
@@ -197,6 +199,9 @@ export function SettingsDialog() {
                   auth={provider.name === "Claude" ? snapshot?.anthropicAuth : snapshot?.auth}
                 />
               ))}
+            </Section>
+            <Section id="models">
+              <ModelSettingsPanel />
             </Section>
             <Section id="appearance">
               <ThemeSettings />

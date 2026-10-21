@@ -17,6 +17,7 @@ export function convertMessage(message: LiveMessage): ThreadMessageLike {
     metadata: {
       custom: {
         tools: message.tools,
+        summary: message.summary,
         outcome: message.outcome,
         images: message.images,
       },
@@ -112,10 +113,11 @@ export function AssistantMessage() {
   const isLast = useAuiState((state) => state.message.isLast);
   const raw = useAuiState((state) => state.message.metadata.custom?.tools);
   const outcome = useAuiState((state) => state.message.metadata.custom?.outcome);
+  const summary = useAuiState((state) => state.message.metadata.custom?.summary);
   const tools = Array.isArray(raw) ? raw.map(record) : [];
   return (
     <MessagePrimitive.Root className={`live-message live-assistant${isLast ? " is-last" : ""}`}>
-      <ActivityTimeline tools={tools} />
+      <ActivityTimeline tools={tools} summary={typeof summary === "string" ? summary : undefined} />
       <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
       {outcome === "error" && (
         <p className="live-outcome" role="status">

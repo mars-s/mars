@@ -147,7 +147,7 @@ function ToolRow({ view }: { view: ToolView }) {
   );
 }
 
-export function ActivityTimeline({ tools }: { tools: readonly unknown[] }) {
+export function ActivityTimeline({ tools, summary }: { tools: readonly unknown[]; summary?: string }) {
   const views = toolViews(tools);
   if (!views.length) return null;
   const failed = views.filter((view) => view.status === "failed").length;
@@ -162,11 +162,12 @@ export function ActivityTimeline({ tools }: { tools: readonly unknown[] }) {
             {active.detail ? `${active.activeTitle} ${active.detail}` : active.activeTitle}
           </TextShimmer>
         ) : (
-          <span className="live-activity-title">{summarise(views)}</span>
+          <span className="live-activity-title">{summary || summarise(views)}</span>
         )}
         <ChevronRight size={14} className="live-chevron" aria-hidden />
         <small>
-          {mixed && <span>{actionCount(views.length)}</span>}
+          {/* With a written summary, the counts move here so nothing is lost. */}
+          {summary && !active ? <span>{summarise(views)}</span> : mixed && <span>{actionCount(views.length)}</span>}
           {failed > 0 && <span className="live-activity-failed">{failed} failed</span>}
         </small>
       </summary>

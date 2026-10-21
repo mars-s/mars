@@ -20,6 +20,7 @@ import { createPlanExtension, readPlan } from "./plans.mjs";
 import { createSkills, createSkillsExtension, skillRoots } from "./skills.mjs";
 import { createProjectExtension, createProjects } from "./project.mjs";
 import { createMemory, createMemoryExtension } from "./memory.mjs";
+import { createBackground, createBackgroundExtension, createModelSettings, readSummaries } from "./model-settings.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -143,6 +144,16 @@ const skills = createSkills({ roots: skillRoots({ work: WORK }) });
 registry.install(createSkillsExtension({ skills }));
 registry.install(createProjectExtension({ projects: createProjects({ harness: () => late.harness, work: WORK, context }) }));
 registry.install(createMemoryExtension({ memory: createMemory({ work: WORK }) }));
+const resolveModel = (id) => {
+  try {
+    const { provider, modelId } = modelSelection(id);
+    return models.getModel(provider, modelId);
+  } catch {
+    return undefined;
+  }
+};
+const modelSettings = createModelSettings({ file: ROOT + "/data/model-settings.json", resolve: resolveModel });
+registry.install(createBackgroundExtension({ background: createBackground({ harness: () => late.harness, models, settings: modelSettings, resolve: resolveModel }) }));
 const extensions = new ExtensionStore(registry);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();
@@ -528,6 +539,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (await workbench.handle(req, res, url)) return;
+    if (url.pathname === "/api/settings/models" && req.method === "GET") {
+      send(res, 200, await modelSettings.get()); return;
+    }
+    if (url.pathname === "/api/settings/models" && req.method === "POST") {
+      send(res, 200, await modelSettings.set(await jsonBody(req))); return;
+    }
     if (url.pathname === "/api/skills" && req.method === "GET") {
       send(res, 200, await skills.list(url.searchParams.get("query") || "")); return;
     }
@@ -575,13 +592,17 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/api/conversations" && req.method === "POST") {
       const data = await jsonBody(req);
-      const selection = data.model ? modelSelection(data.model) : {};
+      // Without an explicit model a new chat starts on the owner's default model and effort.
+      const preferred = await modelSettings.get();
+      const chosen = data.model || (!data.provider && !data.modelId && !data.parentId ? preferred.defaultModel : "");
+      const selection = chosen ? modelSelection(chosen) : {};
       const provider = selection.provider || data.provider;
       const modelId = selection.modelId || data.modelId;
       if ((provider || modelId) && (!provider || !modelId || !models.getModel(provider, modelId))) throw Error("Unknown model");
-      // A new chat keeps the effort the owner last chose, clamped to what its model supports.
-      const thinking = typeof data.thinking === "string" && data.thinking
-        ? clampThinkingLevel(models.getModel(provider || "openai", modelId || "gpt-6-luna") ?? {}, data.thinking)
+      // The effort asked for, or the default effort, clamped to what the model supports.
+      const effort = typeof data.thinking === "string" && data.thinking ? data.thinking : !data.parentId ? preferred.defaultEffort : "";
+      const thinking = effort
+        ? clampThinkingLevel(models.getModel(provider || "openai", modelId || "gpt-6-luna") ?? {}, effort)
         : undefined;
       const conversation = await conversations.create({ ...data, ...selection, thinking });
       send(res, 201, { conversation: { id: String(conversation.id), title: data.title || (data.parentId ? "Side chat" : "New conversation"), ...(data.parentId ? { parentId: String(data.parentId) } : {}) } }); return;
@@ -624,6 +645,8 @@ const server = http.createServer(async (req, res) => {
         ...thread,
         subthreads: subthreads.filter(thread => !thread.workflowId),
         plan: await readPlan(harness, conversation.id, context),
+        summaries: await readSummaries(harness, conversation.id, context),
+        modelSettings: await modelSettings.get(),
         workflows: await listWorkflows({ harness, conversationId: conversation.id, context }),
         providerQueue: budget.status(),
         pid: process.pid,

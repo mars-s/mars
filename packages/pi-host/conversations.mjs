@@ -135,7 +135,12 @@ export function createConversationManager({ harness, root, context, defaultAgent
       if (archived !== undefined && typeof archived !== 'boolean') throw fail('archived must be true or false');
       if (label === undefined && group === undefined && archived === undefined) throw fail('Nothing to change: give title, group or archived');
       await conversation.commit(async tx => {
-        if (label !== undefined) (await tx.doc(TitleDoc, conversation.id)).title = oneLine(label, 160);
+        if (label !== undefined) {
+          // The owner's own name: the background model never replaces it.
+          const doc = await tx.doc(TitleDoc, conversation.id);
+          doc.title = oneLine(label, 160);
+          doc.auto = false;
+        }
         if (group !== undefined || archived !== undefined) {
           const filed = await tx.doc(OrganiseDoc, conversation.id);
           if (group !== undefined) filed.group = oneLine(group, GROUP_MAX);
@@ -154,7 +159,11 @@ export function createConversationManager({ harness, root, context, defaultAgent
       if (record.owner || (await harness.snapshot(TitleDoc, conversation.id, context))?.title) return;
       await conversation.commit(async tx => {
         const doc = await tx.doc(TitleDoc, conversation.id);
-        if (!doc.title) doc.title = label;
+        if (!doc.title) {
+          doc.title = label;
+          // An automatic name: the background model may improve it once (model-settings.mjs).
+          doc.auto = true;
+        }
       }, context);
     },
     async fork({ conversationId, entryId, title: label }) {

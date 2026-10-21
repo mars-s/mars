@@ -466,3 +466,19 @@ test("a side chat's finished note shows as a short line, not as the owner speaki
   );
   assert.deepEqual(state.messages.map((m) => [m.role, m.text]), [["user", "Start research"], ["assistant", "Side chat “Research” finished."]]);
 });
+
+test("background summaries attach to the activity group they were written for", () => {
+  const source = snapshot([
+    { id: 1, model: [{ role: "user", content: "go" }] },
+    { id: 2, model: [{ role: "assistant", content: [{ type: "text", text: "Looking." }, { type: "toolCall", id: "a", name: "bash", arguments: {} }] }] },
+    { id: 3, model: [{ role: "assistant", content: [{ type: "toolCall", id: "b", name: "bash", arguments: {} }] }] },
+    { id: 4, model: [{ role: "assistant", content: [{ type: "toolCall", id: "c", name: "bash", arguments: {} }] }] },
+    { id: 5, model: [{ role: "assistant", content: [{ type: "text", text: "Done." }] }] },
+  ]);
+  // The host keys summaries the same way (packages/pi-host/model-settings.mjs activityGroups).
+  source.summaries = { "3:0": "Ran the checks", "1:0": "ignored: not a tool group", "2:0": 7 };
+  source.modelSettings = { defaultModel: "anthropic/claude-opus-5-5", defaultEffort: "high", backgroundModel: "" };
+  const state = parseSnapshot(source);
+  assert.deepEqual(state.messages.map((m) => [m.id, m.summary ?? ""]), [["1:0", ""], ["2:0", ""], ["3:0", "Ran the checks"]]);
+  assert.deepEqual(state.modelSettings, { defaultModel: "anthropic/claude-opus-5-5", defaultEffort: "high", backgroundModel: "" });
+});

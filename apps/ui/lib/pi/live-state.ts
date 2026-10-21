@@ -75,6 +75,8 @@ export type LiveMessage = {
   role: "user" | "assistant";
   text: string;
   tools: ToolActivity[];
+  /** The background model's one-line summary of this message's run of tool steps, if any. */
+  summary?: string;
   images?: ImageReceipt[];
   running: boolean;
   outcome?: "error" | "cancelled";
@@ -200,7 +202,14 @@ export function parseQueue(value: unknown): QueuedMessage[] {
       ];
     });
 }
+/** The owner's model choices (docs/MODELS.md); each "" when unset. */
+export type ModelSettings = { defaultModel: string; defaultEffort: string; backgroundModel: string };
+export function parseModelSettings(value: unknown): ModelSettings {
+  const data = record(value);
+  return { defaultModel: string(data.defaultModel), defaultEffort: string(data.defaultEffort), backgroundModel: string(data.backgroundModel) };
+}
 export type LiveSnapshot = {
+  modelSettings: ModelSettings;
   /** Messages waiting for the running reply, oldest first. */
   queue: QueuedMessage[];
   context: ContextUsage;
@@ -531,6 +540,12 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
       tools: liveTools,
       running: true,
     });
+  // Background summaries are keyed by the activity group's message id.
+  const summaries = record(data.summaries);
+  for (const message of messages) {
+    const summary = summaries[message.id];
+    if (message.tools.length && typeof summary === "string" && summary.trim()) message.summary = summary.trim().slice(0, 120);
+  }
   const selectedModel = record(record(docs["pi.agent"]).model);
   const provider = string(selectedModel.provider);
   return {
@@ -538,6 +553,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
     sideChatOf: identifier(data.sideChatOf),
     plan: parsePlan(data.plan),
     queue: parseQueue(docs["pi.inbox"]),
+    modelSettings: parseModelSettings(data.modelSettings),
     conversationTitle: string(data.conversationTitle),
     subthreads: list(data.subthreads)
       .map(record)

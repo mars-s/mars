@@ -393,3 +393,11 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 
 - Overnight helpers on Opus with high effort stopped after one step: every response ran into the 8,192-token output cap while thinking (thinking counts), so nothing was written. Default `models.maxOutputTokens` is now 32,000, and the budget never asks a model for more than its own `maxTokens`. `check-model-budget.mjs` covers the model limit; `check-config.mjs` the new default.
 
+
+## 2026-10-22 Default model, background model, run summaries
+
+- `model-settings.mjs` (docs/MODELS.md): Settings, Models stores a default model and effort for new chats and an optional background model. New chat sends no model when a default is set; the host applies it and clamps the effort.
+- The background model, after a final answer in a non-helper chat, replaces an automatic title once (never an owner rename; titles now carry `auto`) and writes one-line summaries for long runs of tool steps into `mars.activity-summaries`, keyed by the UI's activity group id. It sees only the first message and reply for titles, and tool names with shortened arguments for summaries, never output. Failures change nothing.
+- UI: Models tab in Settings; the activity group shows the summary with the counts beside it.
+- Checks: `check-background.mjs` (real harness with scripted main and background models), live-state unit tests for summary keys and settings, `tests/model-settings-ui-check.mjs`.
+

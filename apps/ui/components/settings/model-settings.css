@@ -1,0 +1,43 @@
+/* Models settings (components/settings/model-settings.tsx). */
+.live-model-settings {
+  display: grid;
+  gap: 20px;
+}
+.live-model-setting {
+  display: grid;
+  gap: 6px;
+}
+.live-model-setting label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.live-model-setting p {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.live-model-setting select {
+  height: 36px;
+  max-width: 360px;
+  margin-top: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--text);
+  font-size: 14px;
+}
+.live-model-setting select:hover:not(:disabled) {
+  border-color: var(--input);
+}
+.live-model-setting select:disabled {
+  opacity: 0.6;
+}
+@media (pointer: coarse) {
+  .live-model-setting select {
+    height: 44px;
+  }
+}
