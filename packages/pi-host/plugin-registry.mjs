@@ -97,5 +97,7 @@ export async function createPluginRegistry({ root }) {
       return result;
     },
     isUiEnabled(name) { const extension = definitions.get(name); return !!extension && row(extension).uiEnabled; },
+    /** Every installed tool definition, exposure switches ignored: for the tool-quality check. */
+    definitions() { return [...definitions.values()].flatMap(extension => (extension.tools || []).map(tool => ({ extension: extension.name, tool }))); },
   };
 }

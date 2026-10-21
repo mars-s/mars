@@ -29,4 +29,12 @@ export default [
     rules: { "shadcn/no-arbitrary-values": "off" },
     linterOptions: { reportUnusedDisableDirectives: "off" },
   },
+  {
+    // Vendored registry source keeps its upstream geometry. scripts/theme-vendor.mjs
+    // maps its palette to Mars tokens; agent-elements declares its an-* colours in
+    // agent-ui.css, which this rule cannot see.
+    files: ["components/vendor/**/*.{ts,tsx}"],
+    rules: { "shadcn/no-arbitrary-values": "off", "shadcn/no-raw-colors": "off" },
+    linterOptions: { reportUnusedDisableDirectives: "off" },
+  },
 ];

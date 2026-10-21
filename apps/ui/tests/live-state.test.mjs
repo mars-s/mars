@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseSnapshot } from "../lib/pi/live-state.ts";
+import { parseConversations, parsePlan, parseSnapshot } from "../lib/pi/live-state.ts";
 
 test("Claude connection and model namespace stay distinct without projecting credentials", () => {
   const source = snapshot([]);
@@ -339,4 +339,80 @@ test("codemode history and live nested calls retain real action outcomes", () =>
   assert.equal(state.messages[0].tools[0].children[1].output, "Failed");
   assert.equal(state.messages[1].tools[0].name, "host_write");
   assert.equal(state.messages[1].tools[0].state, "running");
+});
+
+test("context usage passes through Pi numbers and never invents a window", () => {
+  const missing = parseSnapshot(snapshot([]));
+  assert.deepEqual(missing.context, { basis: "unavailable" });
+  const source = snapshot([]);
+  source.context = {
+    basis: "reported",
+    limit: 200000,
+    used: 52000,
+    compactAt: 0.918,
+    autoCompact: true,
+    segments: [
+      { id: "instructions", label: "Instructions", tokens: 6000 },
+      { id: "messages", label: "Messages", tokens: 46000 },
+    ],
+  };
+  const state = parseSnapshot(source);
+  assert.equal(state.context.basis, "reported");
+  assert.equal(state.context.used, 52000);
+  assert.equal(state.context.segments.length, 2);
+  source.context = { basis: "reported", limit: 0, used: 10 };
+  assert.deepEqual(parseSnapshot(source).context, { basis: "unavailable" });
+});
+
+test("models carry provider and Pi effort levels in order; unknown levels are dropped", () => {
+  const source = snapshot([]);
+  source.models = [
+    { id: "gpt-6-sol", name: "Sol", provider: "openai", efforts: ["high", "off", "low", "bogus"] },
+    { id: "anthropic/claude-opus-5-5", name: "Claude Opus 5.5" },
+  ];
+  source.thinkingLevel = "low";
+  const state = parseSnapshot(source);
+  assert.deepEqual(state.models[0].efforts, ["off", "low", "high"]);
+  assert.equal(state.models[1].provider, "anthropic");
+  assert.deepEqual(state.models[1].efforts, []);
+  assert.equal(state.thinkingLevel, "low");
+});
+
+test("conversation rows carry nested side chats, and a side chat's state names its parent", () => {
+  const rows = parseConversations([
+    { id: "1", title: "Parent", sideChats: [{ id: "8", title: "Names", running: true }, { id: "bad" }, { id: "9" }] },
+    { id: "2", title: "Plain" },
+  ]);
+  assert.deepEqual(rows[0].sideChats, [
+    { id: "8", title: "Names", running: true },
+    { id: "9", title: "Side chat", running: false },
+  ]);
+  assert.deepEqual(rows[1].sideChats, [], "rows without side chats get an empty list");
+  assert.equal(parseConversations([{ id: "3", sideChatTotal: 25 }])[0].sideChatTotal, 25);
+  assert.equal(rows[1].sideChatTotal, 0);
+});
+
+test("a side chat snapshot keeps its parent for sidebar nesting", () => {
+  const snapshot = parseSnapshot({
+    runtime: "Pi Durable 1.3.0",
+    conversationId: "8",
+    parentConversationId: "1",
+    sideChatOf: "1",
+    auth: { connected: true },
+    view: { entries: [] },
+  });
+  assert.equal(snapshot.sideChatOf, "1");
+  assert.equal(snapshot.parentConversationId, "1");
+  assert.equal(parseSnapshot({ runtime: "x", conversationId: "1", auth: { connected: true }, view: { entries: [] } }).sideChatOf, "");
+});
+
+test("plans parse to steps with counts; unknown statuses read as pending; empty means no plan", () => {
+  const plan = parsePlan({ steps: [{ step: "Run tests", status: "completed" }, { step: "Fix", status: "in_progress" }, { step: "Ship", status: "maybe" }, { step: " " }] });
+  assert.deepEqual(plan, {
+    steps: [{ step: "Run tests", status: "completed" }, { step: "Fix", status: "in_progress" }, { step: "Ship", status: "pending" }],
+    done: 1,
+    total: 3,
+  });
+  assert.equal(parsePlan({ steps: [] }), null);
+  assert.equal(parsePlan(null), null);
 });

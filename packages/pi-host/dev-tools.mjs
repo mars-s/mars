@@ -240,23 +240,62 @@ export function createDevTools({
     tools: [
       defineTool({
         name: 'apply_patch',
-        description: 'Apply a unified diff (git diff format) relative to cwd, atomically across files. Use check:true to validate only. Prefer edit for single-file exact replacements.',
-        parameters: Type.Object({ patch: Type.String({ minLength: 1 }), cwd: Type.String({ minLength: 1 }), strip: Type.Optional(Type.Integer({ minimum: 0, maximum: 5 })), check: Type.Optional(Type.Boolean()) }),
-        replay: 'unsafe', executionMode: 'sequential', structuredOutputSchema: Type.Any(),
+        description: `Apply a unified diff to files on disk, all or nothing.
+Use it for changes across several files or large rewrites, in git diff format. Either every hunk applies or nothing changes. Run with check: true first to test without writing. For one exact replacement in one file, edit is simpler. Not run again after an interruption.
+Example: await tools.apply_patch({ cwd: "projects/site", patch: "--- a/README.md\\n+++ b/README.md\\n@@ -1 +1 @@\\n-Old\\n+New\\n", check: true })`,
+        parameters: Type.Object({
+          patch: Type.String({ minLength: 1, description: 'The unified diff text, as from git diff, with --- a/ and +++ b/ headers.' }),
+          cwd: Type.String({ minLength: 1, description: 'Folder the diff paths are relative to, usually the repository root, e.g. "projects/site".' }),
+          strip: Type.Optional(Type.Integer({ minimum: 0, maximum: 5, default: 1, description: 'Leading path parts to drop, as patch -p. Default 1 removes the a/ and b/ prefixes.' })),
+          check: Type.Optional(Type.Boolean({ default: false, description: 'true only tests that the patch applies; nothing is written.' })),
+        }),
+        replay: 'unsafe', executionMode: 'sequential',
+        structuredOutputSchema: Type.Object({
+          applied: Type.Boolean({ description: 'True when the files were changed; false for check: true.' }),
+          checked: Type.Boolean({ description: 'True: the patch applies cleanly.' }),
+          cwd: Type.String({ description: 'Absolute folder used.' }),
+          files: Type.Array(Type.Object({
+            path: Type.String({ description: 'File changed.' }),
+            added: Type.Integer({ description: 'Lines added.' }),
+            removed: Type.Integer({ description: 'Lines removed.' }),
+          })),
+        }),
         execute: async args => output(await applyPatch(args)),
       }),
       defineTool({
         name: 'host_deploy',
-        description: 'Deploy the Pi host from a commit of ' + repo + ' (' + subdir + '). Stages the commit, runs all host checks and an isolated staging boot, backs up the live app, then a watchdog restarts ' + service + ' and rolls back automatically if it is unhealthy. Commit first. dryRun:true validates without deploying.',
-        parameters: Type.Object({ ref: Type.Optional(Type.String({ description: 'Branch, tag or commit; default main' })), dryRun: Type.Optional(Type.Boolean()), restartDelaySeconds: Type.Optional(Type.Integer({ minimum: 3, maximum: 600 })), force: Type.Optional(Type.Boolean()) }),
-        replay: 'unsafe', executionMode: 'sequential', structuredOutputSchema: Type.Any(), outputLimits: { maxBytes: 20000, maxLines: 300 },
+        description: `Deploy a committed change to the running Mars host, with automatic rollback.
+Use it after committing a change to ${subdir} in ${repo}; the host does not reload by itself. It stages the commit, runs every host check and a test boot, backs up the live app, then restarts ${service}. A watchdog rolls back automatically if the restarted host is unhealthy. Run with dryRun: true first to check without restarting. The restart interrupts running calls, including this one; afterwards call host_deploy_status with the returned id.
+Example: await tools.host_deploy({ ref: "main", dryRun: true })`,
+        parameters: Type.Object({
+          ref: Type.Optional(Type.String({ description: 'Git branch, tag or commit to deploy. Default "main".' })),
+          dryRun: Type.Optional(Type.Boolean({ default: false, description: 'true runs staging, checks and the test boot, then stops before restarting.' })),
+          restartDelaySeconds: Type.Optional(Type.Integer({ minimum: 3, maximum: 600, description: 'Seconds to wait before the restart, 3 to 600, so this reply can finish.' })),
+          force: Type.Optional(Type.Boolean({ default: false, description: 'true restarts even when the live app already matches the commit.' })),
+        }),
+        replay: 'unsafe', executionMode: 'sequential', outputLimits: { maxBytes: 20000, maxLines: 300 },
+        structuredOutputSchema: Type.Object({
+          id: Type.String({ description: 'Deploy id. Pass it to host_deploy_status.' }),
+          status: Type.String({ description: '"scheduled", "dry_run", "noop" or "staging_failed".' }),
+          ok: Type.Boolean({ description: 'True when staging, checks and the test boot passed.' }),
+          note: Type.Optional(Type.String({ description: 'Plain explanation, e.g. "Live app untouched."' })),
+          next: Type.Optional(Type.String({ description: 'What to do after the restart.' })),
+        }, { additionalProperties: true }),
         execute: async (args, _api, context) => output(await deploy(args, context?.abortSignal)),
       }),
       defineTool({
         name: 'host_deploy_status',
-        description: 'Result of the latest (or given) host_deploy: scheduled, applying, deployed, rolled_back, staging_failed, with checks, staging boot and watchdog log.',
-        parameters: Type.Object({ id: Type.Optional(Type.String()) }),
-        replay: 'safe', structuredOutputSchema: Type.Any(),
+        description: `Check how a host_deploy went.
+Use it after host_deploy, especially after the restart, to see whether it finished or rolled back. Status is one of scheduled, applying, deployed, rolled_back or staging_failed, with check results, the test boot and the watchdog log. Without id, shows the latest deploy.
+Example: await tools.host_deploy_status({ id: "20261021T090000Z" })`,
+        parameters: Type.Object({ id: Type.Optional(Type.String({ description: 'Deploy id from host_deploy. Default: the latest deploy.' })) }),
+        replay: 'safe',
+        structuredOutputSchema: Type.Object({
+          id: Type.Optional(Type.String({ description: 'The deploy shown.' })),
+          status: Type.Optional(Type.String({ description: 'scheduled, applying, deployed, rolled_back or staging_failed.' })),
+          error: Type.Optional(Type.String({ description: 'Why there is nothing to show, e.g. "No deploys yet".' })),
+          recent: Type.Optional(Type.Array(Type.String(), { description: 'The five latest deploy ids.' })),
+        }, { additionalProperties: true }),
         execute: async args => output(await status(args)),
       }),
     ],

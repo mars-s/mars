@@ -103,7 +103,7 @@ try {
   await page.getByRole("button", { name: "Extensions", exact: true }).click();
   assert.equal(await page.locator(".live-sidebar .live-nav-selected").count(), 1);
   assert.equal(await page.locator(".live-sidebar .live-nav-selected").innerText(), "Extensions");
-  await page.getByRole("button", { name: "Conversation", exact: true }).click();
+  await page.getByRole("button", { name: "Chats", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("dialog").waitFor();

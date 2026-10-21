@@ -64,6 +64,8 @@ export type ToolActivity = {
   state?: "running" | "complete" | "failed" | "cancelled";
   durationMs?: number;
   exitCode?: number;
+  /** Pi tool result details, bounded: unified patch for edit/write, truncation flag for shell. */
+  details?: { patch?: string; diff?: string; truncated?: boolean; fullOutputPath?: string };
   children?: ToolActivity[];
 };
 export type LiveMessage = {
@@ -83,12 +85,34 @@ export type LoginState = {
   code: string;
   prompt: string | null;
 };
+export type SideChatSummary = { id: string; title: string; running: boolean };
+export type PlanStatus = "pending" | "in_progress" | "completed";
+/** The agent's checklist for multi-step work (docs/TOOLS.md "plan_update"). */
+export type Plan = { steps: { step: string; status: PlanStatus }[]; done: number; total: number };
+const PLAN_STATUSES: readonly string[] = ["pending", "in_progress", "completed"];
+/** A plan from /api/state, or null. Unknown statuses read as pending; empty steps are dropped. */
+export function parsePlan(value: unknown): Plan | null {
+  const steps = list(record(value).steps)
+    .map(record)
+    .flatMap((row) => {
+      const step = string(row.step).trim().slice(0, 200);
+      const status = (PLAN_STATUSES.includes(string(row.status)) ? string(row.status) : "pending") as PlanStatus;
+      return step ? [{ step, status }] : [];
+    })
+    .slice(0, 20);
+  if (!steps.length) return null;
+  return { steps, done: steps.filter((row) => row.status === "completed").length, total: steps.length };
+}
 export type ConversationSummary = {
   id: string;
   title: string;
   modelId: string;
   provider: string;
   running: boolean;
+  /** Side chats opened from this conversation, newest first (docs/WORKBENCH.md). */
+  sideChats: SideChatSummary[];
+  /** How many side chats exist in all, when more than the listed page. */
+  sideChatTotal: number;
 };
 export type WorkerSummary = {
   id: string;
@@ -101,8 +125,56 @@ export type WorkerSummary = {
   result: string;
   error: string;
 };
+export const EFFORT_ORDER = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type ModelChoice = {
+  id: string;
+  name: string;
+  provider: string;
+  /** Pi's supported thinking levels for this model, lowest first. Empty when unknown. */
+  efforts: string[];
+};
+export type ContextUsage =
+  | { basis: "unavailable" }
+  | {
+      basis: "reported" | "estimated";
+      limit: number;
+      used: number;
+      compactAt: number;
+      autoCompact: boolean;
+      segments: { id: string; label: string; tokens: number }[];
+    };
+export function parseContext(value: unknown): ContextUsage {
+  const row = record(value);
+  const limit = Number(row.limit);
+  const used = Number(row.used);
+  if (
+    (row.basis !== "reported" && row.basis !== "estimated") ||
+    !Number.isFinite(limit) ||
+    limit <= 0 ||
+    !Number.isFinite(used) ||
+    used < 0
+  )
+    return { basis: "unavailable" };
+  return {
+    basis: row.basis,
+    limit,
+    used,
+    compactAt: Math.min(1, Math.max(0, Number(row.compactAt) || 0.8)),
+    autoCompact: row.autoCompact !== false,
+    segments: (Array.isArray(row.segments) ? row.segments : []).map(record).flatMap((segment) =>
+      typeof segment.id === "string" && Number.isFinite(Number(segment.tokens))
+        ? [{ id: segment.id, label: typeof segment.label === "string" ? segment.label : segment.id, tokens: Number(segment.tokens) }]
+        : [],
+    ),
+  };
+}
 export type LiveSnapshot = {
+  context: ContextUsage;
   parentConversationId: string;
+  /** Set when this conversation is a side chat: the conversation it belongs to. */
+  sideChatOf: string;
+  /** The agent's current checklist, or null. */
+  plan: Plan | null;
   conversationTitle: string;
   subthreads: Subthread[];
   workflows: Workflow[];
@@ -112,7 +184,9 @@ export type LiveSnapshot = {
   model: string;
   running: boolean;
   messages: LiveMessage[];
-  models: { id: string; name: string }[];
+  models: ModelChoice[];
+  /** Pi's effort (thinking level) for this conversation, or "" when the host does not report it. */
+  thinkingLevel: string;
   extensions: {
     name: string;
     title: string;
@@ -189,6 +263,13 @@ export function parseConversations(value: unknown): ConversationSummary[] {
               modelId: string(row.modelId),
               provider: string(row.provider),
               running: row.running === true,
+              sideChats: list(row.sideChats)
+                .map(record)
+                .flatMap((side) => {
+                  const sideId = identifier(side.id);
+                  return sideId ? [{ id: sideId, title: string(side.title) || "Side chat", running: side.running === true }] : [];
+                }),
+              sideChatTotal: Number.isInteger(row.sideChatTotal) ? Number(row.sideChatTotal) : 0,
             },
           ]
         : [];
@@ -275,6 +356,15 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
           call.state = call.failed ? "failed" : "complete";
           const details = record(message.details);
           if (typeof details.exitCode === "number") call.exitCode = details.exitCode;
+          const bounded = (value: unknown) =>
+            typeof value === "string" && value.length <= 200000 ? value : undefined;
+          const kept = {
+            patch: bounded(details.patch),
+            diff: bounded(details.diff),
+            truncated: typeof details.truncated === "boolean" ? details.truncated : undefined,
+            fullOutputPath: bounded(details.fullOutputPath),
+          };
+          if (Object.values(kept).some((value) => value !== undefined)) call.details = kept;
           call.children = list(details.calls)
             .map(record)
             .map((nested, index) => ({
@@ -373,6 +463,8 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
   const provider = string(selectedModel.provider);
   return {
     parentConversationId: identifier(data.parentConversationId),
+    sideChatOf: identifier(data.sideChatOf),
+    plan: parsePlan(data.plan),
     conversationTitle: string(data.conversationTitle),
     subthreads: list(data.subthreads)
       .map(record)
@@ -427,10 +519,24 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
     models: list(data.models)
       .map(record)
       .filter((model) => typeof model.id === "string")
-      .map((model) => ({
-        id: string(model.id),
-        name: string(model.name) || string(model.id),
-      })),
+      .map((model) => {
+        const id = string(model.id);
+        const slash = id.indexOf("/");
+        return {
+          id,
+          name: string(model.name) || id,
+          provider: string(model.provider) || (slash > 0 ? id.slice(0, slash) : "openai"),
+          efforts: list(model.efforts)
+            .filter((level): level is string => typeof level === "string")
+            .filter((level) => (EFFORT_ORDER as readonly string[]).includes(level))
+            .sort(
+              (a, b) =>
+                (EFFORT_ORDER as readonly string[]).indexOf(a) -
+                (EFFORT_ORDER as readonly string[]).indexOf(b),
+            ),
+        };
+      }),
+    thinkingLevel: string(data.thinkingLevel),
     extensions: list(data.extensions)
       .map(record)
       .filter(
@@ -451,6 +557,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
     conversations: parseConversations(data.conversations),
     workers: parseWorkers(data.workers),
     usage: parseUsage(data.usage),
+    context: parseContext(data.context),
   };
 }
 export async function piRequest(path: string, body?: unknown): Promise<unknown> {

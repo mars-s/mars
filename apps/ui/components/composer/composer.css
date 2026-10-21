@@ -1,0 +1,332 @@
+.live-composer-wrap {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  width: min(100%, 816px);
+  margin: 0 auto;
+  padding: 12px 24px max(12px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--background) 16px);
+}
+/* Kokonut AI Prompt: a soft outer shell with a header strip around the input surface. */
+.live-prompt-shell {
+  padding: 4px;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.live-prompt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px 0 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.live-prompt-header p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-prompt-header .mars-provider-mark {
+  width: 13px;
+  height: 13px;
+}
+.live-prompt-header button {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.live-prompt-header button:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.live-composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--composer);
+  padding: 14px 10px 10px 12px;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.04),
+    var(--shadow-composer);
+  transition:
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
+}
+.live-composer:hover {
+  border-color: var(--input);
+}
+.live-composer:focus-within {
+  border-color: var(--input);
+  box-shadow:
+    var(--shadow-composer),
+    0 0 0 1px color-mix(in srgb, var(--input) 60%, transparent);
+}
+.live-composer-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--clay);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--composer) 88%, transparent);
+  color: var(--clay);
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms var(--ease-out);
+}
+.live-composer-dropzone[data-dragging="true"] .live-composer-drop-hint {
+  opacity: 1;
+}
+.live-composer-input {
+  display: block;
+  resize: none;
+  border: 0;
+  outline: none !important;
+  background: transparent;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 4px 0 2px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.5;
+  caret-color: var(--clay);
+}
+.live-composer-input::placeholder {
+  color: var(--text-muted);
+}
+.live-composer-input:disabled {
+  cursor: not-allowed;
+}
+.live-composer-input:disabled::placeholder {
+  color: var(--text-faint);
+}
+.live-composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.live-composer-spacer {
+  flex: 1;
+}
+.live-composer-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-right: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  transition:
+    background-color 150ms var(--ease-out),
+    color 150ms var(--ease-out);
+}
+.live-composer-tool:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+.live-composer-tool:disabled {
+  opacity: 0.5;
+}
+/* Kokonut send: one round button, two faces that crossfade, fills once there is something to send. */
+.live-send {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-left: 2px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    color 150ms var(--ease-out);
+}
+.live-send[data-ready] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.live-send[data-ready]:hover:not(:disabled) {
+  background: var(--clay-strong);
+}
+.live-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.live-send:disabled {
+  cursor: not-allowed;
+}
+.live-send-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity 200ms var(--ease-out),
+    filter 200ms var(--ease-out);
+}
+.live-send-face[data-shown] {
+  opacity: 1;
+  filter: none;
+}
+.live-send-stop {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.live-composer-footnote {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-muted);
+}
+.live-composer-footnote button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.live-image-drafts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.live-image-drafts:empty {
+  display: none;
+}
+.live-image-draft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 220px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 16px;
+  cursor: default;
+}
+.live-image-draft-thumb {
+  position: relative;
+  flex: none;
+  width: 56px;
+  height: 56px;
+}
+.live-image-draft-thumb a {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+}
+.live-image-draft img {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  outline: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  outline-offset: -1px;
+}
+.live-image-draft[data-status="running"] img {
+  opacity: 0.6;
+}
+.live-image-draft-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--composer);
+  color: var(--text-muted);
+  transition:
+    background-color 150ms var(--ease-out),
+    color 150ms var(--ease-out);
+}
+.live-image-draft-remove:hover {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.live-image-draft-remove::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+}
+.live-image-draft-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.live-image-draft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.live-image-draft small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.live-image-draft[data-status="incomplete"] small {
+  color: var(--red);
+}
+
+@media (max-width: 768px) {
+  .live-composer-wrap {
+    padding: 8px 12px max(10px, env(safe-area-inset-bottom));
+  }
+  .live-prompt-shell {
+    border-radius: 22px;
+  }
+  .live-composer {
+    border-radius: 18px;
+    padding: 12px 8px 8px 10px;
+  }
+  .live-composer-tool,
+  .live-send {
+    width: 36px;
+    height: 36px;
+  }
+  .live-composer-footnote {
+    margin-top: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-send-face {
+    filter: none;
+    transition: none;
+  }
+}

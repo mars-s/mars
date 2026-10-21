@@ -205,34 +205,60 @@ export function createWebSearchExtension({ models, searchModels = parseModelList
     return { url: args.url, ...page, content: slice, totalChars: page.content.length, ...(end < page.content.length ? { truncated: true, nextStart: end } : {}), ...(directError ? { directError } : {}) };
   }
 
-  const Domains = Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { maxItems: 20 }));
+  const domains = (what) => Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { maxItems: 20, description: `Domains to ${what}, e.g. ["github.com", "nodejs.org"]. Up to 20.` }));
   return defineExtension({
     name: 'web-search',
     marsPlugin: { title: 'Web Search', version: '1.0.0', description: 'Search the web and read pages through your signed-in Claude and ChatGPT subscriptions. Uses Anthropic first, then OpenAI. No extra API key.' },
     tools: [
       defineTool({
         name: 'web_search',
-        description: 'Search the live web for current information (news, releases, docs, prices, facts after your training data). Returns a sourced answer and URLs. Use web_fetch to read a specific page in full.',
+        description: `Search the web and get an answer with its sources.
+Use it for anything current or outside what you know: news, releases, prices, docs, facts after your training data. Write query as a full question for the best answer. It returns a written answer plus the source URLs it used; to read one of those pages in full, call web_fetch with its URL.
+Example: const { answer, sources } = await tools.web_search({ query: "What is the latest stable Node.js version?" })`,
         parameters: Type.Object({
-          query: Type.String({ minLength: 2, maxLength: 1000, description: 'Natural-language question or search query' }),
-          allowed_domains: Domains, blocked_domains: Domains,
-          provider: Type.Optional(Type.Union([Type.Literal('auto'), Type.Literal('anthropic'), Type.Literal('openai')])),
-          max_searches: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
+          query: Type.String({ minLength: 2, maxLength: 1000, description: 'A question or search terms, e.g. "When does the next Ubuntu LTS release?"' }),
+          allowed_domains: domains('search only'),
+          blocked_domains: domains('leave out'),
+          provider: Type.Optional(Type.Union([Type.Literal('auto'), Type.Literal('anthropic'), Type.Literal('openai')], { default: 'auto', description: 'Which subscription searches. "auto" (default) tries Anthropic first, then OpenAI.' })),
+          max_searches: Type.Optional(Type.Integer({ minimum: 1, maximum: 10, description: 'Most web searches the provider may run for this answer, 1 to 10. Higher is slower but more thorough.' })),
         }),
-        replay: 'safe', executionMode: 'parallel', structuredOutputSchema: Type.Any(), outputLimits: { maxBytes: 24000, maxLines: 400 },
+        replay: 'safe', executionMode: 'parallel', outputLimits: { maxBytes: 24000, maxLines: 400 },
+        structuredOutputSchema: Type.Object({
+          query: Type.String({ description: 'The query asked.' }),
+          provider: Type.String({ description: 'Which provider answered.' }),
+          model: Type.String({ description: 'The model used.' }),
+          answer: Type.String({ description: 'The written answer, with source links inline.' }),
+          sources: Type.Array(Type.String(), { description: 'Source URLs found in the answer. Pass one to web_fetch to read it.' }),
+          fallbackFrom: Type.Optional(Type.Array(Type.Any(), { description: 'Providers that failed first, when a fallback answered.' })),
+        }),
         execute: async (args, _api, context) => output(await search(args, context?.abortSignal)),
       }),
       defineTool({
         name: 'web_fetch',
-        description: 'Read a public web page or text/JSON URL and return its readable content as text. Falls back to Anthropic server-side fetch when direct access is blocked. Page with start/nextStart for long pages. Local and private addresses are refused.',
+        description: `Read a web page by its URL (http:// or https://) and get its text.
+Use it for any web address: a doc page, an article, a JSON or text file, or a source from web_search. For files on disk use host_read instead. Pages come back as readable text with links. Long pages arrive in parts: when truncated is true, call again with start set to nextStart. Local and private network addresses are refused; use host_exec with curl for those.
+Example: const page = await tools.web_fetch({ url: "https://nodejs.org/en/about/previous-releases" })`,
         parameters: Type.Object({
-          url: Type.String({ minLength: 8, maxLength: 4000 }),
-          start: Type.Optional(Type.Integer({ minimum: 0 })),
-          max_chars: Type.Optional(Type.Integer({ minimum: 1000, maximum: 60000 })),
-          prompt: Type.Optional(Type.String({ maxLength: 500, description: 'What to focus on, used only by the provider fallback' })),
-          fallback: Type.Optional(Type.Boolean()),
+          url: Type.String({ minLength: 8, maxLength: 4000, description: 'Full http(s) URL, e.g. "https://example.com/docs".' }),
+          start: Type.Optional(Type.Integer({ minimum: 0, default: 0, description: 'Character position to read from. Use nextStart from the previous call for the next part.' })),
+          max_chars: Type.Optional(Type.Integer({ minimum: 1000, maximum: 60000, default: 20000, description: "Most characters to return in this part, 1000 to 60000." })),
+          prompt: Type.Optional(Type.String({ maxLength: 500, description: 'What to focus on if the page has to be read through a provider because direct access is blocked.' })),
+          fallback: Type.Optional(Type.Boolean({ default: true, description: 'false stops the provider fallback when direct access is blocked.' })),
         }),
-        replay: 'safe', executionMode: 'parallel', structuredOutputSchema: Type.Any(), outputLimits: { maxBytes: 70000, maxLines: 2000 },
+        replay: 'safe', executionMode: 'parallel', outputLimits: { maxBytes: 70000, maxLines: 2000 },
+        structuredOutputSchema: Type.Object({
+          url: Type.String({ description: 'The URL asked for.' }),
+          finalUrl: Type.String({ description: 'The URL after redirects.' }),
+          status: Type.Integer({ description: 'HTTP status.' }),
+          contentType: Type.String({ description: 'e.g. "text/html".' }),
+          title: Type.String({ description: 'Page title, when it has one.' }),
+          method: Type.String({ description: '"direct", or the provider used as fallback.' }),
+          content: Type.String({ description: 'The readable text of this part.' }),
+          totalChars: Type.Integer({ description: 'Length of the whole page text.' }),
+          truncated: Type.Optional(Type.Boolean({ description: 'True when there is more; call again with start: nextStart.' })),
+          nextStart: Type.Optional(Type.Integer({ description: 'Pass as start to read the next part.' })),
+          directError: Type.Optional(Type.String({ description: 'Why direct access failed, when a fallback was used.' })),
+        }),
         execute: async (args, _api, context) => output(await read(args, context?.abortSignal)),
       }),
     ],

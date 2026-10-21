@@ -19,3 +19,7 @@ npm-debug.log*
 *.db-*
 node_modules.prev*/
 packages/pi-host/.workspace-lock.json
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+.impeccable/review/
+.impeccable/mocks/

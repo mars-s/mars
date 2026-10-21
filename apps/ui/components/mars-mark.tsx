@@ -1,11 +1,32 @@
-import type { SVGProps } from "react";
+import { useId, type SVGProps } from "react";
 
-export function MarsMark(props: SVGProps<SVGSVGElement>) {
+/**
+ * The Mars mark ("Phase"): Mars half-lit with Phobos alongside. One solid shape in
+ * currentColor, drawn on a 32-unit grid so it holds from favicon size upwards.
+ */
+export function MarsMark({ title, ...props }: SVGProps<SVGSVGElement> & { title?: string }) {
+  const mask = useId();
   return (
-    <svg viewBox="0 0 28 28" fill="none" aria-hidden="true" {...props}>
-      <circle cx="14" cy="14" r="6.4" stroke="currentColor" strokeWidth="1.5" />
-      <ellipse cx="14" cy="14" rx="12.2" ry="4.2" transform="rotate(-35 14 14)" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M11 10.6c1.6-1.2 3.6-1.4 5.1-.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <svg
+      viewBox="0 0 32 32"
+      fill="currentColor"
+      role={title ? "img" : undefined}
+      aria-hidden={title ? undefined : true}
+      {...props}
+    >
+      {title && <title>{title}</title>}
+      <defs>
+        {/* Mask luminance, not paint: white keeps, black cuts. */}
+        <mask id={mask}>
+          {/* eslint-disable-next-line shadcn/no-raw-colors */}
+          <rect width="32" height="32" fill="white" />
+          {/* eslint-disable-next-line shadcn/no-raw-colors */}
+          <circle cx="20.4" cy="12.2" r="10.6" fill="black" />
+        </mask>
+      </defs>
+      <circle cx="15" cy="17" r="12" opacity="0.32" />
+      <circle cx="15" cy="17" r="12" mask={`url(#${mask})`} />
+      <circle cx="27.6" cy="5.2" r="2.1" />
     </svg>
   );
 }

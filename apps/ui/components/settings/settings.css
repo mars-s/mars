@@ -1,0 +1,242 @@
+/* Settings dialog: Claude-style left tab rail with a serif section title. */
+.live-settings {
+  width: 760px;
+  max-width: calc(100% - 2rem) !important;
+  height: min(560px, calc(100dvh - 4rem));
+  padding: 0 !important;
+  gap: 0 !important;
+  overflow: hidden;
+  background: var(--background) !important;
+}
+.live-settings > [data-slot="dialog-close"] {
+  z-index: 1;
+}
+.live-settings-layout {
+  display: grid !important;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 0 !important;
+  min-height: 0;
+  height: 100%;
+}
+.live-settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 22px 12px;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+}
+.live-settings-nav [data-slot="dialog-title"] {
+  padding: 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.live-settings-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 28px 36px 32px;
+}
+.live-settings-section > header {
+  margin-bottom: 24px;
+  padding-right: 32px;
+}
+.live-settings-section > header h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-wrap: balance;
+}
+.live-settings-section > header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.live-settings p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.live-settings code {
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* A label and description on the left, a control on the right. */
+.live-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.live-settings-row > div {
+  min-width: 0;
+}
+.live-settings h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.live-account + .live-account {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.live-account-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.live-account-state svg {
+  color: var(--green);
+}
+.live-account-note {
+  margin-top: 12px !important;
+}
+.live-settings .live-settings-error {
+  margin-top: 12px;
+  color: var(--red);
+  overflow-wrap: anywhere;
+}
+.live-auth-flow {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+.live-auth-flow a {
+  width: fit-content;
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 4px;
+  transition: text-decoration-color 150ms var(--ease-out);
+}
+.live-auth-flow a:hover {
+  text-decoration-color: currentColor;
+}
+.live-callback {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.live-callback label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.live-callback button {
+  justify-self: end;
+  margin-top: 4px;
+}
+.live-connection-details {
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+.live-connection-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.live-connection-details > div:first-child {
+  border-top: 1px solid var(--border);
+}
+.live-connection-details dt {
+  color: var(--text-muted);
+}
+.live-connection-details dd {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Full-screen sheet with horizontal tabs on phones. */
+@media (max-width: 640px) {
+  .live-settings {
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100dvh;
+    /* Undo the centring translate; the build merges a bare translate into transform. */
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+  .live-settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .live-settings-nav {
+    gap: 10px;
+    padding: max(14px, env(safe-area-inset-top)) 0 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .live-settings-nav [data-slot="dialog-title"] {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 64px 0 20px;
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--text);
+  }
+  .live-settings-nav [data-slot="tabs-list"] {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 0 14px 10px;
+  }
+  .live-settings-nav [data-slot="tabs-trigger"] {
+    flex: none;
+    padding: 0 12px;
+  }
+  .live-settings-nav [data-slot="tabs-trigger"] svg {
+    display: none;
+  }
+  .live-settings > [data-slot="dialog-close"] {
+    top: max(14px, env(safe-area-inset-top));
+    right: 12px;
+  }
+  .live-settings-panel {
+    padding: 22px 20px max(28px, env(safe-area-inset-bottom));
+  }
+  .live-settings-section > header {
+    padding-right: 0;
+  }
+  .live-settings-section > header h2 {
+    font-size: 22px;
+  }
+  .live-settings-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .live-settings [data-slot="button"],
+  .live-settings [data-slot="input"],
+  .live-settings [data-slot="tabs-trigger"],
+  .live-settings > [data-slot="dialog-close"] {
+    min-height: 44px;
+  }
+  .live-settings > [data-slot="dialog-close"] {
+    min-width: 44px;
+  }
+}

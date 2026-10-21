@@ -8,6 +8,17 @@ const compact = messages => messages.filter(m => m.role === 'assistant').at(-1)?
 const receiptOf = (task, id) => task?.state.outcome?.result?.find?.(row => row.id === id) || (task?.state.outcome?.result?.steps || task?.state.checkpoint?.steps)?.find(row => row.conversationId === String(id));
 const output = value => ({ output: [{ type: 'text', text: JSON.stringify(value) }], structuredOutput: value });
 
+/**
+ * Forgiving list arguments: models often send a JSON string where an array belongs, or
+ * plain strings where objects belong. Both are turned into the documented shape before
+ * validation; anything else is passed through for the schema to reject.
+ */
+export function forgivingList(value, field) {
+  let list = value;
+  if (typeof list === 'string') try { list = JSON.parse(list); } catch { return value; }
+  return Array.isArray(list) ? list.map((item) => (typeof item === 'string' ? { [field]: item } : item)) : value;
+}
+
 export function selectWorkerModel(models, job) {
   const pair = aliases[job.model || 'luna'];
   const provider = job.provider || pair?.[0];
@@ -58,10 +69,30 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
     if (!loadImages) throw new Error('Worker image loading is unavailable');
     return loadImages(job.attachmentIds, job.task);
   }
-  const job = Type.Object({ title: Type.Optional(Type.String({ maxLength: 160 })), attachmentIds: Type.Optional(Type.Array(Type.String({ pattern: '^[a-f0-9]{64}$' }), { maxItems: 4 })), task: Type.String({ minLength: 1 }), model: Type.Optional(Type.String()), provider: Type.Optional(Type.String()), modelId: Type.Optional(Type.String()) });
+  const job = Type.Object({
+    task: Type.String({ minLength: 1, description: 'Everything the worker needs, as a complete brief: it does not see this conversation. E.g. "Summarise the README in notes/ in five bullet points."' }),
+    title: Type.Optional(Type.String({ maxLength: 160, description: 'Short name shown in the sidebar, e.g. "Summarise README".' })),
+    model: Type.Optional(Type.Union([Type.Literal('luna'), Type.Literal('sol'), Type.Literal('astra'), Type.Literal('opus')], { default: 'luna', description: 'luna: fast and cheap, for simple jobs (default). sol: strong all-rounder. astra: hardest reasoning. opus: Claude, for writing and long careful work.' })),
+    provider: Type.Optional(Type.String({ description: 'Advanced: exact provider, e.g. "openai". Use with modelId instead of model.' })),
+    modelId: Type.Optional(Type.String({ description: 'Advanced: exact model id, e.g. "gpt-6-sol". Use with provider instead of model.' })),
+    attachmentIds: Type.Optional(Type.Array(Type.String({ pattern: '^[a-f0-9]{64}$' }), { maxItems: 4, description: 'Ids of images from this chat to show the worker, up to 4. Needs a model that reads images.' })),
+  });
+  const WorkerResult = Type.Object({
+    id: Type.String({ description: 'Worker id. Pass it to worker_followup or worker_stop.' }),
+    conversationId: Type.String({ description: 'The worker conversation id.' }),
+    provider: Type.String({ description: 'Provider used.' }),
+    modelId: Type.String({ description: 'Model used.' }),
+    status: Type.String({ description: '"completed", "aborted" or "unanswered".' }),
+    result: Type.String({ description: "The worker's final answer, up to 4000 characters." }),
+    usage: Type.Any({ description: 'Token use, by model.' }),
+  });
+  const RunOutcome = Type.Object({
+    status: Type.String({ description: '"completed" when every worker finished, or "aborted".' }),
+    result: Type.Optional(Type.Array(WorkerResult, { description: 'One entry per worker, in the order given.' })),
+  }, { additionalProperties: true });
   const tools = [];
-  function tool(name, description, parameters, execute) {
-    tools.push(defineTool({ name, description, parameters, structuredOutputSchema: Type.Any(), deferred: true, replay: 'safe', executionMode: 'parallel', execute: async (args, api, ctx) => output(await execute(args, api, ctx)) }));
+  function tool(name, description, parameters, result, execute, prepareArguments) {
+    tools.push(defineTool({ name, description, parameters, structuredOutputSchema: result, deferred: true, replay: 'safe', executionMode: 'parallel', ...(prepareArguments ? { prepareArguments } : {}), execute: async (args, api, ctx) => output(await execute(args, api, ctx)) }));
   }
   async function run(jobs, api, ctx) {
     if (!jobs.length || jobs.length > maxConcurrent) throw new Error(`Use 1..${maxConcurrent} workers per fanout`);
@@ -81,8 +112,12 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
     await api.details({ workerTaskId: taskId }, ctx);
     return (await api.waitForTask(taskId, ctx)).state.outcome;
   }
-  tool('worker_run', 'Run a native task-owned selected-model worker. Aliases sol, luna, astra, opus. Use title for a concise task name. attachmentIds explicitly pass images. Returns a compact answer.', job, (args, api, ctx) => run([args], api, ctx));
-  tool('worker_fanout', 'Run independent native workers concurrently and join their compact answers. Ownership and checkpoints survive restart.', Type.Object({ jobs: Type.Array(job, { minItems: 1, maxItems: maxConcurrent }) }), (args, api, ctx) => run(args.jobs, api, ctx));
+  tool('worker_run', `Hand one job to a helper model and wait for its answer.
+Use it for ONE self-contained job, with a different model, or to keep a long investigation out of this conversation. For several steps in order, use workflow_start. The worker sees only task (and any images you pass), not this chat, so write task as a complete brief. It waits until the worker finishes and returns its final answer in result[0].result. It shows nested under this chat, and survives a restart. For several independent jobs at once, use worker_fanout; for work the owner should follow, use side_chat_open.
+Example: const { result } = await tools.worker_run({ task: "List the TODO comments in src/ with file and line.", model: "luna", title: "Find TODOs" })`, job, RunOutcome, (args, api, ctx) => run([args], api, ctx));
+  tool('worker_fanout', `Run two or more jobs at the same time, each by its own helper model, and wait for all their answers.
+Use it whenever there are several independent jobs, e.g. reviewing three files or researching three options: put one entry per job in jobs. For a single job, use worker_run. Each job is a worker as in worker_run, with its own complete brief. Returns one result per job, in the same order. Up to ${maxConcurrent} jobs per call. For steps that must run in order, use workflow_start.
+Example: const { result } = await tools.worker_fanout({ jobs: [{ task: "Review a.ts for bugs." }, { task: "Review b.ts for bugs." }] })`, Type.Object({ jobs: Type.Array(job, { minItems: 1, maxItems: maxConcurrent, description: `The jobs, 1 to ${maxConcurrent}. Each needs its own complete task.` }) }), RunOutcome, (args, api, ctx) => run(args.jobs, api, ctx), (args) => ({ ...args, jobs: forgivingList(args?.jobs, 'task') }));
   async function workerRecords(api, ctx) {
     return api.commit(async tx => {
       const rows = [];
@@ -101,13 +136,32 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
     if (record?.owner?.conversationId !== api.conversationId) throw new Error('Worker not found for this conversation');
     return api.conversation(nativeId(id), ctx);
   }
-  tool('worker_list', 'List this conversation native workers, including terminal results.', Type.Object({}), (_args, api, ctx) => workerRecords(api, ctx));
-  tool('worker_stop', 'Stop a native worker owned by this conversation.', Type.Object({ workerId: Type.String() }), async (args, api, ctx) => {
+  const WorkerRow = Type.Object({
+    id: Type.String({ description: 'Worker id for worker_followup or worker_stop.' }),
+    title: Type.String({ description: 'Short name.' }),
+    status: Type.String({ description: 'e.g. "running", "completed", "aborted".' }),
+    result: Type.Optional(Type.Any({ description: 'The final answer once finished.' })),
+  }, { additionalProperties: true });
+  tool('worker_list', `List the workers this conversation has started, with their status and answers.
+Use it to find a worker's id for worker_followup or worker_stop, or to check on workers after an interruption. Finished workers include their final answer.
+Example: const workers = await tools.worker_list({})`, Type.Object({}), Type.Array(WorkerRow), (_args, api, ctx) => workerRecords(api, ctx));
+  tool('worker_stop', `Stop one of this conversation's workers that is still running.
+Use it when a worker is no longer needed or is taking too long. Only workers started from this conversation can be stopped; get ids from worker_list.
+Example: await tools.worker_stop({ workerId: "57" })`, Type.Object({ workerId: Type.String({ description: 'Worker id from worker_list or worker_run, e.g. "57".' }) }), Type.Object({ stopped: Type.Boolean({ description: 'True when the stop was sent.' }), workerId: Type.String({ description: 'The worker stopped.' }) }), async (args, api, ctx) => {
     const child = await ownedWorker(args.workerId, api, ctx);
     await child.abort(ctx);
     return { stopped: true, workerId: args.workerId };
   });
-  tool('worker_followup', 'Send a follow-up to a native worker owned by this conversation and await its compact answer.', Type.Object({ workerId: Type.String(), task: Type.String({ minLength: 1 }) }), async (args, api, ctx) => {
+  tool('worker_followup', `Ask one of this conversation's workers a follow-up question and wait for its answer.
+Use it to refine or extend a worker's earlier answer: it remembers its own previous work. Waits until it answers. Get ids from worker_run results or worker_list.
+Example: const { result } = await tools.worker_followup({ workerId: "57", task: "Now sort them by file." })`, Type.Object({
+    workerId: Type.String({ description: 'Worker id from worker_run or worker_list, e.g. "57".' }),
+    task: Type.String({ minLength: 1, description: 'The follow-up message for the worker.' }),
+  }), Type.Object({
+    id: Type.Any({ description: 'The worker id.' }),
+    status: Type.String({ description: '"done" when it answered.' }),
+    result: Type.String({ description: 'Its answer, up to 4000 characters.' }),
+  }), async (args, api, ctx) => {
     const child = await ownedWorker(args.workerId, api, ctx);
     const settled = await (await child.submit({ type: 'input', content: args.task, whenBusy: 'followUp', requestId: `worker-followup:${api.taskId}` }, ctx)).wait(ctx);
     const answer = settled.answer ? await api.commit(tx => tx.entry(settled.answer), ctx) : undefined;

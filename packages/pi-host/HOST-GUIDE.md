@@ -32,9 +32,36 @@ Service defaults to `mars-pi-host.service`;
 Never hand-copy files into a managed runtime. An interrupted unsafe command is not
 automatically replayed.
 
-Discover tool schemas on demand with `tool_search`, then use `codemode`. Search and
-read bounded file ranges. Save large results as artefacts rather than repeating
-them in context. Child conversations receive their own brief and explicit image
+## Finding and calling tools
+
+Most tools are not loaded until needed. Find one with `tool_search` (for example
+"side chat" or "download link"), or call it from `codemode` as
+`await tools.<name>({ ... })`. Every tool's description says when to use it and ends
+with an `Example:` call you can copy. Which tool for which job:
+
+For any task of three or more steps, first decide who does the steps:
+
+- You, in this chat: `plan_update` with the whole checklist, then call it again as each
+  step starts and finishes, so the owner sees progress.
+- Helper models, one after another in the background: `workflow_start`.
+- Helper models, all at once on independent jobs: `worker_fanout`.
+
+| You want to | Use |
+| --- | --- |
+| Show the owner your steps and tick them off | `plan_update` |
+| Run a command, install, test, use git | `host_exec` (`bash` for quick ones) |
+| Read the rest of a long output | `artefact_read`, `artefact_search` |
+| Get one answer from another model and wait | `worker_run` |
+| Run several independent jobs at once | `worker_fanout` |
+| Run steps in order, in the background | `workflow_start`, then `workflow_status` |
+| Start work the owner can open and follow | `side_chat_open` |
+| Give the owner a file to download | `workspace_file_link`, then put the url in a Markdown link |
+| Look something up online | `web_search`, then `web_fetch` for a full page |
+| Change the Mars interface | `ui_source_read`, `ui_patch_stage`, `ui_patch_validate`, `ui_patch_promote` |
+| Ship a host change | commit, then `host_deploy` (`dryRun: true` first) |
+
+Read and search long files in parts. Save large results as artefacts rather than
+repeating them in context. Child conversations receive their own brief and explicit image
 references, not the full parent transcript. Workflows run ordered steps and pass a
 bounded preceding result. Plugin controls change exposure, not the owner's VM
 permissions. Installed MCP wrappers use the same plugin/tool/interface controls.

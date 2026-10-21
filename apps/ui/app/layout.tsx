@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import "@/components/chat-thread.css";
 
 const sans = localFont({
   src: [
@@ -39,7 +38,7 @@ export const metadata: Metadata = {
     "A personal workspace for conversations, files and durable tasks. A Next.js client for your Pi agent.",
   applicationName: "Mars",
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#141414" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#262624" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
