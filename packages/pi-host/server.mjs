@@ -11,7 +11,7 @@ import { createWorkflowExtension, listWorkflows, stopWorkflow } from "./workflow
 import { loadConfig } from "./config.mjs";
 import { createVmControl } from "./vm-control.mjs";
 import { createWebSearchExtension } from "./web-search.mjs";
-import { createDevTools } from "./dev-tools.mjs";
+import { createDevTools, createHostVersion } from "./dev-tools.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { abortKeepingQueue, removeQueued, steerQueued, whenBusy } from "./queue.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
@@ -453,6 +453,8 @@ if (process.env.MARS_DUMP_TOOLS) {
   await writeFile(process.env.MARS_DUMP_TOOLS, JSON.stringify(rows, null, 2));
   process.exit(0);
 }
+// GET /api/host/version: the commit the live host runs and how far main is ahead.
+const hostVersion = createHostVersion({ root: ROOT, appDir: APP });
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://local");
@@ -539,6 +541,9 @@ const server = http.createServer(async (req, res) => {
       const name = typeof rawName === "string" ? decodeURIComponent(rawName) : "image";
       const attachment = await images.add(await imageBody(req), { mimeType, name });
       send(res, 201, { attachment }); return;
+    }
+    if (url.pathname === "/api/host/version" && req.method === "GET") {
+      send(res, 200, await hostVersion()); return;
     }
     if (url.pathname.startsWith("/api/attachments/") && req.method === "GET") {
       const attachment = await images.get(url.pathname.slice("/api/attachments/".length));
