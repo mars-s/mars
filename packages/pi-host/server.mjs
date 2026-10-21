@@ -12,6 +12,7 @@ import { loadConfig } from "./config.mjs";
 import { createVmControl } from "./vm-control.mjs";
 import { createWebSearchExtension } from "./web-search.mjs";
 import { createDevTools } from "./dev-tools.mjs";
+import { createSelfEdit } from "./self-edit.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
@@ -153,6 +154,7 @@ registry.install(createWorkspaceFilesExtension({ files: () => late.workbenchTool
 registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
 registry.install(createGatewayExtension({ gateway: () => late.gateway }));
+registry.install(createSelfEdit().extension);
 const extensions = new ExtensionStore(registry);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();

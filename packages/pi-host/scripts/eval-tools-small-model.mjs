@@ -38,6 +38,12 @@ const TASKS = [
   // Gateway (docs/GATEWAY.md): the agent answers questions about chat apps with gateway_status.
   ["Is my Telegram bot connected to Mars right now?", "gateway_status", () => true],
   ["Is anyone waiting for me to approve them on Discord or Telegram?", "gateway_status", () => true],
+  // Changing Mars itself: isolated worktree, check, then a dry run before any real deploy (docs/SELF-EDIT.md).
+  ["I want to change the Mars host code so plan steps are trimmed. Start that change safely, without touching the live checkout.", "self_edit_start", (a) => typeof a.title === "string" && /plan|trim/i.test(a.title)],
+  ["I have edited files in self-edit trim-plan-steps-3f2a. Check them before committing.", "self_edit_check", (a) => a.id === "trim-plan-steps-3f2a" && (!a.scope || a.scope === "related")],
+  ["Self-edit trim-plan-steps-3f2a passed its checks. Commit it and test it with a dry run, without restarting the host.", "self_edit_finish", (a) => a.id === "trim-plan-steps-3f2a" && (!a.deploy || a.deploy === "dry_run")],
+  ["The dry run of self-edit trim-plan-steps-3f2a passed. Ship it to the live host now.", "self_edit_finish", (a) => a.id === "trim-plan-steps-3f2a" && a.deploy === "deploy"],
+  ["Throw away self-edit trim-plan-steps-3f2a; it is not worth finishing.", "self_edit_abandon", (a) => a.id === "trim-plan-steps-3f2a"],
 ];
 const toTool = (row) => ({ type: "function", function: { name: row.name, description: row.description, parameters: row.parameters ?? { type: "object", properties: {} } } });
 
