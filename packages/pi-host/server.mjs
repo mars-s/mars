@@ -208,8 +208,8 @@ registry.install(
     tools: [
       tool(
         "discord_connection_status",
-        `Check whether the owner's Discord server is connected.
-Use it before the other discord_ tools. Discord works only after the owner clicks Connect in Settings, Apps; the bot token is never shown. If it is not connected, tell the owner to connect it there.
+        `Check whether Mars can read the owner's Discord server with the discord_ read tools.
+Use it only before discord_list_channels or discord_read_messages. It is about reading a server's channels, not chatting: to check whether the owner can chat with Mars from Telegram or Discord, or who is waiting for approval, use gateway_status. The read tools work only after the owner clicks Connect in Settings, Apps; the bot token is never shown. If it is not connected, tell the owner to connect it there.
 Example: const { connected } = await tools.discord_connection_status({})`,
         Type.Object({}),
         loose({

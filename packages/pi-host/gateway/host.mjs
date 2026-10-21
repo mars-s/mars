@@ -84,8 +84,8 @@ export function createGatewayExtension({ gateway }) {
     marsPlugin: { title: 'Gateway', version: '1.0.0', description: 'Reach Mars conversations from Telegram, Discord and the HTTP API.' },
     tools: [defineTool({
       name: 'gateway_status',
-      description: `Show which chat apps can reach Mars, which chats are linked to which conversations, and any pairing requests.
-Use it when the owner asks whether Telegram or Discord is connected, which conversation a chat continues, or whether someone is waiting to be approved. Read-only. Approving a pairing is for the owner in Settings, Gateway; never approve one yourself. To send a message to a chat, answer in the linked conversation: replies there are delivered to the chat.
+      description: `Show whether the owner can chat with Mars from Telegram, Discord or the HTTP API, and who is waiting for approval.
+Use it for any question about chatting with Mars from another app: is the Telegram or Discord bot connected, which conversation a chat continues, is someone waiting to be approved. (discord_connection_status is different: it only covers reading a Discord server's channels.) Read-only. Approving a pairing is for the owner in Settings, Gateway; never approve one yourself. To send a message to a chat, answer in the linked conversation: replies there are delivered to the chat.
 Example: const { adapters, bindings, pairings } = await tools.gateway_status({})`,
       parameters: Type.Object({}),
       structuredOutputSchema: Type.Object({
