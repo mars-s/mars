@@ -9,13 +9,20 @@ const body = async (req) => { let s = ''; for await (const c of req) s += c; ret
 const listen = (server) => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
 
 /** A fake Telegram Bot API. `push(update)` queues an update; `sent` records sendMessage calls. */
-export async function fakeTelegram({ token, botId = 999 }) {
+export async function fakeTelegram({ token, botId = 999, control = false }) {
   const updates = []; // { update_id, message }
   const sent = [];
   const actions = [];
   let nextUpdate = 100, nextMessage = 1, rateLimitNext = 0, forbiddenChats = new Set(), acknowledged = 0, failPolls = 0;
   const waiting = new Set();
   const server = http.createServer(async (req, res) => {
+    // Out-of-process control for browser checks: POST /__control/message|sent.
+    if (req.url.startsWith('/__control/') && control) {
+      const data = await body(req);
+      if (req.url === '/__control/message') return json(res, 200, { updateId: api.message(data) });
+      if (req.url === '/__control/sent') return json(res, 200, sent);
+      return json(res, 404, {});
+    }
     const [, bot, method] = req.url.split('/');
     if (bot !== 'bot' + token) return json(res, 401, { ok: false, error_code: 401, description: 'Unauthorized' });
     const data = await body(req);
@@ -44,7 +51,7 @@ export async function fakeTelegram({ token, botId = 999 }) {
     json(res, 404, { ok: false, error_code: 404, description: 'Not Found' });
   });
   const port = await listen(server);
-  return {
+  const api = {
     baseUrl: `http://127.0.0.1:${port}`,
     sent, actions,
     get acknowledged() { return acknowledged; },
@@ -77,6 +84,7 @@ export async function fakeTelegram({ token, botId = 999 }) {
     unforbid(chat) { forbiddenChats.delete(String(chat)); },
     close: () => new Promise((resolve) => { server.closeAllConnections?.(); server.close(resolve); }),
   };
+  return api;
 }
 
 /** A fake Discord: REST (messages, typing) and a Gateway WebSocket with resume. */
