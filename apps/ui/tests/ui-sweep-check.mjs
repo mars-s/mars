@@ -43,8 +43,15 @@ try {
     for (const [path, name] of surfaces) {
       const page = await open(path, phone, theme);
       assert.equal(await sideways(page), 0, `${name} (${theme}) does not scroll sideways at 390px`);
-      if (path.startsWith("/design-system"))
-        await page.screenshot({ path: `${evidence}/phone-${theme}-design-system.png`, fullPage: true });
+      // Playwright hides the caret for a screenshot by styling every input. Taken before React
+      // has hydrated the page, that style reads as a hydration mismatch, so wait first.
+      if (path.startsWith("/design-system")) {
+        await page.waitForFunction(() => {
+          const inputs = [...document.querySelectorAll(".ds-page textarea, .ds-page input")];
+          return inputs.length > 0 && inputs.every((input) => Object.keys(input).some((key) => key.startsWith("__reactProps")));
+        }, null, { timeout: 60000 });
+        await page.screenshot({ path: `${evidence}/phone-${theme}-design-system.png`, fullPage: true, caret: "initial" });
+      }
       await page.context().close();
     }
 
