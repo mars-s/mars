@@ -382,3 +382,9 @@ Surveyed every surface at 1440x900 and 390x844 in dark and light against the pre
 - Checks: `check-self-edit.mjs` (fixture checkout, injected deploy, no restarts). Mutation runs: removing the protected-file rule, skipping the guard at finish, unprotecting existing checks, dropping the dry-run requirement, running every check instead of related ones, keeping the branch on abandon, and the old `apply_patch` cwd each make it fail. Gate: native 32 of 35 (the same three Mac-only failures), tool quality 42 tools, syntax and boundaries pass.
 - Small-model evaluation: five self-edit requests (start, check, dry-run finish, real deploy after a dry run, abandon) added to `packages/pi-host/scripts/eval-tools-small-model.mjs`. Not run in this change.
 - `check-self-edit.mjs` expects a skipped names step, rather than a failure, where TypeScript is not installed (host-only staging).
+
+## 2026-10-22 Self-edit follow-ups and tool shadowing
+
+- Installed extensions can no longer replace a built-in Mars tool or extension (for example `host_deploy` or `host-dev`); the names are taken from the registry before installed packages load. A clashing package already on disk is skipped at boot and reported; a tampered one still stops boot. `check-reserved-tools.mjs` covers refusal, skip-at-boot and that an extension's own names still install (mutation-checked).
+- `check-self-edit-deploy.mjs` drives `self_edit_finish` through the real deploy gate (dry run only): exact commit staged, changed file seen, isolated boot, live app untouched, failing checks reported as `staging_failed`.
+- `gateway_status` and `discord_connection_status` now say how they differ. With the same small-model eval (qwen2.5:1.5b, 19 requests x 5, two runs each), fully correct calls went from 58 and 64 to 80 and 78 of 95; `gateway_status` misses went from 10 and 10 to 0 and 0.

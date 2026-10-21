@@ -212,3 +212,15 @@ service. It proves that:
 - abandon removes the worktree and the branch;
 - finish calls deploy with the exact commit and `dryRun: true`, and refuses a real
   deploy before a passed dry run.
+
+## Follow-ups on the integration branch (22 October 2026)
+
+- Audit finding 6 is fixed: `ExtensionStore` refuses an installed extension whose name or
+  any tool name belongs to Mars itself (captured from the registry before installed
+  extensions load), so nothing can replace `host_deploy`, `self_edit_finish` or the
+  `host-dev` extension. A package already installed that now clashes is skipped at boot and
+  reported; a tampered package still stops boot. `check-reserved-tools.mjs`, mutation-checked.
+- The default deploy wiring is exercised end to end by `check-self-edit-deploy.mjs`:
+  `self_edit_finish` with `deploy: "dry_run"` goes through the real `createDevTools().deploy`,
+  which stages exactly the self-edit commit, runs its checks, boots it in isolation and
+  leaves the live app and checkout alone. A failing staged check returns `staging_failed`.

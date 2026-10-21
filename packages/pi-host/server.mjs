@@ -155,7 +155,9 @@ registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
 registry.install(createGatewayExtension({ gateway: () => late.gateway }));
 registry.install(createSelfEdit().extension);
-const extensions = new ExtensionStore(registry);
+// Host names are captured before installed extensions load, so none can replace them.
+const hostNames = { extensions: plugins.definitions().map((row) => row.extension).filter((name, i, all) => all.indexOf(name) === i), tools: plugins.definitions().map((row) => row.tool.name) };
+const extensions = new ExtensionStore(registry, undefined, () => hostNames);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();
 // Host tools below: each has a typed result so codemode scripts get an object, not a
