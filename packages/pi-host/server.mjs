@@ -44,6 +44,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { ROOT, WORK, APP, PORT, UI_PORT, DEPENDENCIES, requestPolicy, Credentials, atomicJson } from "./security.mjs";
 import { ExtensionStore } from "./extension-store.mjs";
 import { UiPatchStore } from "./ui-patches.mjs";
+import { createGithubExtension } from "./github-sync.mjs";
 await mkdir(ROOT + "/data", { recursive: true, mode: 0o700 });
 await mkdir(ROOT + "/evidence", { recursive: true, mode: 0o700 });
 const STAGING = process.env.MARS_PI_STAGING === "1";
@@ -139,6 +140,8 @@ registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
 const skills = createSkills({ roots: skillRoots({ work: WORK }) });
 registry.install(createSkillsExtension({ skills }));
+// GitHub pushes through the owner's Composio connection (docs/GITHUB.md).
+registry.install(createGithubExtension({ cwd: WORK }));
 const extensions = new ExtensionStore(registry);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();
