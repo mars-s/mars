@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useReducer, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useReducer, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   initialState,
   parseState,
@@ -45,4 +45,18 @@ export function useWorkbench(): Workbench {
   const workbench = useContext(WorkbenchContext);
   if (!workbench) throw Error("useWorkbench must be used inside WorkbenchProvider.");
   return workbench;
+}
+
+export const PHONE_QUERY = "(max-width: 768px)";
+const subscribePhone = (change: () => void) => {
+  const media = matchMedia(PHONE_QUERY);
+  media.addEventListener("change", change);
+  return () => media.removeEventListener("change", change);
+};
+
+/** True while the workbench covers the chat as a phone sheet, so the chat must be inert. */
+export function useWorkbenchSheet() {
+  const { state } = useWorkbench();
+  const phone = useSyncExternalStore(subscribePhone, () => matchMedia(PHONE_QUERY).matches, () => false);
+  return state.open && phone;
 }

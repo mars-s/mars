@@ -30,7 +30,7 @@ import { ConversationView } from "./thread/conversation-view";
 import { convertMessage } from "./thread/messages";
 import { ExtensionsPage } from "./settings/extensions-page";
 import { SettingsDialog } from "./settings/settings-dialog";
-import { WorkbenchProvider } from "./workbench/workbench-context";
+import { useWorkbenchSheet, WorkbenchProvider } from "./workbench/workbench-context";
 import { WorkbenchPane } from "./workbench/workbench";
 
 const EMPTY_MESSAGES: LiveMessage[] = [];
@@ -86,6 +86,15 @@ function ConversationRuntime({
   }, [runtime, draft]);
   return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
 }
+/** The chat column; inert while the phone workbench sheet covers it. */
+function StageMain({ children }: { children: ReactNode }) {
+  return (
+    <main className="live-main" inert={useWorkbenchSheet()}>
+      {children}
+    </main>
+  );
+}
+
 export function LiveWorkspace() {
   const [snapshot, setSnapshot] = useState<LiveSnapshot | null>(null);
   const [connectionError, setConnectionError] = useState("");
@@ -348,30 +357,31 @@ export function LiveWorkspace() {
   return (
     <MotionConfig reducedMotion="user">
       <WorkspaceContext.Provider value={workspace}>
-      <ConversationRuntime
-        key={selectedId || "root"}
-        snapshot={snapshot}
-        onNew={onNew}
-        onCancel={async () => {
-          await action("/api/abort");
-        }}
-        draft={draft}
-      >
         <div className="live-workspace">
           <Sidebar />
           <WorkbenchProvider>
             <div className="live-stage">
-              <main className="live-main">
-                <WorkspaceHeader />
-                {extensionsOpen ? <ExtensionsPage /> : <ConversationView />}
-              </main>
+              {/* Only the main chat is keyed by conversation, so switching chats never remounts the workbench. */}
+              <ConversationRuntime
+                key={selectedId || "root"}
+                snapshot={snapshot}
+                onNew={onNew}
+                onCancel={async () => {
+                  await action("/api/abort");
+                }}
+                draft={draft}
+              >
+                <StageMain>
+                  <WorkspaceHeader />
+                  {extensionsOpen ? <ExtensionsPage /> : <ConversationView />}
+                </StageMain>
+              </ConversationRuntime>
               {!extensionsOpen && <WorkbenchPane />}
             </div>
           </WorkbenchProvider>
         </div>
         <MobileNav />
         <SettingsDialog />
-      </ConversationRuntime>
       </WorkspaceContext.Provider>
     </MotionConfig>
   );

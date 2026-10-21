@@ -42,9 +42,13 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  max-width: calc(100% - 420px);
+  /* The chat keeps 420px where it can, but the pane never drops below its 360px minimum. */
+  max-width: max(360px, calc(100% - 420px));
   background: var(--sidebar);
   animation: wb-in 180ms var(--ease-out);
+}
+.wb-pane:focus {
+  outline: none;
 }
 .wb-pane[data-expanded] {
   flex: 1 1 auto;

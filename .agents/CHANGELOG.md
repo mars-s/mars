@@ -210,3 +210,11 @@ shows "Reconnecting…" with backoff, and offers New session and End session.
 Verified by check-workbench-terminal (real host, real shell), 7 unit tests, a
 fixture browser check, and an ad hoc run through the Next dev proxy to a real host
 with zsh. Nothing was pushed, deployed or run against a live service.
+
+## 2026-10-21 Workbench shell hardening
+
+- Only the main chat is keyed by the selected conversation, so switching chats no longer remounts the workbench or side chat.
+- Tool shortcuts respect host capabilities: a tool the host cannot run opens the New tab with its reason instead of a broken pane.
+- Phone sheet: focus moves into the sheet, the chat behind it is inert, Escape closes it and focus returns to the toggle.
+- Narrow desktop: the pane keeps its 360px minimum (`max(360px, 100% - 420px)`); the separator reports the rendered width and its maximum.
+- `workbench-ui-check` covers each of these, with two mutation runs (shortcut gate, inert) shown to fail.

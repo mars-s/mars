@@ -1,11 +1,13 @@
 "use client";
 
 import { ChevronLeft, Maximize2, Minimize2, Plus, X } from "lucide-react";
-import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { parseCapabilities } from "@/lib/pi/workbench";
+import { useHostData } from "@/lib/pi/workbench-client";
 import { Launcher } from "./launcher";
 import { PaneFor } from "./panes";
 import { TOOLS, toolIcon, toolTitle } from "./tools";
-import { useWorkbench } from "./workbench-context";
+import { PHONE_QUERY, useWorkbench } from "./workbench-context";
 import { clampWidth, MIN_WIDTH, type TabTarget, type WorkbenchTab } from "./workbench-state";
 import "./workbench.css";
 
@@ -32,10 +34,15 @@ export function WorkbenchPane() {
   const { state, dispatch } = useWorkbench();
   const paneRef = useRef<HTMLElement>(null);
   const dragging = useRef<{ startX: number; startWidth: number } | null>(null);
+  // Asked only while open; a shortcut pressed while closed opens the New tab, which shows reasons.
+  const caps = useHostData(state.open ? "/api/workbench/capabilities" : null, parseCapabilities);
+  // What the layout actually renders, which can be narrower than the stored width.
+  const [shown, setShown] = useState(state.width);
   const available = () => (paneRef.current?.parentElement?.clientWidth ?? 1200) - CHAT_MIN;
   const resize = (width: number) => dispatch({ type: "resize", width: clampWidth(width, available()) });
 
-  // Tool shortcuts (Ctrl, matching the tile hints) open their pane in a new tab.
+  // Tool shortcuts (Ctrl, matching the tile hints) open their pane in a new tab. A tool the
+  // host cannot run opens the New tab instead, where its reason is shown.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (!event.ctrlKey || event.metaKey) return;
@@ -52,11 +59,38 @@ export function WorkbenchPane() {
       );
       if (!tool) return;
       event.preventDefault();
-      dispatch({ type: "open-tool", target: { kind: tool.kind } as TabTarget });
+      if (caps.data?.[tool.kind]?.available) dispatch({ type: "open-tool", target: { kind: tool.kind } as TabTarget });
+      else dispatch({ type: "new-tab" });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dispatch, state.open]);
+  }, [dispatch, state.open, caps.data]);
+
+  // On a phone the workbench is a sheet over the chat: focus moves into it, Escape and
+  // Back close it, and focus returns to the toggle that opened it.
+  useEffect(() => {
+    if (!state.open || !matchMedia(PHONE_QUERY).matches) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    paneRef.current?.focus({ preventScroll: true });
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      dispatch({ type: "close" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      (opener?.isConnected ? opener : document.querySelector<HTMLElement>(".live-workbench-toggle"))?.focus({ preventScroll: true });
+    };
+  }, [state.open, dispatch]);
+
+  useEffect(() => {
+    const pane = paneRef.current;
+    if (!pane) return;
+    const observer = new ResizeObserver(() => setShown(Math.round(pane.offsetWidth)));
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, [state.open]);
 
   if (!state.open) return null;
   const active = state.tabs.find((tab) => tab.id === state.activeId) ?? state.tabs[0];
@@ -90,8 +124,9 @@ export function WorkbenchPane() {
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize workbench"
-          aria-valuenow={state.width}
+          aria-valuenow={shown}
           aria-valuemin={MIN_WIDTH}
+          aria-valuemax={Math.max(MIN_WIDTH, Math.round(available()))}
           tabIndex={0}
           className="wb-divider"
           onPointerDown={onPointerDown}
@@ -105,6 +140,7 @@ export function WorkbenchPane() {
       <section
         ref={paneRef}
         className="wb-pane"
+        tabIndex={-1}
         data-expanded={state.expanded ? "" : undefined}
         aria-label="Workbench"
         style={{ width: state.expanded ? undefined : state.width }}

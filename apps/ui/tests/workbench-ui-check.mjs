@@ -74,8 +74,12 @@ try {
   const before = Number(await divider.getAttribute("aria-valuenow"));
   await divider.focus();
   await desktop.keyboard.press("Shift+ArrowLeft");
+  await desktop.waitForFunction(
+    (target) => Number(document.querySelector('[aria-label="Resize workbench"]')?.getAttribute("aria-valuenow")) === target,
+    before + 64,
+    { timeout: 3000 },
+  );
   const after = Number(await divider.getAttribute("aria-valuenow"));
-  assert.equal(after, before + 64, "Shift+Left widens by 64px");
   const box = await pane.boundingBox();
   assert.ok(Math.abs(box.width - after) < 2, "pane width matches the separator value");
 
@@ -87,11 +91,29 @@ try {
   await desktop.getByRole("button", { name: "Close New tab tab" }).first().click();
   assert.equal(await desktop.getByRole("tab").count(), 1);
 
+  // A shortcut for a tool the host cannot run opens the New tab, never a broken pane.
+  await desktop.locator("body").click({ position: { x: 5, y: 450 } });
+  await desktop.keyboard.press("Control+`");
+  assert.equal(await desktop.getByRole("tab", { name: "Terminal" }).count(), 0, "disabled Terminal shortcut is gated");
+  assert.equal(await desktop.getByRole("tab", { name: "New tab" }).count(), 2, "gated shortcut opened a New tab");
+  await desktop.getByRole("button", { name: "Close New tab tab" }).first().click();
+
   // Expand hides the chat; restore brings it back with the draft.
   await desktop.getByRole("button", { name: "Expand workbench" }).click();
   assert.equal(await input.isVisible(), false);
   await desktop.getByRole("button", { name: "Restore workbench" }).click();
   assert.equal(await input.inputValue(), "Draft survives the split");
+
+  // Switching conversations remounts only the main chat; the workbench keeps its tabs.
+  await desktop.getByRole("button", { name: "New workbench tab" }).click();
+  const tabsBefore = await desktop.getByRole("tab").count();
+  state.conversations.push({ id: "2", title: "Second chat" });
+  await desktop.reload();
+  await desktop.getByRole("region", { name: "Workbench" }).waitFor();
+  await desktop.getByRole("button", { name: /Second chat/ }).first().click();
+  await desktop.getByRole("region", { name: "Workbench" }).waitFor();
+  assert.equal(await desktop.getByRole("tab").count(), tabsBefore, "conversation switch keeps workbench tabs");
+  await desktop.getByRole("button", { name: "Close New tab tab" }).first().click();
 
   // Persistence across reload.
   await desktop.reload();
@@ -99,18 +121,38 @@ try {
   await desktop.getByRole("button", { name: "Close workbench" }).click();
   assert.equal(await desktop.getByRole("region", { name: "Workbench" }).count(), 0);
 
+  // Narrow desktop: the pane stays at its 360px minimum and the separator reports what is shown.
+  const narrow = await page({ width: 1024, height: 768 });
+  await narrow.getByRole("button", { name: "Open workbench" }).click();
+  const narrowPane = narrow.getByRole("region", { name: "Workbench" });
+  await narrowPane.waitFor();
+  const narrowBox = await narrowPane.boundingBox();
+  const narrowValue = Number(await narrow.getByRole("separator", { name: "Resize workbench" }).getAttribute("aria-valuenow"));
+  assert.ok(narrowBox.width >= 359, `pane keeps its minimum at 1024px (got ${narrowBox.width})`);
+  assert.ok(Math.abs(narrowBox.width - narrowValue) < 2, "separator value matches the rendered width");
+  assert.equal(await narrow.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "no overflow at 1024px");
+
   const mobile = await page({ width: 390, height: 844 });
-  await mobile.getByRole("button", { name: "Open workbench" }).click();
+  const mobileToggle = mobile.getByRole("button", { name: "Open workbench" });
+  await mobileToggle.click();
   const sheet = mobile.getByRole("region", { name: "Workbench" });
   await sheet.waitFor();
+  assert.equal(await sheet.evaluate((element) => element.contains(document.activeElement)), true, "focus moves into the sheet");
+  assert.equal(await mobile.locator(".live-main").evaluate((element) => element.inert), true, "chat behind the sheet is inert");
   const sheetBox = await sheet.boundingBox();
   assert.ok(sheetBox.width >= 389 && sheetBox.x <= 1, "full-screen sheet on phones");
   assert.equal(await mobile.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "no horizontal overflow");
   await mobile.screenshot({ path: evidence + "/mobile-launcher.png" });
+  await mobile.keyboard.press("Escape");
+  assert.equal(await sheet.count(), 0, "Escape closes the sheet");
+  await mobile.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Open workbench", null, { timeout: 3000 });
+  assert.equal(await mobile.locator(".live-main").evaluate((element) => element.inert), false);
+  await mobileToggle.click();
+  await sheet.waitFor();
   await mobile.getByRole("button", { name: "Back to chat" }).click();
   assert.equal(await sheet.count(), 0);
   assert.deepEqual(errors, []);
-  console.log("PASS workbench shell: toggle, draft kept, launcher capabilities and reasons, suggestions, keyboard resize, tabs, expand, persistence, mobile sheet without overflow");
+  console.log("PASS workbench shell: toggle, draft kept, launcher capabilities and reasons, suggestions, keyboard resize, tabs, gated shortcuts, expand, conversation switch keeps tabs, persistence, 1024px minimum, mobile sheet focus, inert, Escape, no overflow");
 } finally {
   await browser.close();
 }
