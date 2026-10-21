@@ -35,6 +35,12 @@ const TASKS = [
   ["I am about to do these myself, one by one: find the video in the PR, work out a CDN URL, add the player, check it plays. Show the owner my checklist with the first step in progress.", "plan_update", (a) => Array.isArray(a.steps) && a.steps.length === 4 && a.steps[0].status === "in_progress"],
   ["I have finished step 1 of my checklist and am starting step 2. Steps: 'Run tests', 'Fix failures', 'Commit'. Update the checklist the owner sees.", "plan_update", (a) => Array.isArray(a.steps) && a.steps[0]?.status === "completed" && a.steps[1]?.status === "in_progress"],
   ["Have helper models do this in the background, in order: first research tide pools, then write a post from that research.", "workflow_start", (a) => Array.isArray(a.steps) && a.steps.length >= 2],
+  // Changing Mars itself: isolated worktree, check, then a dry run before any real deploy (docs/SELF-EDIT.md).
+  ["I want to change the Mars host code so plan steps are trimmed. Start that change safely, without touching the live checkout.", "self_edit_start", (a) => typeof a.title === "string" && /plan|trim/i.test(a.title)],
+  ["I have edited files in self-edit trim-plan-steps-3f2a. Check them before committing.", "self_edit_check", (a) => a.id === "trim-plan-steps-3f2a" && (!a.scope || a.scope === "related")],
+  ["Self-edit trim-plan-steps-3f2a passed its checks. Commit it and test it with a dry run, without restarting the host.", "self_edit_finish", (a) => a.id === "trim-plan-steps-3f2a" && (!a.deploy || a.deploy === "dry_run")],
+  ["The dry run of self-edit trim-plan-steps-3f2a passed. Ship it to the live host now.", "self_edit_finish", (a) => a.id === "trim-plan-steps-3f2a" && a.deploy === "deploy"],
+  ["Throw away self-edit trim-plan-steps-3f2a; it is not worth finishing.", "self_edit_abandon", (a) => a.id === "trim-plan-steps-3f2a"],
 ];
 const toTool = (row) => ({ type: "function", function: { name: row.name, description: row.description, parameters: row.parameters ?? { type: "object", properties: {} } } });
 
