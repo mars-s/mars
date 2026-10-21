@@ -26,6 +26,7 @@ export function createDiscovery() {
       { name: 'plugins', prefix: 'plugin_', description: 'See and switch plugins and their tools on or off.' },
       { name: 'project', prefix: 'project_', description: 'Choose the repository this conversation works in, so its AGENTS.md and CLAUDE.md apply.' },
       { name: 'memory', prefix: 'memory_', description: 'Remember or forget short notes that apply to every conversation.' },
+      { name: 'github', prefix: 'github_', description: "Push local git commits to GitHub through the owner's Composio GitHub connection." },
       { name: 'skills', prefix: 'skill_', description: "Find, read, write and install the owner's Markdown skills (saved instructions for kinds of work)." },
     ],
   });
