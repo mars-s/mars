@@ -286,3 +286,8 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - Response headers are forwarded from an allow list, with nosniff always set. Keys idle out after 15 minutes and are bound to the listening process, so a port takeover does not inherit an old key. The dev proxy reads keyed bodies through a 20 MiB bounded reader.
 - New `check-workbench-browser-hostile.mjs` (bad path, bad status, hostile HTML, trickle, flood) and a port-takeover case in `check-workbench-browser.mjs`. Mutation runs: without the status and callback guards the check fails; without process binding the takeover case fails.
 - Accepted risk, documented: a key read by third-party script inside a proxied page can drive that one service until it idles out. The proxy sets `Host` to the loopback address, as any reverse proxy does.
+
+## 2026-10-21 Final workbench gate
+
+- The browser check's takeover child no longer inherits stderr (it held the check runner's pipe open) and is awaited on exit.
+- Gate on this commit: tsc and eslint clean; 76 of 76 unit tests; 12 of 12 browser checks (six original fixtures plus six workbench); native 26 of 29, with all 8 workbench host checks passing and the same three Mac-only failures as original f82d5d0 (check-dev-tools, check-ui-patches, check-vm-control); syntax and boundary checks pass; production build passes.

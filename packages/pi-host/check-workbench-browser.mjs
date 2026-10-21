@@ -203,7 +203,7 @@ try {
   // takes over the same port (the original exits, a newcomer binds it).
   const { spawn } = await import("node:child_process");
   const serve = (port) => {
-    const child = spawn(process.execPath, ["-e", `require("http").createServer((q,s)=>s.end("<title>p"+process.pid+"</title>")).listen(${port},"127.0.0.1",()=>console.log("up"))`], { stdio: ["ignore", "pipe", "inherit"] });
+    const child = spawn(process.execPath, ["-e", `require("http").createServer((q,s)=>s.end("<title>p"+process.pid+"</title>")).listen(${port},"127.0.0.1",()=>console.log("up"))`], { stdio: ["ignore", "pipe", "ignore"] });
     return new Promise((resolve) => child.stdout.once("data", () => resolve(child)));
   };
   const takeoverPort = await freePort();
@@ -222,6 +222,7 @@ try {
   await host.request("/api/workbench/services");
   assert.equal((await host.request(`/api/workbench/browse/${takeoverPort}/~${firstKey}/`, { auth: false })).status, 401, "a key does not outlive the process it was minted for");
   second.kill();
+  await new Promise((resolve) => second.once("close", resolve));
 } finally {
   await host.stop();
 }
