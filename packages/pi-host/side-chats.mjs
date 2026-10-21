@@ -74,8 +74,8 @@ export async function createSideChat({ harness, parentId, agent, title, context 
 
 /** Deferred agent tools: open, list and message the calling conversation's side chats. */
 export function createSideChatExtension({ harness: getHarness, defaultAgent }) {
-  const tool = (name, description, parameters, execute) =>
-    defineTool({ name, description, parameters, structuredOutputSchema: Type.Any(), deferred: true, replay: 'safe', execute: async (args, api, ctx) => output(await execute(args, api, ctx)) });
+  const tool = (name, description, parameters, result, execute) =>
+    defineTool({ name, description, parameters, structuredOutputSchema: result, deferred: true, replay: 'safe', execute: async (args, api, ctx) => output(await execute(args, api, ctx)) });
 
   async function ownSideChat(api, id, ctx) {
     const record = await api.commit((tx) => tx.conversation(nativeId(id)), ctx);
@@ -85,13 +85,28 @@ export function createSideChatExtension({ harness: getHarness, defaultAgent }) {
     return api.conversation(nativeId(id), ctx);
   }
 
+  const SideChatRow = Type.Object({
+    id: Type.String({ description: 'Side chat id. Pass it to side_chat_send as sideChatId.' }),
+    title: Type.String({ description: 'Title shown in the sidebar.' }),
+    running: Type.Boolean({ description: 'True while the side chat is still answering.' }),
+  });
   return defineExtension({
     name: 'mars-side-chats',
     tools: [
       tool(
         'side_chat_open',
-        `Open a side chat beside this conversation (it shows nested under this chat in the sidebar). Optionally send \`task\` as its first message. Returns at once with { id, title }; it does not wait for an answer. Use side_chat_list to check on it. At most ${SIDE_CHAT_MAX} side chats per conversation.`,
-        Type.Object({ title: Type.Optional(Type.String({ maxLength: 160 })), task: Type.Optional(Type.String({ minLength: 1, maxLength: 100000 })) }),
+        `Open a side chat nested under this conversation, optionally starting it on a task.
+Use it for work the owner should be able to open and follow on its own: research, a draft, a long investigation. It runs on its own and returns at once with its id; it does not wait for an answer. To get an answer back into this conversation, use worker_run instead. Calling it again after an interruption reuses the same side chat. At most ${SIDE_CHAT_MAX} per conversation; a side chat cannot open side chats of its own.
+Example: await tools.side_chat_open({ title: "Release names", task: "Suggest three names for the workbench release." })`,
+        Type.Object({
+          title: Type.Optional(Type.String({ maxLength: 160, description: 'Short name shown in the sidebar, e.g. "Release names". Default "Side chat".' })),
+          task: Type.Optional(Type.String({ minLength: 1, maxLength: 100000, description: 'First message to send to the side chat. Omit to open it empty for the owner.' })),
+        }),
+        Type.Object({
+          id: Type.String({ description: 'The new side chat id. Pass it to side_chat_send.' }),
+          title: Type.String({ description: 'Title shown in the sidebar.' }),
+          parentId: Type.String({ description: 'This conversation id.' }),
+        }),
         async (args, api, ctx) => {
           const title = (args.title?.trim() || 'Side chat').slice(0, 160);
           // A replayed call reuses the side chat it already created: creation is one commit,
@@ -111,14 +126,30 @@ export function createSideChatExtension({ harness: getHarness, defaultAgent }) {
       ),
       tool(
         'side_chat_list',
-        `List this conversation's side chats, newest first: { items: [{ id, title, running }], total }. Pages of ${SIDE_CHAT_PAGE}; pass offset for older ones.`,
-        Type.Object({ offset: Type.Optional(Type.Integer({ minimum: 0, maximum: SIDE_CHAT_MAX })) }),
+        `List the side chats opened from this conversation, newest first.
+Use it to find a side chat's id for side_chat_send, or to see which ones are still running. Returns ${SIDE_CHAT_PAGE} at a time with the total; pass offset to page back through older ones. Only this conversation's own side chats are listed.
+Example: const { items, total } = await tools.side_chat_list({})`,
+        Type.Object({ offset: Type.Optional(Type.Integer({ minimum: 0, maximum: SIDE_CHAT_MAX, default: 0, description: `How many of the newest to skip, for paging, e.g. ${SIDE_CHAT_PAGE} for the second page.` })) }),
+        Type.Object({
+          items: Type.Array(SideChatRow, { description: `Up to ${SIDE_CHAT_PAGE} side chats, newest first.` }),
+          total: Type.Integer({ description: 'How many side chats this conversation has in all.' }),
+        }),
         (args, api, ctx) => listSideChats({ harness: getHarness(), parentId: String(api.conversationId), context: ctx, offset: args.offset ?? 0 }),
       ),
       tool(
         'side_chat_send',
-        "Send a message to one of this conversation's own side chats. Returns at once; the reply appears in that side chat.",
-        Type.Object({ sideChatId: Type.String({ pattern: '^[0-9]+$' }), text: Type.String({ minLength: 1, maxLength: 100000 }) }),
+        `Send a message to one of this conversation's side chats.
+Use it to give a side chat more instructions. It returns at once; the side chat answers on its own and the reply appears there, not here. If the side chat is busy, the message waits its turn. Only side chats opened from this conversation can be messaged; get ids from side_chat_list.
+Example: await tools.side_chat_send({ sideChatId: "42", text: "Make them shorter." })`,
+        Type.Object({
+          sideChatId: Type.String({ pattern: '^[0-9]+$', description: 'Id of the side chat, from side_chat_open or side_chat_list, e.g. "42".' }),
+          text: Type.String({ minLength: 1, maxLength: 100000, description: 'The message to send, as plain text.' }),
+        }),
+        Type.Object({
+          sent: Type.Boolean({ description: 'Always true when the call returns; failures throw.' }),
+          sideChatId: Type.String({ description: 'The side chat the message went to.' }),
+          submissionId: Type.String({ description: 'Id of the queued message.' }),
+        }),
         async (args, api, ctx) => {
           const child = await ownSideChat(api, args.sideChatId, ctx);
           const submission = await child.submit({ type: 'input', content: args.text, whenBusy: 'followUp', requestId: `side-chat-send:${api.taskId}:${api.callId}` }, ctx);

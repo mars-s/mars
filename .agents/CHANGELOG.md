@@ -311,3 +311,11 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - Downloads refuse hard-linked files (L4). `filename*` percent-encodes `'()*` (RFC 5987). `workspace_file_link` errors are plain reasons with no host path (L3).
 - Checks: `check-side-chats.mjs` adds read-only listing, paging, the exact index, forks, the cap and a timing bound, with mutation runs for the cap and read-only listing. `check-workbench-files.mjs` adds hard links, plain link errors and RFC 5987.
 - Gate: 78 of 78 unit tests, 13 of 13 browser checks, native 27 of 30 (the same three Mac-only failures), syntax, boundaries and production build all pass.
+
+## 2026-10-21 Tool definitions written for small models
+
+- `docs/TOOLS.md` sets the standard: first line a verb and outcome, when to use it versus its neighbours, what it returns, every field described with units and defaults, a typed result, and a copyable `Example:` call.
+- `tool-quality.mjs` encodes it and `check-tool-quality.mjs` runs it on every installed tool, dumped from the real host (`MARS_DUMP_TOOLS`, never reachable over HTTP). Examples are evaluated as literals and validated against the input schema. `check-tool-quality-rules.mjs` proves each rule catches its defect.
+- Rewrote all 36 Mars tools (vm-control, workers, workflows, web, side chats, file links, plugins, Discord, UI patches, extensions, self-deploy, discovery reset). 82 of 99 fields had no description before; all do now. Every tool has a typed result, so codemode scripts get objects, not JSON strings. Plugin and file-link tools moved to `host-tools.mjs`. Codemode namespaces now cover every tool group, and HOST-GUIDE.md has a which-tool-for-which-job table.
+- Forgiving arguments (`prepareArguments`): JSON-string and plain-string lists for `worker_fanout` and `workflow_start`, and a saved-output id passed to `host_read`. `check-tool-arguments.mjs` proves the repairs and that unrepairable values still fail. `check-web-search.mjs` now validates results against the declared schemas.
+- Measured with a local 1.5B model (qwen2.5:1.5b through Ollama, free), 14 requests x 5 runs, all Mars tools offered: fully correct calls went from 29/70 to 54/70 (two further runs: 33 to 51, 31 to 54). Rerun with `packages/pi-host/scripts/eval-tools-small-model.mjs`.

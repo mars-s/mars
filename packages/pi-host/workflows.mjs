@@ -1,6 +1,6 @@
 import {Type} from '@earendil-works/pi-ai';
 import {configure,defineExtension,defineTask,defineTool,UsageDoc} from '@earendil-works/pi-durable';
-import {nativeTitleDoc,selectWorkerModel} from './orchestration.mjs';
+import {forgivingList,nativeTitleDoc,selectWorkerModel} from './orchestration.mjs';
 const KIND='mars.linear-workflow.v1';
 const nativeId=value=>typeof value==='string'&&/^\d+$/.test(value)?Number(value):value;
 const answer=messages=>messages.filter(m=>m.role==='assistant').at(-1)?.content.filter(c=>c.type==='text').map(c=>c.text).join('\n').slice(0,4000)||'';
@@ -65,10 +65,40 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
    await finish(task,runtime,ctx,'aborted',steps);
   },
  });
- const step=Type.Object({title:Type.String({minLength:1,maxLength:160}),prompt:Type.String({minLength:1,maxLength:16000}),model:Type.Optional(Type.String()),provider:Type.Optional(Type.String()),modelId:Type.Optional(Type.String()),attachmentIds:Type.Optional(Type.Array(Type.String({pattern:'^[a-f0-9]{64}$'}),{maxItems:4}))});
- const make=(name,description,parameters,execute)=>defineTool({name,description,parameters,deferred:true,replay:'safe',executionMode:'parallel',structuredOutputSchema:Type.Any(),outputLimits:{maxBytes:10000},execute:async(args,api,ctx)=>{const value=await execute(args,api,ctx);return{output:[{type:'text',text:JSON.stringify(value)}],structuredOutput:value};}});
+ const step=Type.Object({
+  title:Type.String({minLength:1,maxLength:160,description:'Short name for this step, e.g. "Draft outline".'}),
+  prompt:Type.String({minLength:1,maxLength:16000,description:'Complete brief for this step. It also receives the previous step\'s answer, and nothing else from this chat.'}),
+  model:Type.Optional(Type.Union([Type.Literal('luna'),Type.Literal('sol'),Type.Literal('astra'),Type.Literal('opus')],{default:'luna',description:'luna: fast and cheap (default). sol: strong all-rounder. astra: hardest reasoning. opus: Claude, for writing.'})),
+  provider:Type.Optional(Type.String({description:'Advanced: exact provider, e.g. "openai". Use with modelId instead of model.'})),
+  modelId:Type.Optional(Type.String({description:'Advanced: exact model id, e.g. "gpt-6-sol". Use with provider instead of model.'})),
+  attachmentIds:Type.Optional(Type.Array(Type.String({pattern:'^[a-f0-9]{64}$'}),{maxItems:4,description:'Ids of images from this chat to show this step, up to 4.'})),
+ });
+ const StepView=Type.Object({
+  index:Type.Integer({description:'Step number, from 0.'}),
+  title:Type.String({description:'Step name.'}),
+  status:Type.String({description:'"pending", "running", "completed", "failed" or "aborted".'}),
+  result:Type.Optional(Type.Any({description:'The step answer, once finished (workflow_status only).'})),
+ },{additionalProperties:true});
+ const WorkflowView=Type.Object({
+  id:Type.String({description:'Workflow id.'}),
+  title:Type.String({description:'Workflow name.'}),
+  status:Type.String({description:'"running", "completed", "failed" or "aborted".'}),
+  currentStep:Type.Integer({description:'Index of the step running now.'}),
+  steps:Type.Array(StepView),
+ },{additionalProperties:true});
+ const make=(name,description,parameters,result,execute,prepareArguments)=>defineTool({name,description,parameters,deferred:true,replay:'safe',executionMode:'parallel',structuredOutputSchema:result,outputLimits:{maxBytes:10000},...(prepareArguments?{prepareArguments}:{}),execute:async(args,api,ctx)=>{const value=await execute(args,api,ctx);return{output:[{type:'text',text:JSON.stringify(value)}],structuredOutput:value};}});
  const tools=[
-  make('workflow_start','Start an ordered durable background workflow. Each step uses only its brief and the previous compact result. Returns immediately; inspect workflow_status. Separate from independent worker fanout.',Type.Object({title:Type.String({minLength:1,maxLength:160}),steps:Type.Array(step,{minItems:1,maxItems:16})}),async(args,api,ctx)=>{
+  make('workflow_start',`Start a background process of steps that run one after another, each using the previous step's answer.
+Use it for multi-stage work where each step builds on the last, e.g. research, then outline, then draft: put one entry per stage in steps. Each step gets its own brief plus the previous step's answer. It returns at once with workflowId; check progress and answers with workflow_status. It keeps running after a restart. For independent jobs at the same time, use worker_fanout.
+Example: const { workflowId } = await tools.workflow_start({ title: "Blog post", steps: [{ title: "Research", prompt: "List 5 facts about tide pools." }, { title: "Draft", prompt: "Write a 300-word post from these facts." }] })`,Type.Object({
+   title:Type.String({minLength:1,maxLength:160,description:'Name of the whole workflow, shown in the chat, e.g. "Blog post".'}),
+   steps:Type.Array(step,{minItems:1,maxItems:16,description:'The steps in order, 1 to 16.'}),
+  }),Type.Object({
+   workflowId:Type.String({description:'Pass it to workflow_status or workflow_stop.'}),
+   title:Type.String({description:'Workflow name.'}),
+   status:Type.String({description:'"started".'}),
+   background:Type.Boolean({description:'True: it runs on its own; this call does not wait.'}),
+  }),async(args,api,ctx)=>{
    const steps=args.steps.map(step=>({...step,selection:selectWorkerModel(models,step)}));
    for(const step of steps)if(step.attachmentIds?.length&&!models.getModel(step.selection.provider,step.selection.modelId)?.input?.includes('image'))throw Error('Selected workflow model does not support images');
    const operationId=`workflow-start:${api.taskId}`;
@@ -78,11 +108,19 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
     return tx.createTask(workflow,{title:args.title,steps,startedAt:Date.now(),operationId,...(caller?.input?.assistant?{parentEntryId:String(caller.input.assistant)}:{})},{ownership:{kind:'conversation'},background:true});
    },ctx);
    await api.memo('workflow-id',id,ctx);await api.details({workflowId:String(id)},ctx);return{workflowId:String(id),title:args.title,status:'started',background:true};
+  },args=>{
+   // Forgiving: a JSON string or plain step briefs become {title, prompt} steps.
+   const steps=forgivingList(args?.steps,'prompt');
+   return {...args,steps:Array.isArray(steps)?steps.map((step,index)=>step&&typeof step==='object'&&step.prompt&&!step.title?{...step,title:`Step ${index+1}`}:step):steps};
   }),
-  make('workflow_status','Inspect this conversation workflow, ordered phases and bounded results.',Type.Object({workflowId:Type.String()}),async(args,api,ctx)=>{
+  make('workflow_status',`Check a workflow's progress and read each finished step's answer.
+Use it after workflow_start to see which step is running and to get the answers. The final answer is the result of the last step once status is "completed".
+Example: const { status, steps } = await tools.workflow_status({ workflowId: "88" })`,Type.Object({workflowId:Type.String({description:'Id from workflow_start, e.g. "88".'})}),WorkflowView,async(args,api,ctx)=>{
    const task=await api.getTask(nativeId(args.workflowId),ctx);if(task?.kind!==KIND||task.conversationId!==api.conversationId)throw Error('Workflow not found');return viewOf(task,true);
   }),
-  make('workflow_stop','Stop an ordered background workflow and its active native step.',Type.Object({workflowId:Type.String()}),async(args,api,ctx)=>{
+  make('workflow_stop',`Stop a running workflow, including the step running now.
+Use it when the workflow is no longer needed. Finished steps keep their answers; check them with workflow_status.
+Example: await tools.workflow_stop({ workflowId: "88" })`,Type.Object({workflowId:Type.String({description:'Id from workflow_start, e.g. "88".'})}),Type.Object({workflowId:Type.String({description:'The workflow stopped.'}),status:Type.String({description:'"stopping".'})}),async(args,api,ctx)=>{
    const task=await api.getTask(nativeId(args.workflowId),ctx);if(task?.kind!==KIND||task.conversationId!==api.conversationId)throw Error('Workflow not found');await abortTask(task.id,ctx);return{workflowId:args.workflowId,status:'stopping'};
   }),
  ];

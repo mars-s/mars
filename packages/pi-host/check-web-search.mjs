@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { isIP } from 'node:net';
+import { Compile } from 'typebox/compile';
 import { createWebSearchExtension, extractSources, htmlToText, isPrivateAddress, parseModelList, DEFAULT_SEARCH_MODELS } from './web-search.mjs';
 
 const calls = [];
@@ -18,7 +19,15 @@ function fakeModels({ fail = new Set(), signedOut = new Set() } = {}) {
   };
 }
 const tool = (ext, name) => ext.tools.find(t => t.name === name);
-const run = async (ext, name, args) => (await tool(ext, name).execute(args, {}, { abortSignal: new AbortController().signal })).structuredOutput;
+// Every result must match the tool's declared result schema, as Pi enforces for scripts.
+let validated = 0;
+const run = async (ext, name, args) => {
+  const value = (await tool(ext, name).execute(args, {}, { abortSignal: new AbortController().signal })).structuredOutput;
+  const check = Compile(tool(ext, name).structuredOutputSchema);
+  assert.ok(check.Check(value), `${name} result matches its declared schema: ` + JSON.stringify([...check.Errors(value)].slice(0, 2)));
+  validated++;
+  return value;
+};
 
 // Registration and defaults.
 assert.deepEqual(parseModelList(''), DEFAULT_SEARCH_MODELS);
@@ -92,4 +101,5 @@ assert.deepEqual(calls.at(-1).payload.betas, ['a', 'web-fetch-2025-09-10']);
 assert.equal(calls.at(-1).payload.tools[1].type, 'web_fetch_20250910');
 await assert.rejects(run(fx, 'web_fetch', { url: 'https://pub.dev/blocked', fallback: false }), /HTTP 403/);
 
-console.log('web-search checks passed');
+assert.ok(validated >= 4, `results were schema-checked (${validated})`);
+console.log(`web-search checks passed (${validated} results matched their declared schemas)`);

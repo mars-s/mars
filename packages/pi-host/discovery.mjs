@@ -12,11 +12,17 @@ export function createDiscovery() {
     inlineBudget: 1800,
     models: false,
     namespaces: [
-      { name: 'host', prefix: 'host_', description: 'Owner-authorised shell, files and OS control.' },
-      { name: 'workers', prefix: 'worker_', description: 'Selected-model native child agents and workflows.' },
-      { name: 'artefacts', prefix: 'artefact_', description: 'Read/search saved results without loading whole files.' },
+      // One line each, saying when to reach for the group. Listed by codemode and describeNamespace().
+      { name: 'host', prefix: 'host_', description: "Run shell commands, read and write any file, and deploy the Mars host on the owner's machine." },
+      { name: 'workers', prefix: 'worker_', description: 'Hand jobs to helper models and wait for their answers (one job, or several at once).' },
+      { name: 'workflows', prefix: 'workflow_', description: 'Run steps one after another in the background, each building on the last.' },
+      { name: 'artefacts', prefix: 'artefact_', description: 'Read or search the rest of a long saved output by its id.' },
+      { name: 'web', prefix: 'web_', description: 'Search the web for current information, and read web pages.' },
       { name: 'sideChats', prefix: 'side_chat_', description: 'Open, list and message side chats nested under this conversation.' },
-      { name: 'workspaceFiles', prefix: 'workspace_file_', description: 'Download links for workspace files, to hand to the owner.' },
+      { name: 'workspaceFiles', prefix: 'workspace_file_', description: 'Give the owner download links for workspace files.' },
+      { name: 'uiPatches', prefix: 'ui_patch_', description: 'Change the Mars interface safely: stage, validate, promote or roll back.' },
+      { name: 'discord', prefix: 'discord_', description: "Read the owner's connected Discord server (read-only)." },
+      { name: 'plugins', prefix: 'plugin_', description: 'See and switch plugins and their tools on or off.' },
     ],
   });
   const codemode = nativeCode.tools.find(t => t.name === 'codemode');
@@ -38,13 +44,20 @@ export function createDiscovery() {
   const modelTools = [boundedCode, search];
   const reset = defineTool({
     name: 'discovery_reset',
-    description: 'Reset this conversation to codemode and tool_search schemas after exploring many tools. Capability access stays available through scripts.',
+    description: `Unload the tools that tool_search added, keeping only codemode and tool_search.
+Use it after exploring many tools, when the loaded tool list has grown long and slows you down. Nothing is lost: every tool can still be called from codemode as tools.<name>(...), and tool_search can load any of them again.
+Example: await tools.discovery_reset({})`,
     parameters: Type.Object({}),
+    structuredOutputSchema: Type.Object({
+      reset: Type.Boolean({ description: 'True once the extra tools are unloaded.' }),
+      note: Type.String({ description: 'What still works.' }),
+    }),
     deferred: true,
     replay: 'safe',
     execute: async (_args, api, ctx) => {
       await api.commit(tx => configure(tx, api.conversationId, { modelTools }, ctx), ctx);
-      return { output: [{ type: 'text', text: 'Discovery reset. Host tools remain callable through codemode.' }] };
+      const value = { reset: true, note: 'Every tool is still callable from codemode, and tool_search can load any again.' };
+      return { output: [{ type: 'text', text: JSON.stringify(value) }], structuredOutput: value };
     },
   });
   return {
