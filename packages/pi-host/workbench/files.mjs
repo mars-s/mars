@@ -3,7 +3,7 @@ import { open, opendir, lstat, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { StringDecoder } from "node:string_decoder";
-import { resolveInside } from "./paths.mjs";
+import { openInside, resolveInside } from "./paths.mjs";
 
 // docs/WORKBENCH.md "Files". Read-only views of the Pi workspace.
 export const FILE_LIMITS = {
@@ -57,20 +57,6 @@ async function readFully(handle, length) {
     filled += bytesRead;
   }
   return buffer.subarray(0, filled);
-}
-
-/** Opens a regular file without ever blocking on a FIFO or device. */
-async function openRegular(absolute) {
-  const before = await stat(absolute);
-  if (before.isDirectory()) throw fail("That path is a folder, not a file.", 400);
-  if (!before.isFile()) throw fail("Only regular files can be viewed.", 400);
-  const handle = await open(absolute, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
-  const info = await handle.stat();
-  if (!info.isFile()) {
-    await handle.close();
-    throw fail("Only regular files can be viewed.", 400);
-  }
-  return { handle, info };
 }
 
 function score(name, path, needle) {
@@ -171,8 +157,7 @@ export function createFiles({ work }) {
   }
 
   async function file(rel) {
-    const target = await resolveInside(work, rel);
-    const { handle, info } = await openRegular(target.absolute);
+    const { handle, info, target } = await openInside(work, rel);
     try {
       const base = { path: target.relative, size: info.size, modified: info.mtimeMs };
       const head = await readFully(handle, Math.min(info.size, FILE_LIMITS.sniff));
@@ -188,8 +173,7 @@ export function createFiles({ work }) {
   }
 
   async function raw(rel, res) {
-    const target = await resolveInside(work, rel);
-    const { handle, info } = await openRegular(target.absolute);
+    const { handle, info, target } = await openInside(work, rel);
     let streaming = false;
     try {
       const mime = sniffImage(await readFully(handle, Math.min(info.size, 16)));

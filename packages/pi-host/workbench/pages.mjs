@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { link, lstat, mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { link, lstat, mkdir, open, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { resolveInside } from "./paths.mjs";
+import { openInside, resolveInside, writeNewInside } from "./paths.mjs";
 
 // Pages (docs/WORKBENCH.md "Pages"): Markdown files in WORK/pages, saved atomically.
 const NAME = /^[a-z0-9-]{1,64}$/;
@@ -13,8 +14,10 @@ const fail = (message, status, extra = {}) => Object.assign(new Error(message), 
 export const pageTitle = (text, name) => /^# +(.+?)\s*#*\s*$/m.exec(text)?.[1].trim() || name;
 
 async function head(path) {
-  const file = await open(path, "r");
+  // Non-blocking and no symlinks: a FIFO swapped in after the listing must not hang a worker.
+  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   try {
+    if (!(await file.stat()).isFile()) return "";
     const buffer = Buffer.alloc(TITLE_SCAN);
     const { bytesRead } = await file.read(buffer, 0, TITLE_SCAN, 0);
     return buffer.subarray(0, bytesRead).toString("utf8");
@@ -53,26 +56,32 @@ export function createPages({ work }) {
       const info = await lstat(path).catch(() => null);
       if (!info?.isFile()) continue;
       const name = entry.slice(0, -3);
-      pages.push({ name, title: pageTitle(await head(path), name), modified: info.mtimeMs, size: info.size });
+      const text = await head(path).catch(() => null);
+      if (text === null) continue;
+      pages.push({ name, title: pageTitle(text, name), modified: info.mtimeMs, size: info.size });
       if (pages.length >= MAX_PAGES) break;
     }
     return pages.sort((a, b) => b.modified - a.modified);
   }
 
   async function read(name) {
-    const { absolute } = await file(name);
-    const info = await stat(absolute).catch((error) => {
-      throw error.code === "ENOENT" ? fail("That page does not exist.", 404) : error;
+    await file(name);
+    const opened = await openInside(work, `pages/${name}.md`).catch((error) => {
+      throw error.code === "ENOENT" || error.status === 400 ? fail("That page does not exist.", 404) : error;
     });
-    if (!info.isFile()) throw fail("That page does not exist.", 404);
-    if (info.size > MAX_TEXT) throw fail("This page is larger than 1 MiB.", 413);
-    return { name, text: await readFile(absolute, "utf8"), modified: info.mtimeMs };
+    try {
+      if (opened.info.size > MAX_TEXT) throw fail("This page is larger than 1 MiB.", 413);
+      return { name, text: (await opened.handle.readFile()).toString("utf8"), modified: opened.info.mtimeMs };
+    } finally {
+      await opened.handle.close();
+    }
   }
 
-  async function writeTemp(folder, text) {
-    const temp = join(folder, `.${randomBytes(6).toString("hex")}.tmp`);
-    await writeFile(temp, text, { flag: "wx", mode: 0o600 });
-    return temp;
+  // The temp file is proven inside WORK through its handle. link() and rename() then
+  // move it by name within pages/: if pages/ were swapped meanwhile, the temp name would
+  // not exist at the other end and the move fails, so a page cannot land outside.
+  async function writeTemp(_folder, text) {
+    return writeNewInside(work, `pages/.${randomBytes(6).toString("hex")}.tmp`, text);
   }
 
   /** Link the temp file to a name that must not exist yet; false when it does. */
@@ -102,7 +111,9 @@ export function createPages({ work }) {
         for (let n = 1; n <= 1000; n++) {
           const candidate = n === 1 ? "untitled" : `untitled-${n}`;
           const { absolute } = await file(candidate);
-          if (await createExclusive(await writeTemp(folder, text), absolute)) return { created: true, page: await saved(candidate, absolute, text) };
+          if (await createExclusive(await writeTemp(folder, text), absolute)) {
+            return { created: true, page: await saved(candidate, absolute, text) };
+          }
         }
         throw fail("Too many untitled pages. Rename some first.", 409);
       }

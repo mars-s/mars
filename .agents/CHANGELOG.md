@@ -241,3 +241,10 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 
 - `apps/ui/lib/server/pi-proxy.ts` added the owner token for any caller, and its "local only" check read `request.url`, which is always 127.0.0.1 because Next binds there. A DNS-rebinding page could read files and terminal output, and any local process could open a shell (reproduced on `next start`; predates the workbench, which made it reach a shell).
 - The proxy is now off in production builds (404): production browsers reach `/api` on the Pi host, which authenticates the owner itself. In development it also checks the Host header the browser actually sent. New unit test; the reviewer's probe now gets 404 for every request, and the owner path through the host still serves pages, state and workbench capabilities.
+
+## 2026-10-21 Swap-race fixes for Files and Pages (independent review)
+
+- `paths.mjs` gains `openInside` and `writeNewInside`. After opening, `handleInside` proves the open handle is the file inside WORK: through /proc/self/fd on Linux, and elsewhere with two component-by-component lstat walks that must agree and end on the open inode.
+- Files reads use `openInside`. Page reads use it too (non-blocking, no symlinks), and page titles in listings open non-blocking, so a FIFO swapped into pages/ cannot hang a worker thread.
+- Page saves write their temp file with `writeNewInside`. If the folder was swapped mid-write, the bytes are wiped through the handle and the save is refused.
+- New `check-workbench-races.mjs` flips a folder to a symlink outside WORK, and a page to a FIFO, during reads and saves. Mutation runs: without the recheck, 360 of 10,684 racing reads leaked; with blocking page reads, 1 of 248 hung.
