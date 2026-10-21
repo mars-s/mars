@@ -7,6 +7,8 @@ import { FilesPane } from "./files-pane";
 import { ChangesPane } from "./changes-pane";
 import { PagePane } from "./page-pane";
 import { SideChatPane } from "./side-chat-pane";
+import { BrowserPane } from "./browser-pane";
+import { ExtensionPane } from "./extension-pane";
 // One import and one case per lane; each lane owns its pane file.
 
 /** Routes a tab to its pane. A tool without a pane says so plainly. */
@@ -22,7 +24,10 @@ export function PaneFor({ tab }: { tab: WorkbenchTab }) {
       return <SideChatPane tab={tab} />;
     case "terminal":
       return <TerminalPane tab={tab} />;
-    // lane: browser  -> case "browser": return <BrowserPane tab={tab} />;
+    case "browser":
+      return <BrowserPane tab={tab} />;
+    case "extension":
+      return <ExtensionPane tab={tab} />;
     default:
       return (
         <div className="wb-empty" role="status">

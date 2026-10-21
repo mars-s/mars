@@ -43,6 +43,9 @@ export async function startHost(extraEnv = {}) {
         (res) => {
           const chunks = [];
           res.on("data", (chunk) => chunks.push(chunk));
+          // A response cut off mid-stream (for example at a size cap) settles as truncated.
+          res.on("aborted", () => resolve({ status: res.statusCode, headers: res.headers, truncated: true, buffer: Buffer.concat(chunks) }));
+          res.on("error", () => resolve({ status: res.statusCode, headers: res.headers, truncated: true, buffer: Buffer.concat(chunks) }));
           res.on("end", () => {
             const buffer = Buffer.concat(chunks);
             let json;

@@ -200,13 +200,13 @@ createServer(async (req, res) => {
         terminal: { available: true },
         "side-chat": { available: true },
         page: { available: true },
-        browser: { available: false, reason: "Fixture: Browser is not built yet." },
+        browser: { available: true },
       },
     });
   if (url.pathname === "/api/workbench/suggestions")
     return json(res, 200, {
       suggestions: [
-        { kind: "service", title: "Fixture service (Chemwatch dev)", port: 3100 },
+        { kind: "service", title: "Fixture web app", port: 4173 },
         { kind: "page", title: "Release plan (fixture)", name: "release-plan" },
       ],
     });
@@ -406,6 +406,37 @@ createServer(async (req, res) => {
         } else if (char >= " ") (session.line += char), append(session, char);
       }
       return json(res, 200, { accepted: 1 });
+    }
+  }
+  // workbench lane: browser
+  // A labelled fixture web app on "port 4173", served here. It has root-relative CSS,
+  // JS, a root-relative fetch and a second page, like a real dev server. No real
+  // service is reached and keys are fixture values.
+  {
+    const FIXTURE_PORT = 4173;
+    const KEY = "fixture-browse-key-not-a-secret-0123456789a";
+    if (url.pathname === "/api/workbench/services") return json(res, 200, { services: [{ port: FIXTURE_PORT, title: "Fixture web app", status: 200 }] });
+    if (url.pathname === "/api/workbench/browse-key" && req.method === "POST")
+      return Number(body.port) === FIXTURE_PORT ? json(res, 201, { key: KEY, port: FIXTURE_PORT }) : json(res, 403, { error: `localhost:${body.port} is not a running local web service the workbench can open.` });
+    if (url.pathname === "/api/workbench/browse-key/revoke") return json(res, 200, { revoked: true });
+    const browse = /^\/api\/workbench\/browse\/(\d+)\/~([A-Za-z0-9_-]{43})(\/.*)?$/.exec(url.pathname);
+    if (browse) {
+      const sandbox = { "content-security-policy": "sandbox allow-scripts allow-forms allow-popups; frame-ancestors 'self'", "referrer-policy": "no-referrer", "access-control-allow-origin": "null" };
+      if (Number(browse[1]) !== FIXTURE_PORT || browse[2] !== KEY) return res.writeHead(401, { ...sandbox, "content-type": "application/json" }), res.end('{"error":"Unknown browse key"}');
+      const prefix = `/api/workbench/browse/${FIXTURE_PORT}/~${KEY}`;
+      const page = (title, inner) =>
+        `<!doctype html><html><head><base href="${prefix}/"><script>(()=>{const P=${JSON.stringify(prefix)};const f=window.fetch;window.fetch=(i,o)=>f(typeof i==="string"&&i.startsWith("/")&&!i.startsWith(P)?P+i:i,o);const tell=()=>parent.postMessage({marsBrowse:location.pathname+location.search},"*");addEventListener("popstate",tell);tell();})();</script><title>${title}</title><link rel="stylesheet" href="${prefix}/assets/site.css"></head><body><header><strong>Fixture web app</strong> <small>served by the preview fixture, not a real service</small></header>${inner}<script type="module" src="${prefix}/assets/app.js"></script></body></html>`;
+      const files = {
+        "/": ["text/html", page("Fixture web app", `<h1>Hello from localhost:${FIXTURE_PORT}</h1><p id="status">Loading data…</p><p><a href="${prefix}/about">About this fixture</a></p>`)],
+        "/about": ["text/html", page("About the fixture", `<h1>About</h1><p>A second page, reached by a link inside the frame.</p><p><a href="${prefix}/">Home</a></p>`)],
+        "/assets/site.css": ["text/css", "body{font:15px/1.5 system-ui,sans-serif;margin:0;color:#1f1e1d;background:#faf9f5}header{padding:12px 20px;border-bottom:1px solid #e5e2da}header small{color:#77736a;margin-left:6px}h1,p{margin:16px 20px}h1{font-size:22px}a{color:#c15f3c}#status[data-ok]{color:#2f7d4f}"],
+        "/assets/app.js": ["text/javascript", `const s=document.getElementById("status");if(s)fetch("/api/hello").then(r=>r.json()).then(d=>{s.textContent=d.message;s.dataset.ok=""}).catch(()=>{s.textContent="The fetch failed."});`],
+        "/api/hello": ["application/json", JSON.stringify({ message: "Fetched /api/hello through the proxy (fixture data)." })],
+      };
+      const file = files[browse[3] || "/"];
+      if (!file) return res.writeHead(404, { ...sandbox, "content-type": "text/plain" }), res.end("Fixture: not found");
+      res.writeHead(200, { ...sandbox, "content-type": file[0], "cache-control": "no-store" });
+      return res.end(file[1]);
     }
   }
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });

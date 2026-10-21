@@ -26,7 +26,7 @@ export function createWorkbench({ work, send, jsonBody, tools = {}, extensionUis
       terminal: tools.terminal ? (await tools.terminal.available()).reason : "Terminal is not built into this host yet.", // lane: terminal (the module probes python3 and pty)
       "side-chat": "",
       page: tools.pages ? "" : "Pages are not built into this host yet.",
-      browser: tools.browser ? "" : "Browser is not built into this host yet.",
+      browser: tools.browser ? (await tools.browser.available()).reason : "Browser is not built into this host yet.", // lane: browser (lsof or ss)
     };
     return {
       tools: Object.fromEntries(Object.entries(reasons).map(([key, reason]) => [key, reason ? { available: false, reason } : { available: true }])),
@@ -40,6 +40,10 @@ export function createWorkbench({ work, send, jsonBody, tools = {}, extensionUis
     return { suggestions: rows };
   }
   return {
+    /** Before owner auth: only a browse path with a valid key for its port (lane: browser). */
+    async handleKeyed(req, res, url) {
+      return tools.browser ? tools.browser.handleKeyed(req, res, url, { send }) : false;
+    },
     async handle(req, res, url) {
       if (!url.pathname.startsWith("/api/workbench/")) return false;
       await ready;

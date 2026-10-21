@@ -166,21 +166,54 @@ authority the agent's own `host_exec` tool already has.
 
 ### Services and browser
 
-- `GET /api/workbench/services`: TCP listeners on loopback found by `lsof` (macOS)
-  or `ss` (Linux), excluding the host and UI ports themselves, each probed with an
-  HTTP GET `/` (1.5 s timeout) and kept only if it answers HTTP: `{ port, title?, status }`.
-  Results are cached 10 s.
-- `GET|POST /api/workbench/browse/<port>/<path>`: reverse proxy to
-  `http://127.0.0.1:<port>/<path>` only when `<port>` is in the current services
-  list (or `MARS_WORKBENCH_PORTS`). Never another host. Requests drop `cookie`,
-  `authorization`, `origin` and `referer`; responses drop `set-cookie`,
-  `content-security-policy`, `x-frame-options` and `strict-transport-security`,
-  and get `content-security-policy: sandbox allow-scripts allow-forms allow-popups`
-  so a proxied page runs in an opaque origin and cannot call Mars APIs with the
-  owner cookie. Redirects to other ports or hosts are not followed. Body cap 20 MiB.
-- The browser pane renders proxied pages in a sandboxed iframe (`allow-scripts
-  allow-forms`, never `allow-same-origin`). An external `https://` URL typed into the
-  address bar is not proxied: the pane offers "Open in a new browser tab".
+- `GET /api/workbench/services`: TCP listeners on loopback or wildcard addresses found
+  by `lsof` (macOS) or `ss` (Linux), excluding the host port, the UI port and
+  `MARS_WORKBENCH_EXCLUDE_PORTS`, each probed with HTTP GET `/` (1.5 s) and kept only
+  if it answers HTTP: `{ port, title?, status }`. Cached 10 s. A listener that did not
+  answer HTTP is not probed again for 5 minutes. `MARS_WORKBENCH_PORTS` adds ports
+  lsof or ss cannot see.
+- `POST /api/workbench/browse-key {port}` (owner, exact origin): mints a browse key for
+  one discovered, non-excluded port, `201 {key}`, else 403. 32 random bytes in
+  base64url, held in memory only and never logged. A key expires after 30 minutes idle
+  or 8 hours, at most 32 live keys (oldest evicted). `POST
+  /api/workbench/browse-key/revoke {key}`; the pane revokes its keys when the tab closes.
+- `GET|POST /api/workbench/browse/<port>/~<key>/<path>`: the keyed proxy. It is
+  checked before owner authentication, because a sandboxed page's own requests are
+  cross-site and carry no `SameSite=Strict` cookie. It grants only proxying to the
+  key's own port: a key for another port, or an unknown, expired or revoked key, falls
+  through to owner auth and gets 401, and a key opens no other route. Encoded dot
+  segments are resolved before routing, so they leave the keyed path. The unkeyed form
+  `/api/workbench/browse/<port>/<path>` needs the owner.
+- Both forms reach `127.0.0.1` or `::1` on that port only. Requests drop `cookie`,
+  `authorization`, `origin`, `referer` and `x-forwarded-*`. Responses drop
+  `set-cookie`, CSP, `x-frame-options`, HSTS and CORS headers, and always get
+  `content-security-policy: sandbox allow-scripts allow-forms allow-popups;
+  frame-ancestors 'self'`, `referrer-policy: no-referrer` and, for keyed requests
+  only, `access-control-allow-origin: null` so the opaque frame can read its own
+  service's module scripts and fetches. That is safe because keyed requests carry no
+  credentials. Same-service redirects are rewritten into the proxy. Redirects to
+  another port or host become a 502 JSON error. Bodies are capped at 20 MiB both ways.
+- Root-relative URLs: `<base>` alone does not fix `/assets/app.js` or
+  `fetch("/api")`. The proxy injects `<base>` plus a small script first in `<head>`.
+  The script routes root-relative `fetch`, `XMLHttpRequest`, `EventSource` and
+  `history.pushState/replaceState` into the keyed prefix and reports in-frame
+  navigation to the pane with `postMessage`. The proxy also rewrites root-relative
+  `src`, `href`, `action`, `srcset`, `poster`, CSS `url()` and `@import`, and JS module
+  specifiers in HTML, CSS and JavaScript responses.
+- Known limits, stated honestly: WebSockets and absolute URLs to the service's own
+  origin (`http://localhost:5173/...` built at runtime) are not rewritten. Service
+  workers and storage are unavailable in the opaque origin. Compressed HTML is passed
+  through without rewriting. Hot reload in proxied dev servers therefore may not work.
+- The pane: address bar, Back, Forward and Reload from its own history stack, the
+  iframe with `sandbox="allow-scripts allow-forms allow-popups"` (never
+  `allow-same-origin`) and `referrerpolicy="no-referrer"`, and loading and error
+  states. Messages from the frame are accepted only from that frame's window and only
+  for paths under the tab's own port prefix. An external URL is never proxied; the
+  pane offers "Open in a new tab" (`noopener noreferrer`). The tab keeps its URL.
+- Development: the Next dev proxy forwards the keyed form without the owner token,
+  exempt only from its same-site and JSON checks, with the same sandbox headers.
+  `skipTrailingSlashRedirect` keeps the trailing `/` the `<base>` needs. In production
+  the Next proxy is off and the Pi host serves `/api` directly.
 
 ### Suggested
 
@@ -190,8 +223,10 @@ Only things that exist right now appear.
 
 ### Extensions
 
-"More tools" lists installed, enabled extensions with a UI from `snapshot.extensions`
-and mounts them with the existing `/extensions/<hash>/client.js` module loader.
+"More tools" lists installed, enabled extensions with a UI from `snapshot.extensions`.
+Each opens in its own tab through the exact `ExtensionPanel` mount used by the
+Extensions page (`/extensions/<hash>/client.js`). A tab whose extension was since
+disabled or removed says so instead of loading.
 
 ## UI files
 

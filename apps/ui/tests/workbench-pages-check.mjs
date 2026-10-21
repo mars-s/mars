@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
 
 // Fixture-only: pages and conversations live in this file so the check needs no host.
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/workbench-pages";
@@ -118,7 +118,7 @@ async function open(viewport, { theme } = {}) {
     return route.fulfill({ status, json });
   });
   await tab.goto(new URL("?conversation=1", uiBaseURL()).href, { waitUntil: "domcontentloaded", timeout: 180000 });
-  await tab.getByRole("textbox", { name: "Message Mars" }).waitFor();
+  await waitForHydration(tab);
   await tab.getByText("Fixture question 24").waitFor();
   return { tab, db };
 }

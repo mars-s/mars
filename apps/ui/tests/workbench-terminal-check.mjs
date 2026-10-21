@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
 
 // Fixture-only: the terminal routes are a scripted stand-in answered in this test, never a real shell.
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/workbench-terminal";
@@ -127,7 +127,7 @@ async function open({ viewport, theme = "dark", storage }) {
     { theme, storage },
   );
   await page.goto(uiBaseURL(), { waitUntil: "domcontentloaded", timeout: 180000 });
-  await page.getByRole("textbox", { name: "Message Mars" }).waitFor();
+  await waitForHydration(page);
   return { page, host, context };
 }
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { deflateSync } from "node:zlib";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
 
 // Fixture-only: every workbench route is answered here so the check is independent of a host.
 const evidence = process.env.MARS_EVIDENCE_DIR || "/tmp/mars-workbench-evidence/files";
@@ -118,7 +118,7 @@ async function open(viewport, theme) {
     return json === undefined ? route.fulfill({ status, body, contentType }) : route.fulfill({ status, json });
   });
   await tab.goto(uiBaseURL(), { waitUntil: "domcontentloaded", timeout: 180000 });
-  await tab.getByRole("textbox", { name: "Message Mars" }).waitFor();
+  await waitForHydration(tab);
   return tab;
 }
 async function openFiles(tab) {

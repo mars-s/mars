@@ -394,6 +394,10 @@ const server = http.createServer(async (req, res) => {
       res.end();
       return;
     }
+    // Workbench browser: a sandboxed page's own asset, link and form requests carry a
+    // per-port browse key instead of the owner cookie. It reaches that one proxied
+    // service and nothing else; anything else falls through to owner auth below.
+    if (await workbench.handleKeyed(req, res, url)) return;
     const cookie = (req.headers.cookie || "")
       .split(";")
       .map((s) => s.trim())

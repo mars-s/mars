@@ -23,3 +23,17 @@ export function browserLaunchOptions() {
 export function uiBaseURL(env = process.env) {
   return env.MARS_UI_BASE_URL || env.MARS_UI_URL || `http://127.0.0.1:${env.MARS_UI_PORT || "3082"}/`;
 }
+
+/**
+ * Wait until the live workspace is hydrated. The header is server-rendered, so a click
+ * that lands before React attaches its handlers is silently lost. Every workbench check
+ * calls this after loading the page.
+ */
+export async function waitForHydration(page) {
+  await page.getByRole("textbox", { name: "Message Mars" }).waitFor({ timeout: 120000 });
+  await page.waitForFunction(
+    () => Object.keys(document.querySelector(".live-workbench-toggle") ?? {}).some((key) => key.startsWith("__reactProps")),
+    null,
+    { timeout: 60000 },
+  );
+}

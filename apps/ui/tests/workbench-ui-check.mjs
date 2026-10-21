@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
 
 // Fixture-only: every workbench route is answered here so the check is independent of a host.
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/workbench-ui";
@@ -42,12 +42,19 @@ async function page(viewport) {
   const context = await browser.newContext({ viewport, reducedMotion: "reduce" });
   const tab = await context.newPage();
   tab.on("pageerror", (error) => errors.push(error.message));
+  // An installed extension UI, mounted by the same module loader the Extensions page uses.
+  await tab.route(`**/extensions/${"c".repeat(64)}/client.js`, (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: "export function mount(root){const p=document.createElement('p');p.textContent='Canvas notes mounted (fixture)';root.append(p);return()=>p.remove();}",
+    }),
+  );
   await tab.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
     return route.fulfill({ json: routes[path] ?? { accepted: true } });
   });
   await tab.goto(uiBaseURL(), { waitUntil: "domcontentloaded", timeout: 180000 });
-  await tab.getByRole("textbox", { name: "Message Mars" }).waitFor();
+  await waitForHydration(tab);
   return tab;
 }
 try {
@@ -85,7 +92,14 @@ try {
 
   // Tabs: More tools lists extensions; a new tab and close behave.
   await desktop.getByRole("button", { name: "More tools…" }).click();
-  await desktop.getByRole("button", { name: /^Canvas notes/ }).waitFor();
+  await desktop.getByRole("button", { name: /^Canvas notes/ }).click();
+  await desktop.getByText("Canvas notes mounted (fixture)").waitFor();
+  assert.equal(await desktop.getByRole("tab", { name: "Canvas notes" }).getAttribute("aria-selected"), "true", "the extension opens in its own tab");
+  await desktop.screenshot({ path: evidence + "/desktop-extension.png" });
+  await desktop.getByRole("button", { name: "Close Canvas notes tab" }).click();
+  // It was the only tab, so closing it closes the workbench; the + reopens a New tab.
+  assert.equal(await desktop.getByRole("region", { name: "Workbench" }).count(), 0, "closing the last tab closes the workbench");
+  await desktop.getByRole("button", { name: "Open workbench" }).click();
   await desktop.getByRole("button", { name: "New workbench tab" }).click();
   assert.equal(await desktop.getByRole("tab").count(), 2);
   await desktop.getByRole("button", { name: "Close New tab tab" }).first().click();

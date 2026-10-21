@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
 
 // Fixture-only: the Changes routes are answered here with labelled data, independent of a host.
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/workbench-changes";
@@ -103,7 +103,7 @@ async function open(viewport, theme) {
     return route.fulfill({ json: answer ? answer(url) : { accepted: true } });
   });
   await tab.goto(uiBaseURL(), { waitUntil: "domcontentloaded", timeout: 180000 });
-  await tab.getByRole("textbox", { name: "Message Mars" }).waitFor();
+  await waitForHydration(tab);
   await tab.getByRole("button", { name: "Open workbench" }).click();
   await tab.getByRole("region", { name: "Workbench" }).getByRole("button", { name: "Changes", exact: true }).click();
   await tab.getByRole("heading", { name: "4 files changed" }).waitFor();

@@ -1,0 +1,104 @@
+/* Browser pane: address bar and a sandboxed frame. Tokens only (DESIGN.md). */
+.wb-browser {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.wb-browser-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar);
+}
+.wb-browser-address {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  margin-left: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  transition: border-color 120ms var(--ease-out);
+}
+.wb-browser-address:focus-within {
+  border-color: color-mix(in srgb, var(--clay) 60%, var(--border));
+}
+.wb-browser-address input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 400 13px/1 var(--font-sans);
+  outline: none;
+}
+.wb-browser-address input::placeholder {
+  color: var(--text-muted);
+}
+.wb-browser-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--background);
+}
+.wb-browser-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  /* Pages without their own background read as a white page, like a browser. */
+  background: #fff;
+}
+.wb-browser-message {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  max-width: 360px;
+  text-align: center;
+}
+.wb-browser-out {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: 500 13px/1 var(--font-sans);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out);
+}
+.wb-browser-out:hover {
+  background: color-mix(in srgb, var(--text) 10%, var(--surface-raised));
+}
+.wb-browser-out:focus-visible {
+  outline: 2px solid var(--clay);
+  outline-offset: 2px;
+}
+.wb-browser .wb-spin {
+  animation: wb-spin 900ms linear infinite;
+}
+.wb-extension {
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-browser .wb-spin {
+    animation: none;
+  }
+}

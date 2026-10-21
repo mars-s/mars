@@ -6,7 +6,7 @@ import { PluginManager } from "@/components/settings/plugin-manager";
 import { useWorkspace } from "@/components/workspace-context";
 import "./extensions.css";
 
-function ExtensionPanel({ extension }: { extension: LiveSnapshot["extensions"][number] }) {
+export function ExtensionPanel({ extension }: { extension: Pick<LiveSnapshot["extensions"][number], "hash" | "title"> }) {
   const target = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
   useEffect(() => {
