@@ -20,6 +20,31 @@ const KEYED_BROWSE = /^\/api\/workbench\/browse\/\d{1,5}\/~[A-Za-z0-9_-]{43}(?:\
 const BROWSE_BODY_LIMIT = 20 * 1024 * 1024;
 const BROWSE_HEADERS = ["content-type", "content-security-policy", "location", "cache-control", "last-modified", "content-disposition"];
 
+/** Read a request body up to `limit` bytes; a chunked body cannot grow past it. */
+async function boundedBody(request: Request, limit: number): Promise<ArrayBuffer> {
+  const reader = request.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (reader)
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        throw Object.assign(Error("Request too large"), { status: 413 });
+      }
+      chunks.push(value);
+    }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes.buffer;
+}
+
 async function proxyKeyedBrowse(request: Request, local: URL, target: URL, fetcher: typeof fetch): Promise<Response> {
   if (!["GET", "POST", "HEAD"].includes(request.method)) return Response.json({ error: "Method not allowed" }, { status: 405 });
   if (Number(request.headers.get("content-length")) > BROWSE_BODY_LIMIT)
@@ -32,7 +57,7 @@ async function proxyKeyedBrowse(request: Request, local: URL, target: URL, fetch
   try {
     const upstream = await fetcher(new URL(local.pathname + local.search, target), {
       method: request.method,
-      body: request.method === "POST" ? await request.arrayBuffer() : undefined,
+      body: request.method === "POST" ? await boundedBody(request, BROWSE_BODY_LIMIT) : undefined,
       redirect: "manual",
       cache: "no-store",
       signal: AbortSignal.timeout(35000),
@@ -54,7 +79,8 @@ async function proxyKeyedBrowse(request: Request, local: URL, target: URL, fetch
     if (!out.get("content-security-policy")?.includes("sandbox"))
       out.set("content-security-policy", "sandbox allow-scripts allow-forms allow-popups; frame-ancestors 'self'");
     return new Response(upstream.body, { status: upstream.status, headers: out });
-  } catch {
+  } catch (failure) {
+    if ((failure as { status?: number }).status === 413) return Response.json({ error: "Request too large" }, { status: 413 });
     return Response.json({ error: "Cannot reach the private Pi backend." }, { status: 502 });
   }
 }

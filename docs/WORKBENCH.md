@@ -174,8 +174,10 @@ authority the agent's own `host_exec` tool already has.
   lsof or ss cannot see.
 - `POST /api/workbench/browse-key {port}` (owner, exact origin): mints a browse key for
   one discovered, non-excluded port, `201 {key}`, else 403. 32 random bytes in
-  base64url, held in memory only and never logged. A key expires after 30 minutes idle
-  or 8 hours, at most 32 live keys (oldest evicted). `POST
+  base64url, held in memory only and never logged. A key expires after 15 minutes idle
+  or 8 hours, at most 32 live keys (oldest evicted). It is bound to the process
+  listening on the port when it was minted: if that process exits and another takes
+  the port, the key stops working. `POST
   /api/workbench/browse-key/revoke {key}`; the pane revokes its keys when the tab closes.
 - `GET|POST /api/workbench/browse/<port>/~<key>/<path>`: the keyed proxy. It is
   checked before owner authentication, because a sandboxed page's own requests are
@@ -185,14 +187,23 @@ authority the agent's own `host_exec` tool already has.
   segments are resolved before routing, so they leave the keyed path. The unkeyed form
   `/api/workbench/browse/<port>/<path>` needs the owner.
 - Both forms reach `127.0.0.1` or `::1` on that port only. Requests drop `cookie`,
-  `authorization`, `origin`, `referer` and `x-forwarded-*`. Responses drop
-  `set-cookie`, CSP, `x-frame-options`, HSTS and CORS headers, and always get
+  `authorization`, `origin`, `referer` and `x-forwarded-*`. Response headers are
+  forwarded from an allow list (content type, length, caching, location and similar),
+  never `set-cookie`, CSP, framing, HSTS, CORS, `refresh` or reporting headers. Every
+  response gets `x-content-type-options: nosniff` and
   `content-security-policy: sandbox allow-scripts allow-forms allow-popups;
   frame-ancestors 'self'`, `referrer-policy: no-referrer` and, for keyed requests
   only, `access-control-allow-origin: null` so the opaque frame can read its own
   service's module scripts and fetches. That is safe because keyed requests carry no
   credentials. Same-service redirects are rewritten into the proxy. Redirects to
   another port or host become a 502 JSON error. Bodies are capped at 20 MiB both ways.
+- A hostile service cannot take the host down: upstream statuses outside 200 to 599
+  (and 304) become 502, every upstream callback is guarded, rewriting uses linear
+  scans (no backtracking regexes on tags), only HTML, CSS and JS up to 2 MiB are
+  buffered for rewriting (larger text streams through as is, larger HTML is refused),
+  a body that goes quiet for 30 s is cut off, discovery probes have a hard 1.6 s
+  deadline, and at most 24 proxied requests run at once (12 per port), beyond which
+  the answer is 503.
 - Root-relative URLs: `<base>` alone does not fix `/assets/app.js` or
   `fetch("/api")`. The proxy injects `<base>` plus a small script first in `<head>`.
   The script routes root-relative `fetch`, `XMLHttpRequest`, `EventSource` and

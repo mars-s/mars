@@ -137,7 +137,9 @@ try {
   assert.equal(page.status, 200);
   assert.equal(page.headers["content-security-policy"], SANDBOX, "proxied pages run sandboxed and may be framed only by Mars");
   for (const name of ["set-cookie", "x-frame-options", "strict-transport-security"]) assert.equal(page.headers[name], undefined, `${name} is stripped`);
-  assert.equal(page.headers["x-service"], "kept", "ordinary response headers pass through");
+  assert.equal(page.headers["x-service"], undefined, "response headers are forwarded from an allow list only");
+  assert.equal(page.headers["x-content-type-options"], "nosniff");
+  assert.equal(page.headers["content-type"], "text/html; charset=utf-8", "allowed headers pass through");
   assert.ok(page.text.startsWith(`<!doctype html><html><head><base href="/api/workbench/browse/${servicePort}/~${key}/"><script>`), "keyed <base> then the shim, first in <head>: " + page.text.slice(0, 160));
   assert.equal(Number(page.headers["content-length"]), Buffer.byteLength(page.text), "content-length matches the rewritten body");
   assert.equal(page.headers["referrer-policy"], "no-referrer");
@@ -168,8 +170,8 @@ try {
 
   assert.equal((await keyed("/big-declared")).status, 502, "declared bodies over 20 MiB are refused");
   const bigHtml = await keyed("/big-html");
-  assert.equal(bigHtml.status, 502, "HTML over 20 MiB is refused before rewriting");
-  assert.match(bigHtml.json.error, /20 MiB/);
+  assert.equal(bigHtml.status, 502, "HTML too large to rewrite is refused, never buffered whole");
+  assert.match(bigHtml.json.error, /2 MiB/);
   const streamed = await keyed("/big-stream", { raw: true });
   assert.ok(streamed.truncated && streamed.buffer.length <= BODY_CAP, `a streamed body is cut off at the cap (${streamed.buffer.length} bytes)`);
   assert.equal((await keyed("/upload", { method: "POST", body: Buffer.alloc(BODY_CAP + 1), headers: { "content-type": "application/octet-stream" } })).status, 413, "request bodies over 20 MiB are refused");
@@ -196,6 +198,30 @@ try {
   assert.deepEqual(revoked.json, { revoked: true });
   assert.equal((await keyed("/app.css")).status, 401, "a revoked key is refused");
   other.close();
+
+  // Port takeover: a key minted for one process stops working when another process
+  // takes over the same port (the original exits, a newcomer binds it).
+  const { spawn } = await import("node:child_process");
+  const serve = (port) => {
+    const child = spawn(process.execPath, ["-e", `require("http").createServer((q,s)=>s.end("<title>p"+process.pid+"</title>")).listen(${port},"127.0.0.1",()=>console.log("up"))`], { stdio: ["ignore", "pipe", "inherit"] });
+    return new Promise((resolve) => child.stdout.once("data", () => resolve(child)));
+  };
+  const takeoverPort = await freePort();
+  const children = [];
+  process.once("exit", () => children.forEach((child) => child.kill()));
+  const first = await serve(takeoverPort);
+  children.push(first);
+  await new Promise((resolve) => setTimeout(resolve, 10_100));
+  const firstKey = (await host.request("/api/workbench/browse-key", { method: "POST", body: { port: takeoverPort } })).json.key;
+  assert.equal((await host.request(`/api/workbench/browse/${takeoverPort}/~${firstKey}/`, { auth: false })).status, 200);
+  first.kill();
+  await new Promise((resolve) => first.once("close", resolve));
+  const second = await serve(takeoverPort);
+  children.push(second);
+  await new Promise((resolve) => setTimeout(resolve, 10_100));
+  await host.request("/api/workbench/services");
+  assert.equal((await host.request(`/api/workbench/browse/${takeoverPort}/~${firstKey}/`, { auth: false })).status, 401, "a key does not outlive the process it was minted for");
+  second.kill();
 } finally {
   await host.stop();
 }
@@ -220,6 +246,6 @@ try {
 }
 for (const server of [service, lineProtocol, silent, uiServer]) server.close();
 console.log(
-  "PASS workbench browser: lsof/ss parsing, loopback filter, HTTP probe with titles, non-HTTP and excluded ports ignored, 10 s cache, 401 without owner, owner-only same-origin key mint for discovered ports, key bound to one port, unknown/revoked/expired keys refused, key opens nothing else and is never logged, request and response header stripping, sandbox CSP, no-referrer, keyed <base> plus shim, root-relative HTML/CSS/JS rewriting, same-port redirects kept and others refused, 20 MiB caps both ways",
+  "PASS workbench browser: lsof/ss parsing, loopback filter, HTTP probe with titles, non-HTTP and excluded ports ignored, 10 s cache, 401 without owner, owner-only same-origin key mint for discovered ports, key bound to one port, unknown/revoked/expired keys refused, key bound to the listening process, key opens nothing else and is never logged, request and response header stripping, sandbox CSP, no-referrer, keyed <base> plus shim, root-relative HTML/CSS/JS rewriting, same-port redirects kept and others refused, 20 MiB caps both ways",
 );
 process.exit(0);

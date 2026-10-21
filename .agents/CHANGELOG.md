@@ -277,3 +277,12 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - The chat keeps 480px beside the pane (was 420px), so the composer's model picker is not squeezed at 1024px.
 - `workbench-ui-check` asserts launcher focus and the selected tab in view. Mutation runs: without the focus effect the check times out; without scroll-into-view it fails.
 - Not changed, noted for later: side chats are listed in Recents like other conversations, binary files have no download action, and the header toggle keeps the name "Open workbench" with `aria-pressed` (the toggle pattern the tests rely on).
+
+## 2026-10-21 Browser proxy hardening (second independent security review)
+
+- Fixed two host crashes a hostile service or key holder could trigger: an unparsable keyed path (`//[`) threw in a response callback, and an upstream status such as 099 threw in `writeHead`. Upstream callbacks are now guarded, statuses outside 200 to 599 (and 304) become 502, and the document URL is built without `new URL` on attacker input.
+- Fixed a ReDoS that blocked the host for 13 to 48 s per page: `<script`, `<base`, `<head` and `<title` handling is now linear (`tagAt`, `tagEnd`, `attribute`). One megabyte of hostile tags rewrites in milliseconds.
+- Memory and slowloris: only text up to 2 MiB is buffered for rewriting, a quiet body is cut off after 30 s, discovery probes have a hard deadline, and in-flight proxied requests are capped (24 total, 12 per port, else 503).
+- Response headers are forwarded from an allow list, with nosniff always set. Keys idle out after 15 minutes and are bound to the listening process, so a port takeover does not inherit an old key. The dev proxy reads keyed bodies through a 20 MiB bounded reader.
+- New `check-workbench-browser-hostile.mjs` (bad path, bad status, hostile HTML, trickle, flood) and a port-takeover case in `check-workbench-browser.mjs`. Mutation runs: without the status and callback guards the check fails; without process binding the takeover case fails.
+- Accepted risk, documented: a key read by third-party script inside a proxied page can drive that one service until it idles out. The proxy sets `Host` to the loopback address, as any reverse proxy does.
