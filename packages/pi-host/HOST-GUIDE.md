@@ -59,6 +59,7 @@ For any task of three or more steps, first decide who does the steps:
 | Look something up online | `web_search`, then `web_fetch` for a full page |
 | Change the Mars interface | `ui_source_read`, `ui_patch_stage`, `ui_patch_validate`, `ui_patch_promote` |
 | Ship a host change | commit, then `host_deploy` (`dryRun: true` first) |
+| Check which chat apps reach Mars, or who is waiting for approval | `gateway_status` |
 
 Read and search long files in parts. Save large results as artefacts rather than
 repeating them in context. Child conversations receive their own brief and explicit image
@@ -71,3 +72,11 @@ Use explicit attachment IDs for children and workflow steps. Only vision-capable
 models accept images. Native Pi owns conversation, task, usage and recovery state.
 Do not create another session database or scheduler. Model replies and actual tool
 results are evidence; never claim that a test ran unless it did.
+
+## Chat apps
+
+The owner can talk to you from Telegram, Discord or the HTTP API as well as the web UI
+(docs/GATEWAY.md). Each chat continues one conversation, so a message may arrive from a
+phone in the middle of web work. Answer it here as usual: the reply is sent to the chat.
+Keep chat replies short and plain; long ones are split into several messages. Never
+approve a pairing yourself; that is the owner's choice in Settings, Gateway.
