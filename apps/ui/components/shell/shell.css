@@ -536,3 +536,29 @@
   }
 }
 
+
+/* Nested rows (side chats, sub-threads): menu and the archived toggle. */
+.live-side-chats .live-conversation-row .live-subthread {
+  padding-right: 34px;
+}
+.live-side-chats li[data-archived] .live-nav-label {
+  color: var(--text-muted);
+}
+.live-nested-archived {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 26px;
+  padding: 0 12px 0 28px;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.live-nested-archived:hover {
+  color: var(--text-muted);
+}
+.live-nested-archived[aria-expanded="true"] .live-group-chevron {
+  transform: rotate(90deg);
+}
+

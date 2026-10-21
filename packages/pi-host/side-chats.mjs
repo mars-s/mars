@@ -7,6 +7,7 @@
 import { Type } from '@earendil-works/pi-ai';
 import { LiveDoc, configure, defineDoc, defineExtension, defineTool } from '@earendil-works/pi-durable';
 import { nativeTitleDoc } from './orchestration.mjs';
+import { isArchived } from './organise-doc.mjs';
 
 // A fork of a side chat is a new top-level conversation: it is not in the parent's index.
 export const SideChatDoc = defineDoc({ kind: 'mars.side-chat', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ parentId: '' }) });
@@ -37,8 +38,8 @@ export async function listSideChats({ harness, parentId, context, limit = SIDE_C
   const page = ids.slice(offset, offset + limit);
   const items = await Promise.all(
     page.map(async (id) => {
-      const [label, live] = await Promise.all([harness.snapshot(nativeTitleDoc, nativeId(id), context), harness.snapshot(LiveDoc, nativeId(id), context)]);
-      return { id: String(id), title: label?.title || 'Side chat', running: !!live?.run };
+      const [label, live, archived] = await Promise.all([harness.snapshot(nativeTitleDoc, nativeId(id), context), harness.snapshot(LiveDoc, nativeId(id), context), isArchived(harness, nativeId(id), context)]);
+      return { id: String(id), title: label?.title || 'Side chat', running: !!live?.run, ...(archived ? { archived: true } : {}) };
     }),
   );
   return { items, total: ids.length };

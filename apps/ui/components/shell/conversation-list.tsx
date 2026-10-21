@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useWorkspace } from "@/components/workspace-context";
-import type { ConversationSummary } from "@/lib/pi/live-state";
+import type { ConversationSummary, SideChatSummary } from "@/lib/pi/live-state";
 import { ChildNavigation } from "./child-navigation";
 
 /** Must match GROUP_MAX in packages/pi-host/conversations.mjs. */
@@ -47,10 +47,8 @@ const GROUP_MAX = 60;
 const FOLDED_KEY = "mars-sidebar-folded";
 const ARCHIVED = "\u0000archived";
 
-type Naming = {
-  kind: "rename" | "group";
-  conversation: ConversationSummary;
-} | null;
+/** What the name dialog is for: renaming any chat, or naming a new group for a top-level chat. */
+type Naming = { kind: "rename" | "group"; id: string; title: string } | null;
 
 /** Which sections are folded is a browser preference, like the theme. Archived starts folded. */
 function useFolded() {
@@ -256,7 +254,7 @@ function ConversationRow({
             className="live-conversation-menu-content"
           >
             <DropdownMenuItem
-              onSelect={() => onName({ kind: "rename", conversation })}
+              onSelect={() => onName({ kind: "rename", id: conversation.id, title: conversation.title })}
             >
               <Pencil aria-hidden="true" />
               Rename
@@ -278,7 +276,7 @@ function ConversationRow({
                 ))}
                 {others.length > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuItem
-                  onSelect={() => onName({ kind: "group", conversation })}
+                  onSelect={() => onName({ kind: "group", id: conversation.id, title: conversation.title })}
                 >
                   <FolderPlus aria-hidden="true" />
                   New group…
@@ -313,6 +311,7 @@ function ConversationRow({
         parentId={conversation.id}
         sideChats={conversation.sideChats}
         total={conversation.sideChatTotal}
+        onName={onName}
       />
     </div>
   );
@@ -332,7 +331,7 @@ function NameDialog({
   const [value, setValue] = useState("");
   useEffect(() => {
     if (naming)
-      setValue(naming.kind === "rename" ? naming.conversation.title : "");
+      setValue(naming.kind === "rename" ? naming.title : "");
   }, [naming]);
   const rename = naming?.kind === "rename";
   const max = rename ? 160 : GROUP_MAX;
@@ -350,7 +349,7 @@ function NameDialog({
       : trimmed;
     safely(
       organiseConversation(
-        naming.conversation.id,
+        naming.id,
         rename ? { title: trimmed } : { group: name },
       ),
     );
@@ -365,7 +364,7 @@ function NameDialog({
             <DialogDescription>
               {rename
                 ? "Give this chat a name you will recognise in Recents."
-                : `Name a group for “${naming?.conversation.title ?? ""}”. Other chats can join it from their menu.`}
+                : `Name a group for “${naming?.title ?? ""}”. Other chats can join it from their menu.`}
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -397,63 +396,126 @@ function NameDialog({
 
 /**
  * Side chats nested under the conversation they were opened from (docs/WORKBENCH.md).
- * The open side chat stays listed even before the next conversations refresh.
+ * The open side chat stays listed even before the next conversations refresh. Archived ones
+ * fold into an "N archived" line under the others.
  */
 function SideChats({
   parentId,
   sideChats,
   total,
+  onName,
 }: {
   parentId: string;
-  sideChats: { id: string; title: string; running: boolean }[];
+  sideChats: SideChatSummary[];
   total: number;
+  onName: (naming: Naming) => void;
 }) {
-  const { snapshot, selectedId, extensionsOpen, selectConversation } =
-    useWorkspace();
+  const { snapshot } = useWorkspace();
   const rows = [...sideChats];
-  if (
-    snapshot?.sideChatOf === parentId &&
-    !rows.some((row) => row.id === snapshot.conversationId)
-  )
-    rows.unshift({
-      id: snapshot.conversationId,
-      title: snapshot.conversationTitle || "Side chat",
-      running: snapshot.running,
-    });
+  if (snapshot?.sideChatOf === parentId && !rows.some((row) => row.id === snapshot.conversationId))
+    rows.unshift({ id: snapshot.conversationId, title: snapshot.conversationTitle || "Side chat", running: snapshot.running });
   if (!rows.length) return null;
   return (
-    <ul className="live-side-chats" aria-label="Side chats">
-      {rows.map((row) => (
-        <li key={row.id}>
+    <NestedList
+      label="Side chats"
+      rows={rows.map((row) => ({ ...row, side: true }))}
+      onName={onName}
+      footer={
+        total > rows.length ? (
+          <li className="live-side-chat-more">
+            {total - rows.length} older side {total - rows.length === 1 ? "chat" : "chats"} (ask Mars to list them)
+          </li>
+        ) : null
+      }
+    />
+  );
+}
+
+export type NestedRowData = { id: string; title: string; running?: boolean; archived?: boolean; status?: string; side?: boolean };
+
+/**
+ * Rows nested under a chat (side chats and sub-threads). Each has a menu to rename (side
+ * chats) and archive; archived rows hide behind an "N archived" toggle and stay openable.
+ */
+export function NestedList({
+  label,
+  rows,
+  onName,
+  footer,
+}: {
+  label: string;
+  rows: NestedRowData[];
+  onName?: (naming: Naming) => void;
+  footer?: ReactNode;
+}) {
+  const { selectedId, extensionsOpen } = useWorkspace();
+  const [showArchived, setShowArchived] = useState(false);
+  const live = rows.filter((row) => !row.archived || (!extensionsOpen && row.id === selectedId));
+  const archived = rows.filter((row) => !live.includes(row));
+  if (!rows.length) return null;
+  return (
+    <ul className="live-side-chats" aria-label={label}>
+      {live.map((row) => (
+        <NestedRow key={row.id} row={row} onName={onName} />
+      ))}
+      {archived.length > 0 && (
+        <li>
           <button
             type="button"
-            className="live-nav live-subthread live-side-chat"
-            aria-current={
-              !extensionsOpen && selectedId === row.id ? "page" : undefined
-            }
-            onClick={() => selectConversation(row.id)}
+            className="live-nested-archived"
+            aria-expanded={showArchived}
+            onClick={() => setShowArchived((open) => !open)}
           >
-            <MessageSquareDashed
-              size={13}
-              aria-hidden="true"
-              className="live-side-chat-icon"
-            />
-            <span className="live-nav-label">{row.title}</span>
-            {row.running && (
-              <>
-                <span className="live-running-dot" aria-hidden="true" />
-                <span className="sr-only">Running</span>
-              </>
-            )}
+            <ChevronRight size={12} aria-hidden="true" className="live-group-chevron" />
+            {archived.length} archived
           </button>
         </li>
-      ))}
-      {total > rows.length && (
-        <li className="live-side-chat-more">
-          {total - rows.length} older side{" "}
-          {total - rows.length === 1 ? "chat" : "chats"} (ask Mars to list them)
-        </li>
       )}
+      {showArchived && archived.map((row) => <NestedRow key={row.id} row={row} onName={onName} />)}
+      {footer}
     </ul>
+  );
+}
+
+function NestedRow({ row, onName }: { row: NestedRowData; onName?: (naming: Naming) => void }) {
+  const { selectedId, extensionsOpen, selectConversation, organiseConversation, safely } = useWorkspace();
+  return (
+    <li className="live-conversation-row" data-archived={row.archived ? "" : undefined}>
+      <button
+        type="button"
+        className={`live-nav live-subthread${row.side ? " live-side-chat" : ""}`}
+        aria-current={!extensionsOpen && selectedId === row.id ? "page" : undefined}
+        onClick={() => selectConversation(row.id)}
+      >
+        {row.side && <MessageSquareDashed size={13} aria-hidden="true" className="live-side-chat-icon" />}
+        <span className="live-nav-label">{row.title}</span>
+        {row.status && <small>{row.status}</small>}
+        {row.running && (
+          <>
+            <span className="live-running-dot" aria-hidden="true" />
+            <span className="sr-only">Running</span>
+          </>
+        )}
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="live-conversation-menu" aria-label={`Options for ${row.title}`}>
+            <Ellipsis size={15} aria-hidden="true" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="bottom" className="live-conversation-menu-content">
+          {onName && (
+            <DropdownMenuItem onSelect={() => onName({ kind: "rename", id: row.id, title: row.title })}>
+              <Pencil aria-hidden="true" />
+              Rename
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => safely(organiseConversation(row.id, { archived: !row.archived }))}>
+            {row.archived ? <ArchiveRestore aria-hidden="true" /> : <Archive aria-hidden="true" />}
+            {row.archived ? "Unarchive" : "Archive"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </li>
   );
 }

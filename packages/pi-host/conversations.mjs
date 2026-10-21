@@ -1,13 +1,10 @@
 import { listSubthreads, nativeTitleDoc } from './orchestration.mjs';
 import { SIDE_CHAT_PAGE, createSideChat, listSideChats, sideChatParent } from './side-chats.mjs';
-import { AgentDoc, LiveDoc, defineDoc } from '@earendil-works/pi-durable';
+import { AgentDoc, LiveDoc } from '@earendil-works/pi-durable';
+import { OrganiseDoc } from './organise-doc.mjs';
 
 export const TitleDoc = nativeTitleDoc;
-/**
- * How the owner files a top-level conversation in Recents: an optional group name and an
- * archived flag. Native, per conversation, so Pi stays the only store. A fork starts unfiled.
- */
-export const OrganiseDoc = defineDoc({ kind: 'mars.conversation-organise', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ group: '', archived: false }) });
+export { OrganiseDoc };
 export const GROUP_MAX = 60;
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 /** One line of plain text, trimmed and cut to `max` characters. */
@@ -123,15 +120,15 @@ export function createConversationManager({ harness, root, context, defaultAgent
       return conversation;
     },
     /**
-     * File a top-level conversation: rename it, move it to a group ('' for none) or archive it.
-     * Only the fields given change. Workers and side chats follow their parent instead.
+     * File a conversation: rename it, move a top-level chat to a group ('' for none), or archive
+     * any chat, side chat or sub-thread. Only the fields given change.
      */
     async organise({ conversationId, title: label, group, archived } = {}) {
       if (!/^\d+$/.test(String(conversationId ?? ''))) throw fail('conversationId must be a conversation id');
       const conversation = await resolve(String(conversationId));
       const record = await harness.commit(tx => tx.conversation(conversation.id), context);
-      if (record.owner) throw fail('A worker belongs to its parent and cannot be filed separately');
-      if (await sideChatParent(harness, conversation.id, context)) throw fail('A side chat is filed with its parent conversation');
+      const nested = record.owner ? 'A sub-thread' : (await sideChatParent(harness, conversation.id, context)) ? 'A side chat' : '';
+      if (nested && group !== undefined) throw fail(`${nested} stays under its parent; only top-level chats go in groups`);
       if (label !== undefined && (typeof label !== 'string' || !oneLine(label, 160))) throw fail('title must be non-empty text');
       if (group !== undefined && typeof group !== 'string') throw fail('group must be text');
       if (group !== undefined && group.trim().length > GROUP_MAX) throw fail(`group must be at most ${GROUP_MAX} characters`);

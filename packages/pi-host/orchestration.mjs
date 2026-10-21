@@ -1,5 +1,6 @@
 import { Type } from '@earendil-works/pi-ai';
 import { configure, defineExtension, defineTask, defineTool, UsageDoc, AgentDoc, LiveDoc, defineDoc } from '@earendil-works/pi-durable';
+import { isArchived } from './organise-doc.mjs';
 
 export const nativeTitleDoc = defineDoc({ kind: 'mars.conversation-title', version: 1, scope: 'conversation', history: 'latest', fork: 'current', initial: () => ({ title: '' }) });
 const nativeId = value => typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
@@ -174,15 +175,16 @@ export async function listWorkers({ harness, conversationId, context, limit = 10
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('limit must be 1..100');
   const page = await harness.commit(tx => tx.scanConversations({ ownerConversationId: nativeId(conversationId), order: 'descending' }, limit, cursor), context);
   return Promise.all(page.items.map(async record => {
-    const [task, agent, live, usage, label] = await Promise.all([
+    const [task, agent, live, usage, label, archived] = await Promise.all([
       harness.getTask(record.owner.taskId, context),
       harness.snapshot(AgentDoc, record.id, context),
       harness.snapshot(LiveDoc, record.id, context),
       harness.snapshot(UsageDoc, record.id, context),
       harness.snapshot(nativeTitleDoc, record.id, context),
+      isArchived(harness, record.id, context),
     ]);
     const receipt = receiptOf(task, record.id);
-    return { id: String(record.id), conversationId: String(conversationId), childConversationId: String(record.id), title: label?.title || 'Worker', ...(label?.task ? { task: label.task } : {}), ...(label?.workflowId ? { workflowId: label.workflowId } : {}), ...(label?.taskKind ? { taskKind: label.taskKind } : {}), ...(label?.parentEntryId ? { parentEntryId: label.parentEntryId } : {}), ...agent?.model, status: live?.run ? 'running' : receipt?.status || task?.state.outcome?.status || task?.state.status || 'unknown', ...(receipt?.result ? { result: receipt.result } : {}), usage: usage || { models: {}, tools: {} } };
+    return { id: String(record.id), conversationId: String(conversationId), childConversationId: String(record.id), title: label?.title || 'Worker', ...(label?.task ? { task: label.task } : {}), ...(label?.workflowId ? { workflowId: label.workflowId } : {}), ...(label?.taskKind ? { taskKind: label.taskKind } : {}), ...(label?.parentEntryId ? { parentEntryId: label.parentEntryId } : {}), ...agent?.model, status: live?.run ? 'running' : receipt?.status || task?.state.outcome?.status || task?.state.status || 'unknown', ...(receipt?.result ? { result: receipt.result } : {}), ...(archived ? { archived: true } : {}), usage: usage || { models: {}, tools: {} } };
   }));
 }
 
@@ -195,5 +197,5 @@ export async function stopWorker({ harness, conversationId, workerId, context })
 }
 
 export async function listSubthreads(options) {
-  return (await listWorkers(options)).map(({ id, conversationId, title, provider, modelId, status, parentEntryId, workflowId }) => ({ id, conversationId, title, provider, modelId, status, ...(parentEntryId ? { parentEntryId } : {}), ...(workflowId ? { workflowId } : {}) }));
+  return (await listWorkers(options)).map(({ id, conversationId, title, provider, modelId, status, parentEntryId, workflowId, archived }) => ({ id, conversationId, title, provider, modelId, status, ...(parentEntryId ? { parentEntryId } : {}), ...(workflowId ? { workflowId } : {}), ...(archived ? { archived } : {}) }));
 }

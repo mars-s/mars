@@ -346,7 +346,20 @@ export function LiveWorkspace() {
               ...(change.group !== undefined ? { group: change.group.trim() } : {}),
               ...(change.archived !== undefined ? { archived: change.archived } : {}),
             }
-          : row,
+          : row.sideChats.some((side) => side.id === id)
+            ? {
+                ...row,
+                sideChats: row.sideChats.map((side) =>
+                  side.id === id
+                    ? {
+                        ...side,
+                        ...(change.title !== undefined ? { title: change.title.trim() || side.title } : {}),
+                        ...(change.archived !== undefined ? { archived: change.archived } : {}),
+                      }
+                    : side,
+                ),
+              }
+            : row,
       ),
     );
     try {

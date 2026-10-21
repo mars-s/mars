@@ -373,3 +373,10 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - `skills.mjs` (docs/SKILLS.md): reads SKILL.md folders from Mars's own `workspace/skills`, `MARS_SKILL_DIRS`, `~/.agents/skills` and `~/.claude/skills` (first wins). A bounded prompt section lists names and short descriptions and tells the agent to read a matching skill first and to treat `/name` as a request for it. Tools `skill_list`, `skill_read` (SKILL.md plus files, escapes refused), `skill_create` (own folder only) and `skill_install` (owner/repo, GitHub or git URL, local folder). GET /api/skills; the Extensions page lists skills with search.
 - Checks: `check-skills.mjs` (temporary folders and a local git repo, no network); tool quality passes for all 41 Mars tools; `tests/skills-ui-check.mjs`.
 
+
+## 2026-10-21 Side chat listed twice; archive side chats and sub-threads
+
+- An open side chat was listed twice under its parent: `ChildNavigation` added the open child as a sub-thread whenever the snapshot had a parent, and side chats have one too. It now skips side chats.
+- Side chats and sub-threads (workers) can be archived and renamed (side chats) from a row menu; only top-level chats join groups. `mars.conversation-organise` moved to `organise-doc.mjs` so side chats and orchestration read it without an import cycle; side chat rows and sub-thread rows carry `archived`. Archived nested rows fold into an "N archived" toggle; the open one stays visible.
+- Checks: `check-organise.mjs` (side chat archive, group refused, parent row marks it); `tests/nested-archive-ui-check.mjs` (listed once, archive both kinds, toggle).
+

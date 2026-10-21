@@ -36,6 +36,8 @@ export type Subthread = {
   status: string;
   modelId: string;
   provider: string;
+  /** Archived sub-threads fold away under their parent. */
+  archived: boolean;
 };
 export type WorkflowStep = {
   index: number;
@@ -88,7 +90,7 @@ export type LoginState = {
   code: string;
   prompt: string | null;
 };
-export type SideChatSummary = { id: string; title: string; running: boolean };
+export type SideChatSummary = { id: string; title: string; running: boolean; archived?: boolean };
 export type PlanStatus = "pending" | "in_progress" | "completed";
 /** The agent's checklist for multi-step work (docs/TOOLS.md "plan_update"). */
 export type Plan = { steps: { step: string; status: PlanStatus }[]; done: number; total: number };
@@ -299,7 +301,16 @@ export function parseConversations(value: unknown): ConversationSummary[] {
                 .map(record)
                 .flatMap((side) => {
                   const sideId = identifier(side.id);
-                  return sideId ? [{ id: sideId, title: string(side.title) || "Side chat", running: side.running === true }] : [];
+                  return sideId
+                    ? [
+                        {
+                          id: sideId,
+                          title: string(side.title) || "Side chat",
+                          running: side.running === true,
+                          ...(side.archived === true ? { archived: true } : {}),
+                        },
+                      ]
+                    : [];
                 }),
               sideChatTotal: Number.isInteger(row.sideChatTotal) ? Number(row.sideChatTotal) : 0,
               group: string(row.group).trim(),
@@ -527,6 +538,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
                 status: string(row.status),
                 modelId: string(row.modelId),
                 provider: string(row.provider),
+                archived: row.archived === true,
               },
             ]
           : [],

@@ -56,7 +56,13 @@ try {
   await assert.rejects(manager.organise({ conversationId: 'x', archived: true }), /conversation id/);
   await assert.rejects(manager.organise({ conversationId: '99999', archived: true }), /not found/);
   const side = await manager.create({ parentId: String(plain.id), title: 'Side' });
-  await assert.rejects(manager.organise({ conversationId: String(side.id), archived: true }), /filed with its parent/);
+  await assert.rejects(manager.organise({ conversationId: String(side.id), group: 'Mars work' }), /stays under its parent/);
+  const sideRow = await manager.organise({ conversationId: String(side.id), archived: true });
+  assert.equal(sideRow.archived, true, 'a side chat can be archived');
+  const nestedRows = (await manager.list()).find((row) => row.id === String(plain.id)).sideChats;
+  assert.deepEqual(nestedRows, [{ id: String(side.id), title: 'Side', running: false, archived: true }], 'the parent row marks its archived side chat');
+  await manager.organise({ conversationId: String(side.id), archived: false });
+  assert.deepEqual((await manager.list()).find((row) => row.id === String(plain.id)).sideChats, [{ id: String(side.id), title: 'Side', running: false }]);
 
   assert.deepEqual(await harness.snapshot(OrganiseDoc, plain.id, context), { group: 'Mars work', archived: true }, 'filing is one native document');
 
@@ -67,7 +73,7 @@ try {
   assert.deepEqual([row.title, row.group, row.archived], ['Watchdog', 'Mars work', true], 'filing survives a restart');
   row = await manager.organise({ conversationId: String(plain.id), group: '', archived: false });
   assert.deepEqual([row.group, row.archived], ['', false], 'an empty group and archived false restore the default');
-  console.log('PASS organise: rename, group, archive, partial updates, auto-title once, root keeps its name, refusals, side chats refused, one native document, survives reopen');
+  console.log('PASS organise: rename, group, archive, partial updates, auto-title once, root keeps its name, refusals, side chats archive but never join groups, one native document, survives reopen');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
