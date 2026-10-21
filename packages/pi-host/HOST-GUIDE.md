@@ -58,6 +58,8 @@ For any task of three or more steps, first decide who does the steps:
 | Give the owner a file to download | `workspace_file_link`, then put the url in a Markdown link |
 | Look something up online | `web_search`, then `web_fetch` for a full page |
 | Change the Mars interface | `ui_source_read`, `ui_patch_stage`, `ui_patch_validate`, `ui_patch_promote` |
+| Change Mars host code safely | `self_edit_start`, edit in its worktree, `self_edit_check`, `self_edit_finish` |
+| Throw away or find a self-edit | `self_edit_abandon`, `self_edit_list` |
 | Ship a host change | commit, then `host_deploy` (`dryRun: true` first) |
 
 Read and search long files in parts. Save large results as artefacts rather than
