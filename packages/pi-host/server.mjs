@@ -88,6 +88,22 @@ const models = createModels({
 models.setProvider(openaiProvider());
 models.setProvider(anthropicProvider());
 models.setProvider(opencodeGoProvider());
+// Staging checks only (MARS_PI_STAGING=1 and MARS_ECHO_MODEL=1): a free local "echo" model
+// that answers "echo: <last message>", so end-to-end checks get real answers with no
+// provider. Never installed in a normal run.
+const echoModel = STAGING && process.env.MARS_ECHO_MODEL === "1";
+if (echoModel) {
+  const { fauxProvider, fauxAssistantMessage } = await import("@earendil-works/pi-ai/providers/faux");
+  const echo = fauxProvider({ provider: "echo", models: [{ id: "echo", name: "Echo (checks only)" }] });
+  const reply = (context) => {
+    const last = context.messages.findLast((m) => m.role === "user");
+    const text = typeof last?.content === "string" ? last.content : last?.content?.find?.((c) => c.type === "text")?.text ?? "";
+    echo.appendResponses([reply]);
+    return fauxAssistantMessage("echo: " + text);
+  };
+  echo.setResponses([reply]);
+  models.setProvider(echo.provider);
+}
 const marsConfig = await loadConfig();
 for (const layer of marsConfig.layers) {
   if (layer.error) console.warn(`Mars config: skipped ${layer.name} layer (${layer.error})`);
@@ -349,11 +365,12 @@ const harness = await Harness.open(
   },
   context,
 );
+const defaultModel = echoModel ? { provider: "echo", modelId: "echo" } : { provider: "openai", modelId: "gpt-6-luna" };
 const root = await harness.root(context, {
-  agent: { model: { provider: "openai", modelId: "gpt-6-luna" }, cwd: WORK, modelTools: discovery.modelTools },
+  agent: { model: defaultModel, cwd: WORK, modelTools: discovery.modelTools },
 });
 const conversations = createConversationManager({ harness, root, context, defaultAgent: {
-  model: { provider: "openai", modelId: "gpt-6-luna" }, cwd: WORK, modelTools: discovery.modelTools,
+  model: defaultModel, cwd: WORK, modelTools: discovery.modelTools,
 } });
 Object.assign(late, { harness, conversations });
 // Only migrate the historical single-chat tool filter once. Model and transcript stay native.
@@ -373,6 +390,7 @@ function connectionStatus() {
 }
 async function providerReady(view) {
   const selected = view.docs?.["pi.agent"]?.model;
+  if (echoModel && selected?.provider === "echo") return true;
   return selected?.provider === "opencode-go"
     ? !!connections.getOpenCodeApiKey()
     : ["openai", "anthropic"].includes(selected?.provider) &&

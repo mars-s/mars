@@ -178,3 +178,12 @@ fake platform servers:
    audited.
 6. Fake platforms cover message, edit, duplicate delivery, rate limit (429), reconnect and
    permission denial (403).
+
+### Running the acceptance flow on the real host
+
+`check-gateway-e2e.mjs` boots the real `server.mjs` twice on one temporary data root, with
+a fake Telegram and the staging-only echo model (`MARS_PI_STAGING=1 MARS_ECHO_MODEL=1`;
+outside staging the echo model is never installed). It starts a conversation from
+Telegram, continues it through `/api/chat` (the web UI's route), continues it from
+Telegram, restarts the process and checks that the binding holds and a redelivered update
+is not submitted or answered again.
