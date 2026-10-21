@@ -53,6 +53,9 @@ def hangup(*_):
         groups.add(os.tcgetpgrp(master))
     except OSError:
         pass
+    # Once the shell has gone, Linux reports no foreground group as 0, and killpg(0) would
+    # hang up the bridge's own group: the Mars host and everything started with it.
+    groups -= {0, os.getpgrp()}
     for group in groups:
         try:
             os.killpg(group, signal.SIGHUP)

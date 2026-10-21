@@ -61,8 +61,11 @@ try {
   assert.deepEqual(caps.json.tools.terminal, { available: true }, "terminal reports available when python3 has pty");
 
   const id = await open();
-  // macOS /bin/sh is bash, which would treat "!" in "$!" as history expansion.
-  const first = await send(id, "set +H 2>/dev/null; echo mars-$((6*7))\n");
+  // macOS /bin/sh is bash, which would treat "!" in "$!" as history expansion. Debian's
+  // /bin/sh is dash, where "set +H" is an error that drops the rest of its line, so the
+  // option goes on a line of its own.
+  await send(id, "set +H 2>/dev/null\n");
+  const first = await send(id, "echo mars-$((6*7))\n");
   assert.equal(first.status, 200);
   let seen = await until(id, /mars-42/);
   assert.ok(!seen.text.includes("MARS_PTY"), "bridge-only environment does not leak into the shell");

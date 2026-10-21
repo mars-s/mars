@@ -343,3 +343,10 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - Sidebar: each chat has a menu (Rename, Add/Move to group with New group…, Remove from group, Archive/Unarchive). Named groups sit above the default Recents list; Archived is a folded section at the end. Folding is a browser preference. Archived chats still open and run.
 - Checks: `check-organise.mjs` (real harness: rename, group, archive, partial updates, auto-title once, refusals, reopen), a live-state unit test, and `tests/organise-ui-check.mjs` in the browser (archive, unarchive, groups, rename, Effort visible below 24 models, effort sent, new chat keeps effort).
 
+
+## 2026-10-21 Terminal kill no longer hangs up the host; terminal check runs on Debian
+
+- `workbench/pty-bridge.py`: on SIGTERM the bridge hung up the shell's group and the terminal's foreground group. Once the shell had exited, Linux reports the foreground group as 0, and `killpg(0, SIGHUP)` hung up the bridge's own process group, which is the Mars host and everything started with it. The bridge now never signals group 0 or its own group. Before the fix, `check-workbench-terminal.mjs` killed its own runner with SIGHUP at the kill step on Bot Box (exit 129); after it, three runs pass.
+- `check-workbench-terminal.mjs`: Debian's /bin/sh is dash, where `set +H` is an error that drops the rest of its line, so the first echo never ran and the check failed in deploy staging. `set +H` is now sent on its own line.
+- Host checks: 35 of 35 pass on Bot Box.
+
