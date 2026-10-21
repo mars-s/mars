@@ -102,3 +102,20 @@
     animation: none;
   }
 }
+.wb-browser-body > .wb-empty {
+  flex: 1 1 auto;
+}
+.wb-browser-body > .wb-empty > p {
+  max-width: 360px;
+  margin: 0;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.wb-browser-body kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font: 12px/1.4 var(--font-mono);
+}

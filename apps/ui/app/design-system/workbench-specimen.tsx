@@ -18,6 +18,9 @@ const SPECIMENS: { label: string; tab: TabTarget }[] = [
   { label: "Terminal", tab: { kind: "terminal" } },
   { label: "Side chat", tab: { kind: "side-chat", conversationId: "902" } },
   { label: "Page", tab: { kind: "page", name: "release-plan" } },
+  // Frame navigation cannot be answered in-page, so the Browser specimen shows its
+  // real chrome in the empty state; tests/workbench-browser-check.mjs shows it loaded.
+  { label: "Browser", tab: { kind: "browser" } },
 ];
 
 const noop = () => undefined;

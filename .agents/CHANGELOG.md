@@ -257,3 +257,7 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - Checks: `check-workbench-browser.mjs` on a real temporary host (mint auth and origin, port binding with a mutation run, unknown, revoked and expired keys, key never logged or usable as an owner credential, dot segments, header stripping, caps, discovery ignoring non-HTTP and excluded ports). `workbench-browser-check.mjs` drives a multi-asset fixture app through the real dev proxy: root-relative CSS, module JS and fetch, opaque origin that cannot read Mars or its API, link navigation, Back, Forward, Reload, persistence, external URL, refused port, four screenshots. The shell check now mounts an extension in its own tab.
 - `tests/browser-options.mjs` gains `waitForHydration`, used by every workbench check, after clicks before hydration were silently lost.
 - The browser lane worker stalled twice with no file changes, so the parent finished the lane directly from its inherited host draft.
+
+## 2026-10-21 Browser in /design-system
+
+- The `/design-system` pane picker gains Browser (address bar and empty state; the loaded page is shown by `workbench-browser-check` screenshots, because frame navigation cannot be answered in-page). The empty state is centred at 360px with a styled `kbd`. Impeccable detector on changed workbench files: no findings.
