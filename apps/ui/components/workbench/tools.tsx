@@ -23,7 +23,7 @@ export const TOOLS: ToolSpec[] = [
   { kind: "terminal", title: "Terminal", Icon: SquareTerminal, shortcut: { label: "⌃`", key: "`" } },
   { kind: "files", title: "Files", Icon: FolderTree, shortcut: { label: "⌃⇧P", key: "p", shift: true } },
   { kind: "side-chat", title: "Side chat", Icon: MessageSquarePlus, shortcut: { label: "⌃⌥S", key: "s", alt: true } },
-  { kind: "page", title: "New page", Icon: FilePlus2, shortcut: { label: "⌃⇧N", key: "n", shift: true } },
+  { kind: "page", title: "Pages", Icon: FilePlus2, shortcut: { label: "⌃⇧N", key: "n", shift: true } },
   { kind: "browser", title: "Browser", Icon: Globe, shortcut: { label: "⌃⇧B", key: "b", shift: true } },
 ];
 

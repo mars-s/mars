@@ -131,15 +131,45 @@ try {
 
   // Persistence across reload.
   await desktop.reload();
+  await waitForHydration(desktop);
   await desktop.getByRole("region", { name: "Workbench" }).waitFor();
   await desktop.getByRole("button", { name: "Close workbench" }).click();
   assert.equal(await desktop.getByRole("region", { name: "Workbench" }).count(), 0);
+
+  // Keyboard users keep their place: a tool opened from the launcher takes focus, and
+  // with many tabs the selected one stays scrolled into view.
+  await desktop.getByRole("button", { name: "Open workbench" }).click();
+  const filesTile = desktop.getByRole("button", { name: /^Files/ });
+  await desktop.waitForFunction(() => [...document.querySelectorAll(".wb-tool")].some((tile) => tile.textContent.startsWith("Files") && !tile.disabled));
+  await filesTile.focus();
+  await desktop.keyboard.press("Enter");
+  await desktop.waitForFunction(() => document.querySelector(".wb-pane")?.contains(document.activeElement) && document.activeElement !== document.querySelector(".wb-pane"), null, { timeout: 3000 });
+  // Enough tabs that even at their 72px minimum they overflow, then select the first.
+  for (let n = 0; n < 12; n++) await desktop.getByRole("button", { name: "New workbench tab" }).click();
+  // Select a tab at the far left by clicking it after scrolling it into reach, then add
+  // one more: the strip must bring the new (far right) selected tab back into view.
+  await desktop.getByRole("tablist", { name: "Workbench tabs" }).evaluate((strip) => (strip.scrollLeft = 0));
+  await desktop.getByRole("tab").first().click();
+  await desktop.getByRole("tablist", { name: "Workbench tabs" }).evaluate((strip) => (strip.scrollLeft = 0));
+  await desktop.getByRole("button", { name: "New workbench tab" }).click();
+  await desktop.waitForTimeout(200);
+  const selected = await desktop.locator(".wb-tab[data-selected]").boundingBox();
+  const strip = await desktop.getByRole("tablist", { name: "Workbench tabs" }).boundingBox();
+  assert.ok(selected.x >= strip.x - 1 && selected.x + selected.width <= strip.x + strip.width + 1, "the selected tab is fully visible in an overflowing strip");
+  assert.equal(await desktop.getByRole("tablist", { name: "Workbench tabs" }).getAttribute("data-overflow"), "", "overflow is marked for the edge fade");
+  await desktop.getByRole("button", { name: "Close workbench" }).click();
 
   // Narrow desktop: the pane stays at its 360px minimum and the separator reports what is shown.
   const narrow = await page({ width: 1024, height: 768 });
   await narrow.getByRole("button", { name: "Open workbench" }).click();
   const narrowPane = narrow.getByRole("region", { name: "Workbench" });
   await narrowPane.waitFor();
+  // aria-valuenow follows the rendered width through a ResizeObserver, a frame later.
+  await narrow.waitForFunction(() => {
+    const pane = document.querySelector(".wb-pane");
+    const value = Number(document.querySelector('[aria-label="Resize workbench"]')?.getAttribute("aria-valuenow"));
+    return pane && Math.abs(pane.getBoundingClientRect().width - value) < 2;
+  }, null, { timeout: 3000 });
   const narrowBox = await narrowPane.boundingBox();
   const narrowValue = Number(await narrow.getByRole("separator", { name: "Resize workbench" }).getAttribute("aria-valuenow"));
   assert.ok(narrowBox.width >= 359, `pane keeps its minimum at 1024px (got ${narrowBox.width})`);
@@ -166,7 +196,7 @@ try {
   await mobile.getByRole("button", { name: "Back to chat" }).click();
   assert.equal(await sheet.count(), 0);
   assert.deepEqual(errors, []);
-  console.log("PASS workbench shell: toggle, draft kept, launcher capabilities and reasons, suggestions, keyboard resize, tabs, gated shortcuts, expand, conversation switch keeps tabs, persistence, 1024px minimum, mobile sheet focus, inert, Escape, no overflow");
+  console.log("PASS workbench shell: launcher tool takes focus, selected tab scrolled into view, toggle, draft kept, launcher capabilities and reasons, suggestions, keyboard resize, tabs, gated shortcuts, expand, conversation switch keeps tabs, persistence, 1024px minimum, mobile sheet focus, inert, Escape, no overflow");
 } finally {
   await browser.close();
 }

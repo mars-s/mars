@@ -11,14 +11,14 @@ import { PHONE_QUERY, useWorkbench } from "./workbench-context";
 import { clampWidth, MIN_WIDTH, type TabTarget, type WorkbenchTab } from "./workbench-state";
 import "./workbench.css";
 
-const CHAT_MIN = 420;
+const CHAT_MIN = 480;
 
 function tabLabel(tab: WorkbenchTab) {
   switch (tab.kind) {
     case "files":
       return tab.path ? tab.path.split("/").pop() || "Files" : "Files";
     case "page":
-      return tab.name || "New page";
+      return tab.name || "Pages";
     case "browser":
       return tab.url ? tab.url.replace(/^https?:\/\//, "").replace(/\/$/, "") : "Browser";
     case "extension":
@@ -93,6 +93,54 @@ export function WorkbenchPane() {
     return () => observer.disconnect();
   }, [state.open]);
 
+  // Keep the selected tab visible in an overflowing strip, and mark overflow for the fade.
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const strip = tabsRef.current;
+    if (!strip) return;
+    document.getElementById(`wb-tab-${state.activeId}`)?.parentElement?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    const mark = () => strip.toggleAttribute("data-overflow", strip.scrollWidth > strip.clientWidth + 1);
+    mark();
+    const observer = new ResizeObserver(mark);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [state.activeId, state.tabs.length, state.open]);
+
+  // Focus follows what the user just did. When a tab's content changes (a tool opened
+  // from the launcher, a tab closed), focus moves to the first control in the new active
+  // panel instead of falling to <body>, but only if focus was inside the workbench.
+  const activeKind = state.tabs.find((tab) => tab.id === state.activeId)?.kind;
+  const lastActive = useRef(`${state.activeId}:${activeKind}`);
+  useEffect(() => {
+    // Only a different tab or a different tool counts; a pane updating its own target
+    // (Files remembering the open path) must not move focus.
+    const identity = `${state.activeId}:${activeKind}`;
+    const changed = lastActive.current !== identity;
+    lastActive.current = identity;
+    if (!changed || !state.open) return;
+    const pane = paneRef.current;
+    const lost = document.activeElement === document.body || !document.activeElement?.isConnected;
+    if (!pane || (!lost && !pane.contains(document.activeElement))) return;
+    // Panes render their main control after data loads, so try for a short while, in
+    // priority order (the tree, then a text field, then any control). Stop as soon as
+    // the user moves focus themselves, so this never steals it back.
+    const start = document.activeElement;
+    const priority = ['[role="tree"] [tabindex="0"]', "textarea:not([disabled])", "input:not([disabled])", 'button:not([disabled]), [tabindex="0"]'];
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (document.activeElement !== start && document.activeElement !== document.body) return clearInterval(timer);
+      const panel = document.getElementById(`wb-panel-${state.activeId}`);
+      const found = priority.map((selector) => panel?.querySelector<HTMLElement>(selector)).find(Boolean);
+      // Prefer the main control: give the tree or a text field time to appear.
+      const main = found && !found.matches('button, [tabindex="0"]:not([role="treeitem"])');
+      if (main || ++tries > 20) {
+        clearInterval(timer);
+        (found ?? document.getElementById(`wb-tab-${state.activeId}`))?.focus({ preventScroll: true });
+      }
+    }, 50);
+    return () => clearInterval(timer);
+  }, [state.activeId, activeKind, state.open]);
+
   if (!state.open) return null;
   const active = state.tabs.find((tab) => tab.id === state.activeId) ?? state.tabs[0];
 
@@ -151,7 +199,7 @@ export function WorkbenchPane() {
           <button type="button" className="wb-icon wb-back" aria-label="Back to chat" onClick={() => dispatch({ type: "close" })}>
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
-          <div className="wb-tabs" role="tablist" aria-label="Workbench tabs">
+          <div ref={tabsRef} className="wb-tabs" role="tablist" aria-label="Workbench tabs">
             {state.tabs.map((tab) => {
               const Icon = toolIcon(tab.kind);
               const selected = tab.id === active.id;

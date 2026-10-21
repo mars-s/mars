@@ -265,3 +265,15 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 ## 2026-10-21 Workbench verification notes
 
 - `.agents/verification.md` lists the workbench gate, the host checks and what they do not prove.
+
+## 2026-10-21 Workbench UX fixes (independent visual and keyboard review)
+
+- Focus follows the user: a tool opened from the launcher (mouse or keyboard) focuses its main control (the file tree, a text field, then any control). It stops as soon as the user moves focus, and a pane updating its own target never moves focus.
+- Tabs shrink to a 72 to 180px range before they scroll. The selected tab is scrolled into view, and an overflowing strip fades at its right edge.
+- The launcher switches to one column in a pane narrower than 520px (container query), so tool names stay readable at the 360px minimum.
+- Pane toolbars for Files, Changes, Browser and Terminal share one 44px bar.
+- Light mode contrast: the semantic colours are darker (`--green #2f6f3a`, `--red #a2402a`, `--amber #8a5a00`, `--blue #36628c`), shortcut hints use a stronger text mix on a lighter tint, dotfile and folder notes use `--text-muted`, and xterm has `minimumContrastRatio: 4.5`.
+- The "New page" tool is now "Pages", which matches what it opens (the page list with its own New page button).
+- The chat keeps 480px beside the pane (was 420px), so the composer's model picker is not squeezed at 1024px.
+- `workbench-ui-check` asserts launcher focus and the selected tab in view. Mutation runs: without the focus effect the check times out; without scroll-into-view it fails.
+- Not changed, noted for later: side chats are listed in Recents like other conversations, binary files have no download action, and the header toggle keeps the name "Open workbench" with `aria-pressed` (the toggle pattern the tests rely on).

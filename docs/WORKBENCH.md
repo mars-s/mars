@@ -33,7 +33,7 @@ type WorkbenchTab =
 type WorkbenchState = {
   open: boolean;
   expanded: boolean;
-  width: number; // pixels, clamped to [360, viewport - 420]
+  width: number; // pixels, clamped to [360, main area - 480]
   tabs: WorkbenchTab[]; // at least one when open
   activeId: string;
 };
@@ -58,7 +58,7 @@ global shortcuts and never becomes the phone sheet.
   `aria-valuenow` in pixels, dragged with the pointer or moved with Left and Right
   (Shift for 64px steps), Home and End. `aria-valuenow` reports the rendered width
   and `aria-valuemax` the space available. The pane keeps a 360px floor
-  (`max(360px, 100% - 420px)`), so at 1024px with the sidebar open the chat gives
+  (`max(360px, 100% - 480px)`), so at 1024px with the sidebar open the chat gives
   way rather than the pane dropping below its minimum.
 - Expanded: the workbench takes the main area and the chat collapses to a narrow
   restore strip. Toggle with the header button or Cmd/Ctrl+Shift+E.

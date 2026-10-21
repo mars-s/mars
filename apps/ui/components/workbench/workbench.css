@@ -42,8 +42,9 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  /* The chat keeps 420px where it can, but the pane never drops below its 360px minimum. */
-  max-width: max(360px, calc(100% - 420px));
+  /* The chat keeps 480px (room for the composer's model picker) where it can, but the
+     pane never drops below its 360px minimum. */
+  max-width: max(360px, calc(100% - 480px));
   background: var(--sidebar);
   animation: wb-in 180ms var(--ease-out);
 }
@@ -81,12 +82,18 @@
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  scroll-padding-inline: 8px;
+}
+/* Tabs shrink before they scroll, and an overflowing strip fades at its right edge. */
+.wb-tabs[data-overflow] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 .wb-tab {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
   align-items: center;
-  max-width: 200px;
+  min-width: 72px;
+  max-width: 180px;
   height: 32px;
   border-radius: 8px;
   color: var(--text-muted);
@@ -196,6 +203,14 @@
   width: min(100%, 720px);
   margin: 0 auto;
   padding: 40px 32px 48px;
+  container-type: inline-size;
+}
+/* A narrow pane (the 360px minimum) gets one column so tool names stay readable. */
+@container (max-width: 520px) {
+  .wb-tools,
+  .wb-more {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .wb-launcher h2 {
   margin: 0 0 14px;
@@ -253,8 +268,8 @@
   flex: none;
   padding: 2px 6px;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: color-mix(in srgb, var(--text) 72%, var(--text-muted));
   font-family: var(--font-sans);
   font-size: 11px;
 }

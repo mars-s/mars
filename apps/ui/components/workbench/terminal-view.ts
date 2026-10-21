@@ -86,6 +86,8 @@ export async function mountTerminal(
     scrollback: 5000,
     allowProposedApi: false,
     macOptionIsMeta: true,
+    // Dim and faint ANSI text (prompts, git hints) is lifted to readable contrast in both themes.
+    minimumContrastRatio: 4.5,
     theme: readTheme(host),
   });
   const fit = new FitAddon();

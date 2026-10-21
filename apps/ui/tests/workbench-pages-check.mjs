@@ -136,7 +136,7 @@ try {
   await main.fill("Main draft stays put");
   await desktop.getByRole("button", { name: "Open workbench" }).click();
   const pane = desktop.getByRole("region", { name: "Workbench" });
-  await pane.getByRole("button", { name: /^New page/ }).click();
+  await pane.getByRole("button", { name: /^Pages/ }).click();
 
   // Pages list, newest first, then New page creates a generated name.
   const list = pane.getByRole("list", { name: "Pages" });
@@ -227,7 +227,7 @@ try {
   assert.ok(Math.abs((await viewport.evaluate((node) => node.scrollTop)) - scrolled) < 2, "main scroll position unchanged");
 
   // Polling runs only while the side chat is visible.
-  await desktop.getByRole("tab", { name: "Remote rewrite" }).or(desktop.getByRole("tab", { name: "New page" })).first().click();
+  await desktop.getByRole("tab", { name: "Remote rewrite" }).or(desktop.getByRole("tab", { name: "Pages" })).first().click();
   await desktop.waitForTimeout(300);
   const hidden = db.stateReads.get("9");
   await desktop.waitForTimeout(3200);
@@ -243,7 +243,7 @@ try {
   const { tab: light } = await open({ width: 1440, height: 900 }, { theme: "light" });
   await light.getByRole("button", { name: "Open workbench" }).click();
   const lightPane = light.getByRole("region", { name: "Workbench" });
-  await lightPane.getByRole("button", { name: /^New page/ }).click();
+  await lightPane.getByRole("button", { name: /^Pages/ }).click();
   await lightPane.getByRole("button", { name: /Release plan/ }).click();
   await lightPane.getByRole("status").getByText("Saved", { exact: true }).waitFor();
   await light.screenshot({ path: `${evidence}/desktop-light-page.png` });
@@ -257,7 +257,7 @@ try {
     const { tab: mobile } = await open({ width: 390, height: 844 }, { theme });
     await mobile.getByRole("button", { name: "Open workbench" }).click();
     const sheet = mobile.getByRole("region", { name: "Workbench" });
-    await sheet.getByRole("button", { name: /^New page/ }).click();
+    await sheet.getByRole("button", { name: /^Pages/ }).click();
     await sheet.getByRole("button", { name: /Release plan/ }).click();
     await sheet.getByRole("textbox", { name: "Page text" }).waitFor();
     await sheet.getByRole("status").getByText("Saved", { exact: true }).waitFor();

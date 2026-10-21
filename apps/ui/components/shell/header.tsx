@@ -45,7 +45,7 @@ export function WorkspaceHeader() {
             className="live-icon live-workbench-toggle"
             aria-label="Open workbench"
             aria-pressed={workbench.state.open}
-            title={workbench.state.open ? "Close workbench (⌃⇧E)" : "Open workbench (⌃⇧E)"}
+            title="Open workbench (⌃⇧E)"
             data-open={workbench.state.open ? "" : undefined}
             onClick={() => workbench.dispatch({ type: workbench.state.open ? "close" : "open" })}
           >
