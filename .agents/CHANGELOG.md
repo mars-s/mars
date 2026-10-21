@@ -291,3 +291,7 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 
 - The browser check's takeover child no longer inherits stderr (it held the check runner's pipe open) and is awaited on exit.
 - Gate on this commit: tsc and eslint clean; 76 of 76 unit tests; 12 of 12 browser checks (six original fixtures plus six workbench); native 26 of 29, with all 8 workbench host checks passing and the same three Mac-only failures as original f82d5d0 (check-dev-tools, check-ui-patches, check-vm-control); syntax and boundary checks pass; production build passes.
+
+## 2026-10-21 Workbench decision log
+
+- Decision trail updated in `.agents/goals/workbench-log.tsv`. Lane worktrees removed; their branches are kept (codex/wb-*).
