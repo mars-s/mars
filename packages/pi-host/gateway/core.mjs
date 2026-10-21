@@ -8,7 +8,7 @@ import { chunkText } from './chunk.mjs';
 /** Bindings, owner allowlist, pending pairings, recent event keys and the outbound queue. */
 export const GatewayDoc = defineDoc({
   kind: 'mars.gateway', version: 1, scope: 'session',
-  initial: () => ({ bindings: {}, allow: {}, pairings: [], seen: [], outbox: [], watching: {}, nextJob: 1, sessionsShown: {} }),
+  initial: () => ({ bindings: {}, allow: {}, pairings: [], seen: [], delivered: [], outbox: [], watching: {}, nextJob: 1, sessionsShown: {} }),
 });
 /** The latest audit records, newest last. Message text is never stored here. */
 export const GatewayAuditDoc = defineDoc({ kind: 'mars.gateway-audit', version: 1, scope: 'session', initial: () => ({ records: [] }) });
@@ -78,15 +78,26 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     });
   }
 
-  /** Queue chunks of `text` to `route`, in one commit, then start delivery. */
-  async function enqueue(route, text, extra = {}) {
+  /**
+   * Queue chunks of `text` to `route`, in one commit, then start delivery. With `once`, a
+   * key already delivered to that route is skipped: Pi can answer a steer and a queued
+   * message with one answer, and the chat should get it once.
+   */
+  async function enqueue(route, text, { once } = {}) {
     const adapter = adapters.get(route.split(':')[0])?.adapter;
     const limit = adapter?.limits?.maxText ?? 2000;
     const chunks = chunkText(text, limit);
     if (!chunks.length) return;
     await commit(async (tx) => {
       const doc = await tx.doc(GatewayDoc);
-      for (const chunk of chunks) doc.outbox.push({ id: doc.nextJob++, route, text: chunk, attempts: 0, notBefore: 0, ...extra });
+      if (once) {
+        const key = route + '#' + once;
+        doc.delivered ??= [];
+        if (doc.delivered.includes(key)) return;
+        doc.delivered.push(key);
+        if (doc.delivered.length > SEEN_LIMIT) doc.delivered.splice(0, doc.delivered.length - SEEN_LIMIT);
+      }
+      for (const chunk of chunks) doc.outbox.push({ id: doc.nextJob++, route, text: chunk, attempts: 0, notBefore: 0 });
     });
     kick();
   }
@@ -150,11 +161,11 @@ export function createGateway({ harness, conversations, context, now = Date.now,
         const conversation = await harness.conversation(nativeId(conversationId), context);
         const entry = await conversation.commit((tx) => tx.entry(settled.answer), context);
         const text = answerText(entry) || '(The answer had no text.)';
-        for (const route of routes) await enqueue(route, text, { submissionId });
+        for (const route of routes) await enqueue(route, text, { once: 'answer:' + settled.answer });
       } else {
         const why = { model_error: 'the model returned an error', aborted: 'it was stopped', stale: 'it was replaced' }[settled.reason] ?? settled.reason ?? 'unknown';
         const detail = settled.detail ? ` (${String(settled.detail).slice(0, 200)})` : '';
-        for (const route of routes) await enqueue(route, `No answer: ${why}${detail}.`, { submissionId });
+        for (const route of routes) await enqueue(route, `No answer: ${why}${detail}.`, { once: 'submission:' + submissionId });
       }
       await commit(async (tx) => { delete (await tx.doc(GatewayDoc)).watching[submissionId]; });
     })().catch((error) => log('gateway follow: ' + error.message)).finally(() => waiters.delete(submissionId));
@@ -334,7 +345,7 @@ export function createGateway({ harness, conversations, context, now = Date.now,
    */
   function addAdapter(adapter) {
     if (adapters.has(adapter.channel)) throw Error(`Adapter ${adapter.channel} already added`);
-    const entry = { adapter, state: 'starting', detail: '', failures: 0, controller: null };
+    const entry = { adapter, state: 'starting', detail: '', lastError: '', failures: 0, controller: null };
     adapters.set(adapter.channel, entry);
     (async () => {
       while (!closed) {
@@ -348,10 +359,10 @@ export function createGateway({ harness, conversations, context, now = Date.now,
           throw Error('Adapter stopped unexpectedly');
         } catch (error) {
           if (closed || entry.controller.signal.aborted) break;
-          if (error.fatal) { entry.state = 'stopped'; entry.detail = String(error.message); return; }
+          if (error.fatal) { entry.state = 'stopped'; entry.detail = entry.lastError = String(error.message).slice(0, 300); return; }
           entry.failures += 1;
           entry.state = 'failed';
-          entry.detail = String(error.message).slice(0, 300);
+          entry.detail = entry.lastError = String(error.message).slice(0, 300);
           log(`gateway adapter ${adapter.channel} failed: ${entry.detail}`);
           await audit({ channel: adapter.channel, decision: 'adapter_failed', detail: entry.detail }).catch(() => {});
           const wait = Math.min(backoff.firstMs * 2 ** (entry.failures - 1), backoff.maxMs);
@@ -367,9 +378,9 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     const audit = (await harness.snapshot(GatewayAuditDoc, context))?.records ?? [];
     const titles = new Map((await conversations.list()).map((row) => [row.id, row.title]));
     return {
-      adapters: [...adapters.values()].map(({ adapter, state, detail, failures }) => ({
+      adapters: [...adapters.values()].map(({ adapter, state, detail, lastError, failures }) => ({
         channel: adapter.channel, state: adapter.health?.()?.state === 'stopped' ? 'stopped' : state,
-        detail: detail || adapter.health?.()?.detail || '', failures,
+        detail: detail || adapter.health?.()?.detail || '', failures, lastError,
       })),
       bindings: Object.entries(doc.bindings).map(([route, conversationId]) => ({ route, channel: route.split(':')[0], conversationId, title: titles.get(conversationId) ?? `Conversation ${conversationId}` })),
       pairings: doc.pairings.filter((p) => p.expiresAt > now()).map(({ code, channel, sender, name, expiresAt }) => ({ code, channel, sender, name, expiresAt: new Date(expiresAt).toISOString() })),

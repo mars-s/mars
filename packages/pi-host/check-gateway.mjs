@@ -146,6 +146,27 @@ try {
   const order = sentTo(OWNER_TG);
   assert.ok(order.indexOf('echo: Hold on') < order.indexOf('echo: Queued behind'), 'in order');
 
+  // 5b. /steer joins a running answer. If Pi answers a steer and a queued message in one
+  // run, both share one answer, which reaches the chat once.
+  let releaseSteer;
+  gates.set('Hold two', new Promise((resolve) => { releaseSteer = resolve; }));
+  telegram.message({ from: OWNER_TG, text: 'Hold two' });
+  await until(async () => (await host.harness.snapshot(LiveDoc, Number(conversationId), context))?.run, 'second gated run started');
+  telegram.message({ from: OWNER_TG, text: 'and one more' });
+  telegram.message({ from: OWNER_TG, text: '/steer use metric units' });
+  const steered = await until(async () => {
+    const items = (await host.harness.snapshot(InboxDoc, Number(conversationId), context))?.items ?? [];
+    return items.length === 2 && items;
+  }, '/steer queued');
+  assert.deepEqual(steered.map((item) => item.mode).sort(), ['followUp', 'steer'], '/steer joins the running answer instead of waiting');
+  const sentBefore = sentTo(OWNER_TG).length;
+  releaseSteer();
+  await until(() => seen.includes('use metric units'), 'steer text reached the model without the command word');
+  await gateway.settle();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const after = sentTo(OWNER_TG).slice(sentBefore);
+  assert.equal(new Set(after).size, after.length, 'no answer is sent to the chat twice: ' + JSON.stringify(after));
+
   // 6. Commands bypass the model.
   const modelCalls = seen.length;
   statusWorkersFor = conversationId;
@@ -222,7 +243,7 @@ try {
   gateway.addAdapter(crashing);
   await until(() => starts >= 3, 'supervisor restarts a crashing adapter');
   const flaky = (await gateway.status()).adapters.find((a) => a.channel === 'flaky');
-  assert.ok(flaky.failures >= 2 && /socket exploded/.test(flaky.detail), 'its failures and reason are reported');
+  assert.ok(flaky.failures >= 2 && /socket exploded/.test(flaky.lastError), 'its failures and last error are reported, even mid-restart');
   assert.ok((await gateway.status()).audit.some((a) => a.decision === 'adapter_failed' && a.channel === 'flaky'), 'and audited');
   telegram.message({ from: OWNER_TG, text: 'still here' });
   await until(() => sentTo(OWNER_TG).includes('echo: still here'), 'Telegram keeps working while another adapter crashes');
@@ -258,7 +279,7 @@ try {
   assert.equal(seen.filter((t) => t === 'SLOW 600 across a restart').length, 1, 'a redelivery after restart submits once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'slow: across a restart').length, 1, 'and is answered once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'echo: queued before restart').length, 1, 'the queued reply is sent once');
-  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
+  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, /steer joins the running answer, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
