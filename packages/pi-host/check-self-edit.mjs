@@ -97,9 +97,13 @@ try {
   assert.equal(checked.failed[0].file, 'packages/pi-host/a.mjs');
   await writeFile(join(wtHost, 'a.mjs'), "import { missing } from './b.mjs';\nexport const answer = 42 + missng;\n");
   checked = await call('self_edit_check', { id });
-  assert.equal(checked.failed[0].step, 'names');
-  assert.deepEqual(checked.failed.map(row => row.detail.match(/'(\w+)'/)?.[1]).sort(), ['missing', 'missng']);
-  assert.match(checked.next, /wrong name or import/);
+  // Staging installs only host dependencies, without TypeScript; then the step must say it was skipped.
+  if (await exists(join(DEPENDENCIES, 'typescript/bin/tsc'))) {
+    assert.equal(checked.failed[0].step, 'names');
+    assert.deepEqual(checked.failed.map(row => row.detail.match(/'(\w+)'/)?.[1]).sort(), ['missing', 'missng']);
+    assert.match(checked.next, /wrong name or import/);
+  } else assert.match(checked.notes.join(' '), /names and imports were not checked/);
+  await clearMarkers();
   assert.deepEqual(await ranChecks(), [], 'no check runs while syntax or names fail');
 
   // Trust boundary: changes to the files that judge a change are refused and never committed.
