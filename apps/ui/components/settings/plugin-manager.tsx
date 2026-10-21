@@ -24,7 +24,7 @@ export function PluginManager({
   }, []);
   useEffect(() => {
     void refresh().catch((failure) =>
-      setError(failure instanceof Error ? failure.message : "Could not load plugins."),
+      setError(failure instanceof Error ? failure.message : "Could not load extensions."),
     );
   }, [refresh]);
   async function update(
@@ -120,15 +120,15 @@ export function PluginManager({
   const system = plugins.filter((plugin) => plugin.kind === "system");
   const reload = () =>
     void refresh().catch((failure) =>
-      setError(failure instanceof Error ? failure.message : "Could not refresh plugins."),
+      setError(failure instanceof Error ? failure.message : "Could not refresh extensions."),
     );
   return (
-    <section className="live-plugin-manager" aria-label="Installed plugins">
+    <section className="live-plugin-manager" aria-label="Installed extensions">
       <div className="live-plugin-toolbar">
         <p>{loaded ? `${installed.length} installed` : ""}</p>
         <Button variant="ghost" size="sm" disabled={!!pending} onClick={reload}>
           <RotateCw aria-hidden="true" />
-          Refresh plugins
+          Refresh extensions
         </Button>
       </div>
       {error && (
@@ -139,10 +139,10 @@ export function PluginManager({
           </Button>
         </p>
       )}
-      {!loaded && !error && <p role="status">Loading plugins…</p>}
+      {!loaded && !error && <p role="status">Loading extensions…</p>}
       {installed.length > 0 && <div className="live-plugin-list">{installed.map(card)}</div>}
       {loaded && !installed.length && (
-        <p className="live-plugin-empty">No installed plugins yet.</p>
+        <p className="live-plugin-empty">No installed extensions yet.</p>
       )}
       {system.length > 0 && (
         <details className="live-system-plugins">

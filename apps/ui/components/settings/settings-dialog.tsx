@@ -73,7 +73,7 @@ function ProviderAccount({ provider, auth }: { provider: Provider; auth: LoginSt
   const [answer, setAnswer] = useState("");
   const waiting = auth?.state === "pending";
   return (
-    <section className="live-account" aria-label={`${provider.name} account`}>
+    <section className="live-settings-account" aria-label={`${provider.name} account`}>
       <div className="live-settings-row">
         <div>
           <h3>{provider.name}</h3>

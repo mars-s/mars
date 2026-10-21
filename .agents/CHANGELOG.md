@@ -356,3 +356,19 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 
 - HOST-GUIDE.md starts with an "Answering" paragraph (call the tool first; do not describe a call or invent its result). The harness loop promoted it in round 1 (config c8b8ffde0ff1); `harness/confirm.mjs` then re-scored parent and candidate on the held-out set four times, interleaved: 9 to 15 versus 21 to 27 fully correct of 45, no overlap. The round-4 tool override was inside the noise band and is not adopted. docs/HARNESS-LOOP.md "Adopting a config".
 - Gateway follow-ups: `/status` lists running helpers, `/steer`, typing kept up for the whole answer, one delivery per shared answer, Discord without privileged intents (server messages need a mention), research index with ranked decisions, host guide section on chat apps, two gateway questions in the small-model eval.
+
+## 2026-10-22 UI sweep: broken states and layout bugs across chat, workbench, settings and /design-system
+
+Surveyed every surface at 1440x900 and 390x844 in dark and light against the preview fixture, then fixed one finding per commit. Evidence and the findings list are in `/tmp/gw-evidence/ui-sweep/` (not committed).
+
+- Recents: an open side chat was listed twice, once as a subthread row and once as a side chat, and the parent's real subthread disappeared. ChildNavigation now skips snapshots with `sideChatOf`.
+- Dev proxy: when the UI was opened at `http://127.0.0.1:<port>`, the address Next prints, every POST failed with "Origin rejected". That covered send, terminal, model and settings. Next rewrites `request.url` to localhost, so the proxy now compares Origin with the Host the browser sent, which is still restricted to local names.
+- Workbench launcher: when capabilities fail, the tiles say "Unavailable". Before, they stayed on "Checking…" forever.
+- /design-system: no sideways scroll at 390px. Body scrollWidth was 442 and is now 390. The Subagent, Diff review, MCP call and AI Prompt specimens are no longer clipped.
+- Settings Account: the provider sections shared the class `live-account` with the sidebar account row, so each was fixed at 48px and the Claude row spilled out of its box. The settings class is renamed.
+- Settings: the Radix tab panel keyboard stop shows the focus ring.
+- Extensions page: the copy says extensions throughout. Before, refresh, empty, loading and error text said plugins.
+- Pages editor: the title, Saved status and text start at the same x, and the clay focus rule sits beside the text, not 48px from it.
+- Composer: beside an open workbench at 1024px, the model name showed as "G" (7px of 58px). The toolbar is now a size container and the effort label gives way first.
+- Checks: new `tests/ui-sweep-check.mjs` covers no sideways scroll at 390px on chat, side chat, /design-system and every workbench pane in both themes, plus the readable model name beside the pane. It is added to `test:ui`. `side-chats-download-check` asserts one side-chat row. `workbench-ui-check` covers capabilities failing. `pi-proxy.test.mjs` covers POSTs from 127.0.0.1. Each new assertion fails with its fix reverted.
+- Not changed: `--text-faint` metadata measures 3.8 to 4.4:1 in dark, which DESIGN.md allows for quiet metadata. `workbench-terminal-check`'s "xterm is fetched as its own chunk" assertion fails against a webpack dev server on the base commit too, because the chunk is named after the module, not xterm. Turbopack, which the check assumes, cannot run from a worktree whose `node_modules` is a symlink outside the repo.

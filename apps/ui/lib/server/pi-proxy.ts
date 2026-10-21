@@ -1,14 +1,14 @@
 type ProxyOptions = { origin?: string; token?: string; fetcher?: typeof fetch; production?: boolean };
 
 const LOCAL_NAMES = ["localhost", "127.0.0.1", "[::1]"];
-/** The Host header the browser actually sent. request.url always says 127.0.0.1 because Next binds there. */
-function sentHostname(request: Request): string {
+/** The Host header the browser actually sent. Next rewrites request.url to localhost whatever the browser used. */
+function sentHost(request: Request): URL | undefined {
   // Requests built in tests carry no Host header; then the URL's host is what was sent.
   const host = request.headers.get("host") ?? new URL(request.url).host;
   try {
-    return new URL(`http://${host}`).hostname;
+    return new URL(`${new URL(request.url).protocol}//${host}`);
   } catch {
-    return "";
+    return undefined;
   }
 }
 
@@ -93,10 +93,12 @@ export async function proxyPi(request: Request, options: ProxyOptions = {}): Pro
     return Response.json({ error: "Not found" }, { status: 404 });
   const local = new URL(request.url);
   const keyedBrowse = KEYED_BROWSE.test(local.pathname);
+  const sent = sentHost(request);
   if (
     !LOCAL_NAMES.includes(local.hostname) ||
     // DNS rebinding: an attacker's name resolving to 127.0.0.1 still sends its own Host.
-    !LOCAL_NAMES.includes(sentHostname(request)) ||
+    !sent ||
+    !LOCAL_NAMES.includes(sent.hostname) ||
     (request.headers.get("sec-fetch-site") === "cross-site" && !keyedBrowse)
   ) {
     return Response.json({ error: "Local development access only" }, { status: 403 });
@@ -107,7 +109,8 @@ export async function proxyPi(request: Request, options: ProxyOptions = {}): Pro
   if (!keyedBrowse) {
     if (!["GET", "POST"].includes(request.method) || (extension && request.method !== "GET"))
       return Response.json({ error: "Method not allowed" }, { status: 405 });
-    if (request.method === "POST" && request.headers.get("origin") !== local.origin)
+    // The page's own origin is the local host the browser addressed, so 127.0.0.1 and localhost both work.
+    if (request.method === "POST" && request.headers.get("origin") !== sent.origin)
       return Response.json({ error: "Origin rejected" }, { status: 403 });
   }
   const origin = options.origin ?? process.env.MARS_PI_ORIGIN;

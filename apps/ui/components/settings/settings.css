@@ -44,6 +44,12 @@
   margin-bottom: 24px;
   padding-right: 32px;
 }
+/* The tab panel is a keyboard stop (Radix gives it tabindex 0), so it needs the ring too. */
+.live-settings-section:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 6px;
+  border-radius: 8px;
+}
 .live-settings-section > header h2 {
   margin: 0;
   font-family: var(--font-serif);
@@ -87,7 +93,7 @@
   font-weight: 500;
   color: var(--text);
 }
-.live-account + .live-account {
+.live-settings-account + .live-settings-account {
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid var(--border);
