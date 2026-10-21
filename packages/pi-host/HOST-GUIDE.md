@@ -53,6 +53,8 @@ For any task of three or more steps, first decide who does the steps:
 | Save how to do something for next time | `skill_create` |
 | Add skills from a repo, e.g. "npx skills add owner/repo" | `skill_install` |
 | Run a command, install, test, use git | `host_exec` (`bash` for quick ones) |
+| Run a refused destructive command (git reset --hard, rm -rf of home) the owner explicitly asked for | `host_exec` with `allowDestructive: true` |
+| Look at an image file (screenshot, chart) | `host_view_image`, then `image()` in codemode |
 | Read the rest of a long output | `artefact_read`, `artefact_search` |
 | Get one answer from another model and wait | `worker_run` |
 | Run several independent jobs at once | `worker_fanout` |
