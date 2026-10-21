@@ -3,7 +3,7 @@
 // each check against http://localhost:<port>/ (the dev proxy compares the Origin with the page's
 // own host name, so use localhost, not 127.0.0.1), and stops only the processes it started.
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const ui = fileURLToPath(new URL("..", import.meta.url));
@@ -17,6 +17,9 @@ const listed = [...new Set(pkg.scripts["test:ui"].match(/tests\/[\w-]+\.mjs/g))]
 const checks = only.some((name) => name.endsWith(".mjs"))
   ? only
   : listed.filter((file) => !only.length || only.some((name) => file.includes(name)));
+// The separate dev server rewrites next-env.d.ts for its own folder; put the original back after.
+const nextEnv = new URL("../next-env.d.ts", import.meta.url);
+const nextEnvText = await readFile(nextEnv, "utf8").catch(() => undefined);
 const started = [];
 const start = (args, env) => {
   const child = spawn(process.execPath, args, { cwd: ui, env: { ...process.env, ...env }, stdio: ["ignore", "ignore", "ignore"], detached: true });
@@ -57,3 +60,4 @@ for (const result of failed) console.log(`\n--- ${result.file}\n${result.log}`);
 console.log(`\n${results.length - failed.length} of ${results.length} browser checks passed`);
 process.exitCode = failed.length ? 1 : 0;
 stop();
+if (nextEnvText !== undefined) await writeFile(nextEnv, nextEnvText);
