@@ -334,3 +334,7 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - `plan_update`: steps are trimmed in `preparePlan`, before validation, so a step of only spaces is refused instead of saved as an empty line. `check-plans.mjs` covers it (fails on the old code) and now closes and reopens the store to prove the plan survives a restart.
 - `/design-system` has a Plan specimen (in progress and finished) using the real `PlanCard`. Its styles moved from `thread.css` to `components/ai/plan-card.css`, imported by the component.
 - Correction to the plan entry above: recovery after the workflow_start redirect was not demonstrated; the first call was already right.
+
+## 2026-10-22 Self-edit: isolated, checked and guarded changes to Mars itself
+
+- `docs/SELF-EDIT.md` audits the self-change path from the agent's side (the candidate commit's own checks and watchdog judged it, edits landed in the live checkout, `apply_patch` resolved a relative `cwd` against the host process folder, no plain next step after a dry run, UI changes in a host commit silently not shipped, extensions able to replace built-in tools) and specifies the `self_edit_*` tools and the protected-file trust boundary.
