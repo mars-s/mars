@@ -83,7 +83,7 @@ html:has(.ds-frame), body:has(.ds-frame) { overflow: auto; height: auto; }
 .ds-placeholder { margin: 4px 0 28px; color: var(--text-muted); font-size: 16px; }
 .ds-composer-bar, .ds-composer-bar > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 
-.ds-thread { max-width: 768px; display: grid; gap: 20px; }
+.ds-thread { max-width: 768px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 .ds-user { display: flex; justify-content: flex-end; }
 .ds-user p { margin: 0; max-width: 85%; padding: 10px 16px; border-radius: 16px; background: var(--user-bubble); font-size: 15px; line-height: 1.55; }
 .ds-activity { font-size: 13px; color: var(--text-muted); }
@@ -95,7 +95,7 @@ html:has(.ds-frame), body:has(.ds-frame) { overflow: auto; height: auto; }
 .ds-activity-rows em { margin-left: auto; font-style: normal; font-size: 12px; }
 .ds-status-fail { color: var(--red); }
 .ds-assistant p { margin: 0 0 14px; font-size: 16px; line-height: 1.65; }
-.ds-assistant pre { margin: 0; padding: 14px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
+.ds-assistant pre { margin: 0; overflow-x: auto; padding: 14px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
 .ds-assistant pre code { font-size: 13px; color: var(--text); }
 .ds-actions { display: flex; gap: 2px; margin-top: 10px; }
 
@@ -133,7 +133,7 @@ html:has(.ds-frame), body:has(.ds-frame) { overflow: auto; height: auto; }
 .ds-library[data-library="Kokonut UI"] { color: var(--clay); border-color: color-mix(in srgb, var(--clay) 40%, var(--border)); }
 .ds-library[data-library="21st Agent Elements"] { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, var(--border)); }
 .ds-library[data-library="assistant-ui"] { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
-.ds-specimen-stage { display: grid; gap: 12px; justify-items: stretch; padding: 18px; background: var(--background); min-height: 96px; }
+.ds-specimen-stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; justify-items: stretch; padding: 18px; background: var(--background); min-height: 96px; }
 .ds-specimen-stage > * { max-width: 100%; }
 .ds-island-stage { position: relative; display: flex; justify-content: center; min-height: 120px; }
 .ds-island-stage > * { position: relative !important; inset: auto !important; transform: none !important; }
