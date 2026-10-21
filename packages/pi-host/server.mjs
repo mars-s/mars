@@ -384,7 +384,8 @@ harness.resume();
 const fakeGateway = process.env.MARS_GATEWAY_FAKE === "1" && /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.MARS_TELEGRAM_API || "");
 const gatewayHost = await startGateway({ harness, conversations, context,
   env: (STAGING && !fakeGateway) || process.env.MARS_DUMP_TOOLS ? {} : process.env, discordToken: connections.getDiscordToken(),
-  ready: async (id) => (await providerReady(await conversations.state(id))) ? null : "Mars cannot answer yet: connect the selected model provider in Mars Settings, then send your message again." });
+  ready: async (id) => (await providerReady(await conversations.state(id))) ? null : "Mars cannot answer yet: connect the selected model provider in Mars Settings, then send your message again.",
+  workersOf: (id) => listWorkers({ harness, conversationId: id, context, limit: 20 }) });
 late.gateway = gatewayHost.gateway;
 async function evaluationStatus() {
   try {

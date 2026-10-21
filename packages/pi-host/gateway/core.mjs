@@ -57,9 +57,10 @@ function answerText(entry) {
  * The gateway for one harness. `conversations` is the host's conversation manager.
  * Adapters are added with `addAdapter` and run under a supervisor. `ready(conversationId)`
  * returns null, or a sentence for the chat when the conversation cannot answer yet (for
- * example no model provider is signed in); then nothing is submitted.
+ * example no model provider is signed in); then nothing is submitted. `workersOf(id)` lists
+ * the conversation's helper models ({ title, status }) for /status.
  */
-export function createGateway({ harness, conversations, context, now = Date.now, log = () => {}, backoff = { firstMs: 1000, maxMs: 60000 }, ready = async () => null }) {
+export function createGateway({ harness, conversations, context, now = Date.now, log = () => {}, backoff = { firstMs: 1000, maxMs: 60000 }, ready = async () => null, workersOf = async () => [] }) {
   const adapters = new Map(); // channel -> { adapter, state, detail, failures, controller }
   const waiters = new Map(); // submission id -> promise
   let closed = false;
@@ -200,13 +201,17 @@ export function createGateway({ harness, conversations, context, now = Date.now,
       }
       case '/status': {
         if (!conversationId) return 'This chat has no conversation yet. Send a message to start one.';
-        const [live, inbox, row] = await Promise.all([
+        const [live, inbox, row, workers] = await Promise.all([
           harness.snapshot(LiveDoc, nativeId(conversationId), context),
           harness.snapshot(InboxDoc, nativeId(conversationId), context),
           conversations.list().then((rows) => rows.find((r) => r.id === String(conversationId))),
+          workersOf(conversationId).catch(() => []),
         ]);
         const queued = inbox?.items?.length ?? 0;
-        return `"${row?.title ?? conversationId}" [${conversationId}]: ${live?.run ? 'answering' : 'idle'}${queued ? `, ${queued} queued` : ''}.`;
+        const running = workers.filter((w) => w.status === 'running');
+        const lines = [`"${row?.title ?? conversationId}" [${conversationId}]: ${live?.run ? 'answering' : 'idle'}${queued ? `, ${queued} queued` : ''}.`];
+        if (running.length) lines.push(`Helpers running: ${running.slice(0, 5).map((w) => w.title).join(', ')}${running.length > 5 ? ` and ${running.length - 5} more` : ''}.`);
+        return lines.join('\n');
       }
       case '/stop': {
         if (!conversationId) return 'Nothing to stop.';

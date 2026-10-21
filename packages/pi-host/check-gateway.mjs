@@ -69,7 +69,9 @@ async function open() {
 const telegram = await fakeTelegram({ token: TG_TOKEN });
 const discord = await fakeDiscord({ token: DC_TOKEN });
 let host = await open();
-let gateway = createGateway({ harness: host.harness, conversations: host.conversations, context, backoff: { firstMs: 20, maxMs: 100 } });
+const workersOf = async (id) => (String(id) === String(statusWorkersFor) ? [{ title: 'Review a.ts', status: 'running' }, { title: 'Done job', status: 'completed' }] : []);
+let statusWorkersFor = null;
+let gateway = createGateway({ harness: host.harness, conversations: host.conversations, context, backoff: { firstMs: 20, maxMs: 100 }, workersOf });
 const api = createApiAdapter();
 gateway.addAdapter(api);
 gateway.addAdapter(createTelegramAdapter({ token: TG_TOKEN, baseUrl: telegram.baseUrl, pollTimeoutSeconds: 1 }));
@@ -146,8 +148,10 @@ try {
 
   // 6. Commands bypass the model.
   const modelCalls = seen.length;
+  statusWorkersFor = conversationId;
   telegram.message({ from: OWNER_TG, text: '/status' });
-  await until(() => sentTo(OWNER_TG).some((t) => t.startsWith('"Plan the garden"')), '/status reply');
+  const statusReply = await until(() => sentTo(OWNER_TG).find((t) => t.startsWith('"Plan the garden"')), '/status reply');
+  assert.match(statusReply, /Helpers running: Review a\.ts\./, '/status names running helpers, not finished ones');
   telegram.message({ from: OWNER_TG, text: '/sessions' });
   await until(() => sentTo(OWNER_TG).some((t) => /^1\. /.test(t)), '/sessions reply');
   telegram.message({ from: OWNER_TG, text: '/new Shopping' });
@@ -207,6 +211,25 @@ try {
   discord.message({ author: OWNER_DC, channel: '700000000000000002', guild: '800000000000000001', text: 'no permission here' });
   await until(async () => (await gateway.status()).audit.some((a) => a.decision === 'delivery_failed' && a.channel === 'discord'), 'discord 403 recorded');
 
+  // 11b. A crashing adapter is restarted by the supervisor and never stops the others.
+  let starts = 0;
+  const crashing = {
+    channel: 'flaky', limits: { maxText: 500 },
+    async start() { starts += 1; await new Promise((resolve) => setTimeout(resolve, 10)); throw Error('socket exploded'); },
+    async send() { return {}; },
+    health: () => ({ state: 'failed' }),
+  };
+  gateway.addAdapter(crashing);
+  await until(() => starts >= 3, 'supervisor restarts a crashing adapter');
+  const flaky = (await gateway.status()).adapters.find((a) => a.channel === 'flaky');
+  assert.ok(flaky.failures >= 2 && /socket exploded/.test(flaky.detail), 'its failures and reason are reported');
+  assert.ok((await gateway.status()).audit.some((a) => a.decision === 'adapter_failed' && a.channel === 'flaky'), 'and audited');
+  telegram.message({ from: OWNER_TG, text: 'still here' });
+  await until(() => sentTo(OWNER_TG).includes('echo: still here'), 'Telegram keeps working while another adapter crashes');
+  const fatal = { channel: 'badtoken', limits: { maxText: 500 }, async start() { throw Object.assign(Error('token rejected'), { fatal: true }); }, async send() { return {}; }, health: () => ({ state: 'stopped' }) };
+  gateway.addAdapter(fatal);
+  await until(async () => (await gateway.status()).adapters.find((a) => a.channel === 'badtoken')?.state === 'stopped', 'a fatal error stops without retrying');
+
   // 12. Restart: bindings, allowlist, an answer still being written and an unsent reply all
   // survive; a redelivery after restart submits once.
   await gateway.settle();
@@ -235,7 +258,7 @@ try {
   assert.equal(seen.filter((t) => t === 'SLOW 600 across a restart').length, 1, 'a redelivery after restart submits once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'slow: across a restart').length, 1, 'and is answered once');
   assert.equal(sentTo(OWNER_TG).filter((t) => t === 'echo: queued before restart').length, 1, 'the queued reply is sent once');
-  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord resume without re-identify plus 429 and 403, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
+  console.log('PASS gateway: route keys, chunking with fences, Telegram start then web then Telegram on one conversation with channel badge, duplicate delivery once, busy queue in order without touching another conversation, commands bypass the model, pairing denies then approves, audit of every decision without text, 429 retry and 403 drop, long replies chunked, Discord resume without re-identify plus 429 and 403, a crashing adapter restarted without stopping others, /status lists running helpers, restart keeps bindings, approvals, unsent replies, in-flight answers and dedup');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

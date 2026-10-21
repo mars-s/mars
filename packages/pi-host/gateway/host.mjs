@@ -16,8 +16,8 @@ const nativeId = (value) => (typeof value === 'string' && /^\d+$/.test(value) ? 
  * owner turned them on (MARS_GATEWAY_TELEGRAM=1 / MARS_GATEWAY_DISCORD=1) and a token exists.
  * Owner sender ids from MARS_TELEGRAM_OWNER / MARS_DISCORD_OWNER are allowed at boot.
  */
-export async function startGateway({ harness, conversations, context, env = process.env, discordToken, log = console.error, ready }) {
-  const gateway = createGateway({ harness, conversations, context, log, ready });
+export async function startGateway({ harness, conversations, context, env = process.env, discordToken, log = console.error, ready, workersOf }) {
+  const gateway = createGateway({ harness, conversations, context, log, ready, workersOf });
   const api = createApiAdapter();
   const configured = [];
   gateway.addAdapter(api);
