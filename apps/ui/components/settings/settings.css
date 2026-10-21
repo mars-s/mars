@@ -240,3 +240,26 @@
     min-width: 44px;
   }
 }
+
+.live-host-version {
+  margin-top: 16px;
+}
+.live-host-version code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.live-host-problem {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.live-host-problem svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--clay);
+}
+

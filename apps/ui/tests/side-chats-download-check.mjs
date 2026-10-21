@@ -30,7 +30,7 @@ try {
   const page = await open({ width: 1440, height: 900 });
   // The fixture side chat is nested under its parent, not a row of its own.
   const parentRow = recents(page).locator("> div").filter({ has: page.getByRole("button", { name: "Tidy the Pi host deploy script", exact: true }) });
-  const nested = parentRow.getByRole("list", { name: "Side chats" }).getByRole("button", { name: /Name the release/ });
+  const nested = parentRow.getByRole("list", { name: "Side chats" }).getByRole("button", { name: /^Name the release/ });
   await nested.waitFor();
   assert.equal(await recents(page).locator(".live-conversation").filter({ hasText: "Name the release" }).count(), 0, "a side chat is not a top-level row");
 

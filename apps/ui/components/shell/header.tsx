@@ -3,6 +3,7 @@
 import { ChevronLeft, CircleAlert, CloudOff, Menu, Plus, Settings, X } from "lucide-react";
 import { useWorkspace } from "@/components/workspace-context";
 import { useWorkbench } from "@/components/workbench/workbench-context";
+import { problemTitle, useHostVersion } from "@/components/settings/host-version";
 import "./shell.css";
 
 export function WorkspaceHeader() {
@@ -18,6 +19,7 @@ export function WorkspaceHeader() {
     openSettings,
   } = useWorkspace();
   const workbench = useWorkbench();
+  const hostVersion = useHostVersion();
   const parentId = snapshot?.parentConversationId;
   return (
     <>
@@ -61,6 +63,15 @@ export function WorkspaceHeader() {
           <Settings size={18} />
         </button>
       </header>
+      {hostVersion?.problem && (
+        <div role="status" className="live-notice">
+          <CircleAlert size={16} />
+          <p>{problemTitle(hostVersion.problem.status)}. The host may be running an older build.</p>
+          <button type="button" className="live-notice-action" onClick={() => openSettings("connection")}>
+            Details
+          </button>
+        </div>
+      )}
       {connectionError && (
         <div role="alert" className="live-notice">
           <CloudOff size={16} />

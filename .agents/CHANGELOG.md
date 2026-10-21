@@ -401,3 +401,11 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - UI: Models tab in Settings; the activity group shows the summary with the counts beside it.
 - Checks: `check-background.mjs` (real harness with scripted main and background models), live-state unit tests for summary keys and settings, `tests/model-settings-ui-check.mjs`.
 
+
+## 2026-10-22 "/" skill menu, host version notice, one-command browser checks
+
+- Composer: typing "/" lists skills (name matches first, then description), arrows move, Enter or Tab writes "/name " without sending, Escape closes, a space ends it. The input stays a textbox and owns the list through aria-controls and aria-activedescendant.
+- Host version (from the deploy helper's GET /api/host/version): a notice under the header when the last host update was interrupted, rolled back or failed, with Details opening Settings, Connection, which shows the live build and how many commits on main are not deployed. One shared poll a minute.
+- `npm run test:browser` (apps/ui/scripts/browser-checks.mjs) starts the fixture host and a separate dev server (.next-build, so the live UI is untouched), runs every test:ui check against localhost, prints failures and stops only its own processes. Arguments filter by name or run given files.
+- Tests: three routed checks ignore the read-only host version poll; side-chats-download-check anchors its side chat name (the new row menu matched too); plan-check closes finished pages so a loaded machine keeps up. New: slash-menu-ui-check, host-version-ui-check.
+

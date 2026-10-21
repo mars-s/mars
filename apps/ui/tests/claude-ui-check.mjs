@@ -16,6 +16,8 @@ const calls = [],
 page.on("pageerror", (e) => errors.push(e.message));
 await page.route("**/api/**", async (route) => {
   const path = new URL(route.request().url()).pathname;
+  // Read-only host version polling (components/settings/host-version.tsx) is not a mutation.
+  if (path === "/api/host/version") return route.fulfill({ status: 404, json: {} });
   if (path === "/api/state")
     return route.fulfill({
       json: {

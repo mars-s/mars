@@ -455,3 +455,50 @@
   }
 }
 
+
+/* "/" skill menu (components/composer/slash-menu.tsx), opening above the input. */
+.live-slash-menu {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  left: 8px;
+  z-index: 20;
+  max-height: 320px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--popover);
+  box-shadow: var(--shadow-float);
+  animation: live-queue-in 140ms var(--ease-out);
+}
+.live-slash-menu li {
+  display: grid;
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.live-slash-menu li[aria-selected="true"] {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.live-slash-name {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.live-slash-description {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-slash-menu {
+    animation: none;
+  }
+}
+

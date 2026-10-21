@@ -29,6 +29,8 @@ try {
   assert.match(await items.nth(0).textContent(), /done$/, "status is spoken for screen readers");
   await plan.screenshot({ path: `${evidence}/desktop-dark-in-progress.png` });
   await page.screenshot({ path: `${evidence}/desktop-dark-thread.png` });
+  // Each page polls the host every second; close finished ones so a slow machine keeps up.
+  await page.context().close();
 
   // A finished plan collapses to its count and opens on click.
   const done = await open("/?conversation=7", { width: 1440, height: 900 }, "light");
@@ -38,11 +40,13 @@ try {
   await summary.click();
   assert.equal(await done.getByRole("region", { name: "Plan" }).getByRole("listitem").count(), 2);
   await done.screenshot({ path: `${evidence}/desktop-light-finished.png` });
+  await done.context().close();
 
   // No plan, no card.
   const none = await open("/?conversation=3", { width: 1440, height: 900 }, "dark");
   await none.waitForTimeout(500);
   assert.equal(await none.getByRole("region", { name: "Plan" }).count(), 0);
+  await none.context().close();
 
   const phone = await open("/?conversation=1", { width: 390, height: 844 }, "dark");
   await phone.getByRole("region", { name: "Plan" }).waitFor();

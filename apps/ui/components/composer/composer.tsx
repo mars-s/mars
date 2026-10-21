@@ -6,6 +6,7 @@ import type { QueuedMessage } from "@/lib/pi/live-state";
 import { ContextMeter } from "@/components/ai/context-meter";
 import { ModelPicker, ProviderMark } from "@/components/ai/model-picker";
 import { LiveImageAttachment } from "@/components/composer/live-image-attachment";
+import { useSlashMenu } from "@/components/composer/slash-menu";
 import { useWorkspace } from "@/components/workspace-context";
 import "./composer.css";
 
@@ -145,6 +146,7 @@ export function Composer() {
   const current = snapshot?.models.find((model) => model.id === snapshot.model);
   const running = !!snapshot?.running;
   const queue = snapshot?.queue ?? [];
+  const slash = useSlashMenu();
   return (
     <>
       <div className="live-prompt-shell">
@@ -193,10 +195,13 @@ export function Composer() {
               maxRows={9}
               submitMode="enter"
               addAttachmentOnPaste={true}
+              {...slash.inputProps}
               onKeyDown={(event) => {
                 if (event.nativeEvent.isComposing && event.key === "Enter") event.stopPropagation();
+                slash.onKeyDown(event);
               }}
             />
+            {slash.menu}
             <div className="live-composer-toolbar">
               <ComposerPrimitive.AddAttachment
                 className="live-composer-tool"

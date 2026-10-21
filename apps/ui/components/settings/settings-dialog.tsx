@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectionSettings } from "@/components/settings/connection-settings";
 import { ModelSettingsPanel } from "@/components/settings/model-settings";
+import { HostVersionDetails, useHostVersion } from "@/components/settings/host-version";
 import { ThemeSettings } from "@/components/settings/theme-settings";
 import { useWorkspace } from "@/components/workspace-context";
 import type { LoginState } from "@/lib/pi/live-state";
@@ -167,6 +168,7 @@ export function SettingsDialog() {
   const { snapshot, connectionError, settingsOpen, setSettingsOpen, settingsTab, setSettingsTab } =
     useWorkspace();
   const narrow = useSyncExternalStore(subscribeNarrow, () => matchMedia(narrowQuery).matches, () => false);
+  const hostVersion = useHostVersion();
   return (
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
       <DialogContent className="live-settings">
@@ -221,6 +223,7 @@ export function SettingsDialog() {
                   <dd>{connectionError ? "Disconnected" : snapshot ? "Connected" : "Connecting"}</dd>
                 </div>
               </dl>
+              <HostVersionDetails version={hostVersion} />
               <p className="live-settings-footnote">
                 Closing this page leaves durable work running. Stop a response explicitly in the
                 conversation.
