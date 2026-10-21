@@ -351,3 +351,8 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - `check-harness-loop.mjs` (no model, no network) covers the rule, a mutation run without the held-out guard (it then promotes a regression), id stability and tamper refusal, and held-out isolation in a full fake round. Manual mutations of the id hash and of the round (leaking held-out misses to the proposer) each failed the check.
 - Seven real rounds at 3 runs per task are in `.agents/goals/harness-rounds.tsv`. Round 1 promoted the Answering paragraph (dev 30 to 45 of 69, held-out 14 to 21 of 45). Round 4 promoted a `worker_stop` rewrite at +3 dev and +1 held-out, which is inside the observed noise. Five other candidates were kept out. No model weights changed.
 - Gate: 32 of 35 host checks (the same three Mac-only failures), syntax and boundaries pass.
+
+## 2026-10-22 Adopt the harness loop's first promotion
+
+- HOST-GUIDE.md starts with an "Answering" paragraph (call the tool first; do not describe a call or invent its result). The harness loop promoted it in round 1 (config c8b8ffde0ff1); `harness/confirm.mjs` then re-scored parent and candidate on the held-out set four times, interleaved: 9 to 15 versus 21 to 27 fully correct of 45, no overlap. The round-4 tool override was inside the noise band and is not adopted. docs/HARNESS-LOOP.md "Adopting a config".
+- Gateway follow-ups: `/status` lists running helpers, `/steer`, typing kept up for the whole answer, one delivery per shared answer, Discord without privileged intents (server messages need a mention), research index with ranked decisions, host guide section on chat apps, two gateway questions in the small-model eval.

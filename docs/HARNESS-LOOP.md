@@ -126,3 +126,15 @@ binding and tamper refusal, and held-out isolation.
 - The held-out set is small and gets reused. Each promotion learns a little about it
   through the yes or no. Rotate in new held-out tasks over time.
 - Tasks are synthetic requests, not replays of past Mars tasks.
+
+## Adopting a config
+
+A promotion from the loop is a candidate, not a change. Before copying a promoted config
+into HOST-GUIDE.md or a tool, run `node harness/confirm.mjs <parent> <candidate>`, which
+scores both on held-out several times, interleaved, and adopt only when the ranges do not
+overlap. Adopted so far:
+
+| Config | What | Held-out, 4 repeats x 3 runs, fully correct of 45 | Adopted |
+| --- | --- | --- | --- |
+| c8b8ffde0ff1 | "Answering" paragraph at the top of the guide | parent f7877a555c76: 15, 14, 11, 9 (mean 12.25); candidate: 26, 27, 27, 21 (mean 25.25) | Yes, 22 October 2026, into HOST-GUIDE.md |
+| 75c07ae17503 | worker_stop description override (round 4) | Not confirmed: its gain was inside the noise band | No |
