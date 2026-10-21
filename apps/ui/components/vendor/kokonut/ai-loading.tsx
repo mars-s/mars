@@ -474,6 +474,11 @@ export default function AILoadingState({
     steps.length > 0 && steps.every((step) => step.status === "done");
   const isActive = Boolean(running);
   const seconds = useElapsed(isActive, isDone);
+  // The header already names the running step; list it again only when it
+  // carries log lines worth showing.
+  const listed = steps.filter(
+    (step) => step !== running || Boolean(step.detail?.length)
+  );
   const times = useStepTimes(steps);
 
   // Open while working; folds away once everything is done, until the user
@@ -519,17 +524,19 @@ export default function AILoadingState({
                 · {steps.length} steps
               </span>
             )}
-            <ChevronDown
-              aria-hidden="true"
-              className={cn(
-                "ml-auto size-4 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/header:text-muted-foreground dark:group-hover/header:text-muted-foreground",
-                isOpen && "rotate-180"
-              )}
-            />
+            {listed.length > 0 && (
+              <ChevronDown
+                aria-hidden="true"
+                className={cn(
+                  "ml-auto size-4 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/header:text-muted-foreground dark:group-hover/header:text-muted-foreground",
+                  isOpen && "rotate-180"
+                )}
+              />
+            )}
           </button>
 
           <AnimatePresence initial={false}>
-            {isOpen && (
+            {isOpen && listed.length > 0 && (
               <motion.ol
                 animate={{ height: "auto", opacity: 1 }}
                 className="overflow-hidden"
@@ -538,9 +545,9 @@ export default function AILoadingState({
                 initial={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.25, ease: EASE_OUT }}
               >
-                {steps.map((step, i) => (
+                {listed.map((step, i) => (
                   <StepRow
-                    isLast={i === steps.length - 1}
+                    isLast={i === listed.length - 1}
                     key={step.id}
                     step={step}
                     time={times[step.id]}
