@@ -18,6 +18,8 @@ import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
 import { createSkills, createSkillsExtension, skillRoots } from "./skills.mjs";
+import { agentRoots, createAgents, createAgentsExtension } from "./agents.mjs";
+import { createSessionHooks, createSessionHooksExtension } from "./hooks.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -123,7 +125,8 @@ registry.install(defineExtension({ name: "persistent-output", hooks: [{ task: "p
 } }] }));
 // read/write/edit/bash stay listed in the codemode section so file edits never need shell heredocs.
 registry.install(CodingTools);
-registry.install(createOrchestrationExtension({ models, maxConcurrent: Math.min(32, budget.status().maxConcurrent), loadImages: images.content }));
+const orchestration = createOrchestrationExtension({ models, maxConcurrent: Math.min(32, budget.status().maxConcurrent), loadImages: images.content });
+registry.install(orchestration);
 registry.install(createWorkflowExtension({ models, loadImages: images.content, abortTask: (id, ctx) => harness.abortTask(id, ctx) }));
 // Host objects created after the registry (harness, conversations, workbench tools).
 // Agent tools below reach them through `late` when they run, never at install time.
@@ -139,6 +142,10 @@ registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
 const skills = createSkills({ roots: skillRoots({ work: WORK }) });
 registry.install(createSkillsExtension({ skills }));
+// Named agents and session start hooks (docs/AGENTS-AND-HOOKS.md).
+const sessionHooks = createSessionHooks({ work: WORK });
+registry.install(createAgentsExtension({ agents: createAgents({ roots: agentRoots({ work: WORK }) }), models, runWorkers: orchestration.runWorkers, hooks: sessionHooks }));
+registry.install(createSessionHooksExtension({ hooks: sessionHooks }));
 const extensions = new ExtensionStore(registry);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();

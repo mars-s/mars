@@ -42,7 +42,8 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
         const owner = task.owner ? await tx.task(task.owner) : undefined;
         for (const job of task.input.jobs) {
           const child = await tx.createConversation({ ownership: { kind: 'task', taskId: runtime.taskId } });
-          await configure(tx, child.id, { model: job.selection });
+          // A named agent's body (agents.mjs) becomes the worker's instructions; plain workers clear any inherited ones.
+          await configure(tx, child.id, { model: job.selection, instructions: job.instructions || null });
           const label = await tx.doc(nativeTitleDoc, child.id);
           label.title = (job.title?.trim() || job.task.trim()).slice(0, 160);
           label.task = job.task;
@@ -168,7 +169,8 @@ Example: const { result } = await tools.worker_followup({ workerId: "57", task: 
     const answer = settled.answer ? await api.commit(tx => tx.entry(settled.answer), ctx) : undefined;
     return { id: child.id, status: settled.status, result: compact(answer?.model || []) };
   });
-  return defineExtension({ name: 'mars-orchestration', tools, tasks: [workflow] });
+  // runWorkers lets agent_run (agents.mjs) start workers through the same task and replay path.
+  return Object.assign(defineExtension({ name: 'mars-orchestration', tools, tasks: [workflow] }), { runWorkers: run });
 }
 
 export async function listWorkers({ harness, conversationId, context, limit = 100, cursor }) {

@@ -25,6 +25,7 @@ export function createDiscovery() {
       { name: 'discord', prefix: 'discord_', description: "Read the owner's connected Discord server (read-only)." },
       { name: 'plugins', prefix: 'plugin_', description: 'See and switch plugins and their tools on or off.' },
       { name: 'skills', prefix: 'skill_', description: "Find, read, write and install the owner's Markdown skills (saved instructions for kinds of work)." },
+      { name: 'agents', prefix: 'agent_', description: "List, run and create the owner's named agents (helper models with their own instructions, Claude Code subagents)." },
     ],
   });
   const codemode = nativeCode.tools.find(t => t.name === 'codemode');
