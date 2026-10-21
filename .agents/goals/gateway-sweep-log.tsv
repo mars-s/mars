@@ -1,0 +1,3 @@
+time	lane	hypothesis	change	metric	baseline	result	kept or reverted	evidence path
+2026-10-21T12:49:18Z	frame	goal file defines done; Page is intent, repo docs are authority	created codex/gateway-sweep off main e709326	n/a	n/a	branch created	kept	git branch codex/gateway-sweep
+2026-10-21T12:56:36Z	research	Harness2 has a primary source	research worker read arXiv 2610.14224 and google-research/harness2	primary source found	unknown	found; it is per-task recursive harness editing, not dev/held-out promotion (that is Meta-Harness)	kept	docs/research/harness-squared.md
