@@ -138,3 +138,68 @@ test("binary writes stay confined to bounded image uploads", async () => {
   assert.equal((await proxyPi(request("/api/attachments", "image/png", new Uint8Array(10 * 1024 * 1024 + 1)), options)).status, 413);
   assert.equal(calls, 0);
 });
+
+test("keyed workbench browse is the only cross-site route, and never carries the owner token", async () => {
+  const key = "A".repeat(43);
+  const calls = [];
+  const options = {
+    origin: "http://127.0.0.1:3191",
+    token: "fixture-owner-token",
+    fetcher: async (url, init) => {
+      calls.push({ url: String(url), init });
+      return new Response("<p>ok</p>", {
+        headers: { "content-type": "text/html", "set-cookie": "sid=1", "content-security-policy": "sandbox allow-scripts allow-forms allow-popups; frame-ancestors 'self'" },
+      });
+    },
+  };
+  const crossSite = { "sec-fetch-site": "cross-site", cookie: "pi_trial=owner", origin: "null" };
+  const page = await proxyPi(new Request(`http://localhost:3200/api/workbench/browse/5173/~${key}/assets/a.js`, { headers: crossSite }), options);
+  assert.equal(page.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `http://127.0.0.1:3191/api/workbench/browse/5173/~${key}/assets/a.js`);
+  const sent = new Headers(calls[0].init.headers);
+  for (const name of ["authorization", "cookie", "origin"]) assert.equal(sent.get(name), null, `${name} is not forwarded`);
+  assert.equal(page.headers.get("set-cookie"), null);
+  assert.match(page.headers.get("content-security-policy"), /sandbox allow-scripts allow-forms allow-popups/);
+  assert.equal(page.headers.get("referrer-policy"), "no-referrer");
+
+  const form = await proxyPi(
+    new Request(`http://localhost:3200/api/workbench/browse/5173/~${key}/form`, {
+      method: "POST",
+      headers: { ...crossSite, "content-type": "application/x-www-form-urlencoded" },
+      body: "a=1",
+    }),
+    options,
+  );
+  assert.equal(form.status, 200, "a form post from the sandboxed page is forwarded");
+
+  // Every other shape keeps the existing checks.
+  for (const path of ["/api/state", "/api/workbench/browse/5173/", `/api/workbench/browse/5173/~${key.slice(1)}/x`, `/api/workbench/services/~${key}`])
+    assert.equal((await proxyPi(new Request(`http://localhost:3200${path}`, { headers: crossSite }), options)).status, 403, `cross-site ${path}`);
+  assert.equal(
+    (await proxyPi(new Request("http://localhost:3200/api/chat", { method: "POST", headers: { origin: "null", "content-type": "text/plain" }, body: "x" }), options)).status,
+    403,
+  );
+  assert.equal(calls.length, 2, "no other request was forwarded");
+});
+
+test("the proxy is off in production builds and refuses DNS-rebound Host headers", async () => {
+  let called = false;
+  const options = {
+    origin: "http://127.0.0.1:3191",
+    token: "fixture-owner-token",
+    fetcher: async () => ((called = true), new Response("{}")),
+  };
+  assert.equal((await proxyPi(new Request("http://127.0.0.1:3200/api/state"), { ...options, production: true })).status, 404);
+  const rebound = new Request("http://127.0.0.1:3200/api/workbench/file?path=notes.txt", {
+    headers: { host: "rebind.attacker.example:3200", "sec-fetch-site": "same-origin" },
+  });
+  assert.equal((await proxyPi(rebound, options)).status, 403, "an attacker's Host is refused even though Next saw 127.0.0.1");
+  const keyedRebound = new Request(`http://127.0.0.1:3200/api/workbench/browse/5173/~${"A".repeat(43)}/`, {
+    headers: { host: "rebind.attacker.example:3200" },
+  });
+  assert.equal((await proxyPi(keyedRebound, options)).status, 403, "keyed browse too");
+  assert.equal(called, false);
+  const local = new Request("http://127.0.0.1:3200/api/state", { headers: { host: "localhost:3200" } });
+  assert.equal((await proxyPi(local, options)).status, 200);
+});

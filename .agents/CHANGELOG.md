@@ -236,3 +236,8 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - git runs with a minimal environment (PATH, HOME, LANG) and GIT_CONFIG_NOSYSTEM, never the owner token or provider keys.
 - Repositories whose .git borrows data (commondir, gitdir, alternates, grafts) or links its parts elsewhere are refused with 403, closing reads outside WORK.
 - git failures return a generic message instead of stderr, which could quote host paths or config lines.
+
+## 2026-10-21 UI proxy closed in production (independent review, critical)
+
+- `apps/ui/lib/server/pi-proxy.ts` added the owner token for any caller, and its "local only" check read `request.url`, which is always 127.0.0.1 because Next binds there. A DNS-rebinding page could read files and terminal output, and any local process could open a shell (reproduced on `next start`; predates the workbench, which made it reach a shell).
+- The proxy is now off in production builds (404): production browsers reach `/api` on the Pi host, which authenticates the owner itself. In development it also checks the Host header the browser actually sent. New unit test; the reviewer's probe now gets 404 for every request, and the owner path through the host still serves pages, state and workbench capabilities.
