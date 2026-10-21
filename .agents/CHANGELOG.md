@@ -334,3 +334,12 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 - `plan_update`: steps are trimmed in `preparePlan`, before validation, so a step of only spaces is refused instead of saved as an empty line. `check-plans.mjs` covers it (fails on the old code) and now closes and reopens the store to prove the plan survives a restart.
 - `/design-system` has a Plan specimen (in progress and finished) using the real `PlanCard`. Its styles moved from `thread.css` to `components/ai/plan-card.css`, imported by the component.
 - Correction to the plan entry above: recovery after the workflow_start redirect was not demonstrated; the first call was already right.
+
+## 2026-10-22 Harness loop: versioned guide and tool text, scored on dev, promoted only if held-out holds
+
+- `packages/pi-host/harness/` holds content-hashed harness config versions (`{ id, parent, systemGuide, toolOverrides, contextNotes }`, written once, refused if hand-edited), a runner that scores a config with local Ollama `qwen2.5:1.5b` on the real tool dump plus overrides, a dev set (23 tasks) and a separate frozen held-out set (15 tasks). Spec in `docs/HARNESS-LOOP.md`.
+- The proposer has two scopes. A general rule adds an "Answering" paragraph to the guide when most dev misses are prose answers. A tool rewrite has the local model write guidance for the tool with the most dev misses, keeping its summary and Example lines and passing the tool-quality rules. It never imports or receives held-out text.
+- Promotion needs at least +2 fully correct dev runs over the parent and no drop on held-out. Each score carries config id, set, model, tools hash and runs, and mismatched scores are refused. Nothing edits HOST-GUIDE.md or tool files. The loop changes only its own parent config.
+- `check-harness-loop.mjs` (no model, no network) covers the rule, a mutation run without the held-out guard (it then promotes a regression), id stability and tamper refusal, and held-out isolation in a full fake round. Manual mutations of the id hash and of the round (leaking held-out misses to the proposer) each failed the check.
+- Seven real rounds at 3 runs per task are in `.agents/goals/harness-rounds.tsv`. Round 1 promoted the Answering paragraph (dev 30 to 45 of 69, held-out 14 to 21 of 45). Round 4 promoted a `worker_stop` rewrite at +3 dev and +1 held-out, which is inside the observed noise. Five other candidates were kept out. No model weights changed.
+- Gate: 32 of 35 host checks (the same three Mac-only failures), syntax and boundaries pass.
