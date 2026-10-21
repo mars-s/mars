@@ -21,6 +21,8 @@ import { createSkills, createSkillsExtension, skillRoots } from "./skills.mjs";
 import { createProjectExtension, createProjects } from "./project.mjs";
 import { createMemory, createMemoryExtension } from "./memory.mjs";
 import { createBackground, createBackgroundExtension, createModelSettings, readSummaries } from "./model-settings.mjs";
+import { agentRoots, createAgents, createAgentsExtension } from "./agents.mjs";
+import { createSessionHooks, createSessionHooksExtension } from "./hooks.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -127,7 +129,8 @@ registry.install(defineExtension({ name: "persistent-output", hooks: [{ task: "p
 } }] }));
 // read/write/edit/bash stay listed in the codemode section so file edits never need shell heredocs.
 registry.install(CodingTools);
-registry.install(createOrchestrationExtension({ models, maxConcurrent: Math.min(32, budget.status().maxConcurrent), loadImages: images.content }));
+const orchestration = createOrchestrationExtension({ models, maxConcurrent: Math.min(32, budget.status().maxConcurrent), loadImages: images.content });
+registry.install(orchestration);
 registry.install(createWorkflowExtension({ models, loadImages: images.content, abortTask: (id, ctx) => harness.abortTask(id, ctx) }));
 // Host objects created after the registry (harness, conversations, workbench tools).
 // Agent tools below reach them through `late` when they run, never at install time.
@@ -157,6 +160,10 @@ const modelSettings = createModelSettings({ file: ROOT + "/data/model-settings.j
 registry.install(createBackgroundExtension({ background: createBackground({ harness: () => late.harness, models, settings: modelSettings, resolve: resolveModel }) }));
 // GitHub pushes through the owner's Composio connection (docs/GITHUB.md).
 registry.install(createGithubExtension({ cwd: WORK }));
+// Named agents and session start hooks (docs/AGENTS-AND-HOOKS.md).
+const sessionHooks = createSessionHooks({ work: WORK });
+registry.install(createAgentsExtension({ agents: createAgents({ roots: agentRoots({ work: WORK }) }), models, runWorkers: orchestration.runWorkers, hooks: sessionHooks }));
+registry.install(createSessionHooksExtension({ hooks: sessionHooks }));
 const extensions = new ExtensionStore(registry);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();

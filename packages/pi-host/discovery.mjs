@@ -28,6 +28,7 @@ export function createDiscovery() {
       { name: 'memory', prefix: 'memory_', description: 'Remember or forget short notes that apply to every conversation.' },
       { name: 'github', prefix: 'github_', description: "Push local git commits to GitHub through the owner's Composio GitHub connection." },
       { name: 'skills', prefix: 'skill_', description: "Find, read, write and install the owner's Markdown skills (saved instructions for kinds of work)." },
+      { name: 'agents', prefix: 'agent_', description: "List, run and create the owner's named agents (helper models with their own instructions, Claude Code subagents)." },
     ],
   });
   const codemode = nativeCode.tools.find(t => t.name === 'codemode');
