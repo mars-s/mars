@@ -69,6 +69,7 @@ For any task of three or more steps, first decide who does the steps:
 | Look something up online | `web_search`, then `web_fetch` for a full page |
 | Change the Mars interface | `ui_source_read`, `ui_patch_stage`, `ui_patch_validate`, `ui_patch_promote` |
 | Ship a host change | commit, then `host_deploy` (`dryRun: true` first) |
+| Run a memory-hungry job (Next build, many browsers) | `host_exec` with `systemd-run --user --scope -p MemoryMax=2200M <command>`: commands otherwise share the host's memory limit, and an out-of-memory kill takes the host down with them |
 
 Read and search long files in parts. Save large results as artefacts rather than
 repeating them in context. Child conversations receive their own brief and explicit image
