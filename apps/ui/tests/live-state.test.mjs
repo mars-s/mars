@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseConversations, parseSnapshot } from "../lib/pi/live-state.ts";
+import { parseConversations, parsePlan, parseSnapshot } from "../lib/pi/live-state.ts";
 
 test("Claude connection and model namespace stay distinct without projecting credentials", () => {
   const source = snapshot([]);
@@ -404,4 +404,15 @@ test("a side chat snapshot keeps its parent for sidebar nesting", () => {
   assert.equal(snapshot.sideChatOf, "1");
   assert.equal(snapshot.parentConversationId, "1");
   assert.equal(parseSnapshot({ runtime: "x", conversationId: "1", auth: { connected: true }, view: { entries: [] } }).sideChatOf, "");
+});
+
+test("plans parse to steps with counts; unknown statuses read as pending; empty means no plan", () => {
+  const plan = parsePlan({ steps: [{ step: "Run tests", status: "completed" }, { step: "Fix", status: "in_progress" }, { step: "Ship", status: "maybe" }, { step: " " }] });
+  assert.deepEqual(plan, {
+    steps: [{ step: "Run tests", status: "completed" }, { step: "Fix", status: "in_progress" }, { step: "Ship", status: "pending" }],
+    done: 1,
+    total: 3,
+  });
+  assert.equal(parsePlan({ steps: [] }), null);
+  assert.equal(parsePlan(null), null);
 });

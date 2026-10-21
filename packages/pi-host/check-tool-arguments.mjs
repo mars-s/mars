@@ -24,6 +24,8 @@ const steps = start.prepareArguments({ title: 'Post', steps: ['Research tide poo
 assert.ok(Compile(start.parameters).Check(steps), 'workflow_start accepts plain step briefs');
 assert.deepEqual(steps.steps.map((step) => step.title), ['Step 1', 'Step 2']);
 
+assert.throws(() => start.prepareArguments({ steps: [{ step: 'Run tests', status: 'in_progress' }] }), /plan_update/, 'checklist steps sent to workflow_start point to plan_update');
+
 // host_read given a saved-output id reads that output instead of failing on a missing file.
 const root = mkdtempSync(join(tmpdir(), 'mars args '));
 const vm = createVmControl({ root, cwd: root });
@@ -33,4 +35,4 @@ const hostRead = vm.extension.tools.find((tool) => tool.name === 'host_read');
 assert.match((await hostRead.execute({ path: ran.stdout.id }, {}, {})).structuredOutput.text, /saved-output-text/, 'host_read reads a saved output by id');
 writeFileSync(join(root, 'plain.txt'), 'a real file');
 assert.equal((await hostRead.execute({ path: 'plain.txt' }, {}, {})).structuredOutput.text, 'a real file', 'and still reads real files');
-console.log('PASS tool arguments: JSON-string and plain-string lists repaired for worker_fanout and workflow_start, unrepairable values still rejected, host_read accepts a saved-output id');
+console.log('PASS tool arguments: JSON-string and plain-string lists repaired for worker_fanout and workflow_start, unrepairable values still rejected, checklist sent to workflow_start redirected to plan_update, host_read accepts a saved-output id');

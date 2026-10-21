@@ -7,6 +7,7 @@ import { LiveWorkers } from "@/components/activity/live-workers";
 import { Composer } from "@/components/composer/composer";
 import { UserMessage, AssistantMessage } from "./messages";
 import { useWorkspace } from "@/components/workspace-context";
+import { PlanCard } from "@/components/ai/plan-card";
 import { RunProgress } from "@/components/ai/run-progress";
 import { runSteps } from "@/components/ai/run-steps";
 import { toolViews } from "@/components/ai/tool-adapter";
@@ -44,6 +45,7 @@ export function ConversationView() {
               onStop={(workerId) => safely(action("/api/workers/stop", { workerId }))}
             />
           )}
+          <PlanCard plan={snapshot?.plan ?? null} />
           {snapshot && <AgentActivity workers={workers} />}
           <RunProgress steps={runSteps(snapshot, toolViews)} />
         </div>

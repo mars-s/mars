@@ -16,6 +16,7 @@ export function createDiscovery() {
       { name: 'host', prefix: 'host_', description: "Run shell commands, read and write any file, and deploy the Mars host on the owner's machine." },
       { name: 'workers', prefix: 'worker_', description: 'Hand jobs to helper models and wait for their answers (one job, or several at once).' },
       { name: 'workflows', prefix: 'workflow_', description: 'Run steps one after another in the background, each building on the last.' },
+      { name: 'plans', prefix: 'plan_', description: 'Show the owner your step-by-step checklist and tick steps off as you work.' },
       { name: 'artefacts', prefix: 'artefact_', description: 'Read or search the rest of a long saved output by its id.' },
       { name: 'web', prefix: 'web_', description: 'Search the web for current information, and read web pages.' },
       { name: 'sideChats', prefix: 'side_chat_', description: 'Open, list and message side chats nested under this conversation.' },

@@ -39,8 +39,16 @@ Most tools are not loaded until needed. Find one with `tool_search` (for example
 `await tools.<name>({ ... })`. Every tool's description says when to use it and ends
 with an `Example:` call you can copy. Which tool for which job:
 
+For any task of three or more steps, first decide who does the steps:
+
+- You, in this chat: `plan_update` with the whole checklist, then call it again as each
+  step starts and finishes, so the owner sees progress.
+- Helper models, one after another in the background: `workflow_start`.
+- Helper models, all at once on independent jobs: `worker_fanout`.
+
 | You want to | Use |
 | --- | --- |
+| Show the owner your steps and tick them off | `plan_update` |
 | Run a command, install, test, use git | `host_exec` (`bash` for quick ones) |
 | Read the rest of a long output | `artefact_read`, `artefact_search` |
 | Get one answer from another model and wait | `worker_run` |

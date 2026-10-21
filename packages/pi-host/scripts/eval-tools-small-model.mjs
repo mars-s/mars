@@ -31,6 +31,10 @@ const TASKS = [
   ["Turn off the web_fetch tool of the web-search plugin.", "plugin_configure", (a) => a.name === "web-search" && a.tools?.web_fetch === false],
   ["Check whether the latest host deploy finished or rolled back.", "host_deploy_status", () => true],
   ["Read the interface source file components/shell/header.tsx before changing it.", "ui_source_read", (a) => a.path === "components/shell/header.tsx"],
+  // Choosing how to run multi-step work: you do it (plan), in order by helpers (workflow), or at once (fanout).
+  ["I am about to do these myself, one by one: find the video in the PR, work out a CDN URL, add the player, check it plays. Show the owner my checklist with the first step in progress.", "plan_update", (a) => Array.isArray(a.steps) && a.steps.length === 4 && a.steps[0].status === "in_progress"],
+  ["I have finished step 1 of my checklist and am starting step 2. Steps: 'Run tests', 'Fix failures', 'Commit'. Update the checklist the owner sees.", "plan_update", (a) => Array.isArray(a.steps) && a.steps[0]?.status === "completed" && a.steps[1]?.status === "in_progress"],
+  ["Have helper models do this in the background, in order: first research tide pools, then write a post from that research.", "workflow_start", (a) => Array.isArray(a.steps) && a.steps.length >= 2],
 ];
 const toTool = (row) => ({ type: "function", function: { name: row.name, description: row.description, parameters: row.parameters ?? { type: "object", properties: {} } } });
 

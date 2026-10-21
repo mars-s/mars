@@ -62,3 +62,29 @@ evaluation sends each request to a local 1.5B model with every Mars tool offered
 times per request, and grades the chosen tool, schema-valid arguments and the intent
 of the arguments. Re-run it after changing tool wording; it needs Ollama with
 `qwen2.5:1.5b` and costs nothing.
+
+## Choosing how to run multi-step work
+
+Three tools cover multi-step work, and the agent picks by **who does the steps**:
+
+| Tool | Who does the steps | When |
+| --- | --- | --- |
+| `plan_update` | You, in this chat | Several steps you will do yourself: keep a visible checklist and tick each off as you go. |
+| `workflow_start` | Helper models, one after another, in the background | Steps that build on each other and can run unattended. |
+| `worker_fanout` | Helper models, all at once | Independent jobs with no order. |
+
+`plan_update` is the lightest: it writes nothing but the checklist the owner sees, so
+use it for any task of three or more steps.
+
+### plan_update
+
+- Each call sends the **whole** list, `[{ step, status }]`, status `pending`,
+  `in_progress` or `completed`, at most 20 steps of up to 200 characters. At most one
+  step is `in_progress`.
+- The plan is stored in a native per-conversation document (`mars.plan`), so it
+  survives a restart, and the latest plan shows in `/api/state` as `plan`.
+- `{ steps: [] }` clears it. It returns `{ steps, done, total, next }`, where `next` is
+  the first step that is not completed.
+- The thread shows the latest plan as a card above the run status: an empty circle for
+  pending, a spinner for in progress, a tick for completed. Once every step is done it
+  collapses to "4 of 4 done".

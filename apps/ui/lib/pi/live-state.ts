@@ -86,6 +86,23 @@ export type LoginState = {
   prompt: string | null;
 };
 export type SideChatSummary = { id: string; title: string; running: boolean };
+export type PlanStatus = "pending" | "in_progress" | "completed";
+/** The agent's checklist for multi-step work (docs/TOOLS.md "plan_update"). */
+export type Plan = { steps: { step: string; status: PlanStatus }[]; done: number; total: number };
+const PLAN_STATUSES: readonly string[] = ["pending", "in_progress", "completed"];
+/** A plan from /api/state, or null. Unknown statuses read as pending; empty steps are dropped. */
+export function parsePlan(value: unknown): Plan | null {
+  const steps = list(record(value).steps)
+    .map(record)
+    .flatMap((row) => {
+      const step = string(row.step).trim().slice(0, 200);
+      const status = (PLAN_STATUSES.includes(string(row.status)) ? string(row.status) : "pending") as PlanStatus;
+      return step ? [{ step, status }] : [];
+    })
+    .slice(0, 20);
+  if (!steps.length) return null;
+  return { steps, done: steps.filter((row) => row.status === "completed").length, total: steps.length };
+}
 export type ConversationSummary = {
   id: string;
   title: string;
@@ -156,6 +173,8 @@ export type LiveSnapshot = {
   parentConversationId: string;
   /** Set when this conversation is a side chat: the conversation it belongs to. */
   sideChatOf: string;
+  /** The agent's current checklist, or null. */
+  plan: Plan | null;
   conversationTitle: string;
   subthreads: Subthread[];
   workflows: Workflow[];
@@ -445,6 +464,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
   return {
     parentConversationId: identifier(data.parentConversationId),
     sideChatOf: identifier(data.sideChatOf),
+    plan: parsePlan(data.plan),
     conversationTitle: string(data.conversationTitle),
     subthreads: list(data.subthreads)
       .map(record)

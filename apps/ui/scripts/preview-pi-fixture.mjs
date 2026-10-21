@@ -164,6 +164,17 @@ function state(id) {
     extensions: [],
     ...(conversation.child ? { parentConversationId: "1" } : {}),
     ...(conversation.sideOf ? { parentConversationId: conversation.sideOf, sideChatOf: conversation.sideOf } : {}),
+    // plan_update: fixture checklist on the main fixture chat; the done one shows collapsed.
+    ...(id === "1"
+      ? { plan: { steps: [
+          { step: "Find the video in the GitHub PR (fixture)", status: "completed" },
+          { step: "Work out a CDN URL that serves it", status: "in_progress" },
+          { step: "Add Video.js player to the page", status: "pending" },
+          { step: "Check it plays in the browser", status: "pending" },
+        ], done: 1, total: 4, next: "Work out a CDN URL that serves it" } }
+      : id === "7"
+        ? { plan: { steps: [{ step: "Draft the notes (fixture)", status: "completed" }, { step: "Check the links", status: "completed" }], done: 2, total: 2, next: null } }
+        : {}),
     view: {
       entries: conversation.entries,
       docs: {

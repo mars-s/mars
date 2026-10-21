@@ -88,7 +88,7 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
  },{additionalProperties:true});
  const make=(name,description,parameters,result,execute,prepareArguments)=>defineTool({name,description,parameters,deferred:true,replay:'safe',executionMode:'parallel',structuredOutputSchema:result,outputLimits:{maxBytes:10000},...(prepareArguments?{prepareArguments}:{}),execute:async(args,api,ctx)=>{const value=await execute(args,api,ctx);return{output:[{type:'text',text:JSON.stringify(value)}],structuredOutput:value};}});
  const tools=[
-  make('workflow_start',`Start a background process of steps that run one after another, each using the previous step's answer.
+  make('workflow_start',`Have helper models run several steps one after another in the background, each using the previous step's answer.
 Use it for multi-stage work where each step builds on the last, e.g. research, then outline, then draft: put one entry per stage in steps. Each step gets its own brief plus the previous step's answer. It returns at once with workflowId; check progress and answers with workflow_status. It keeps running after a restart. For independent jobs at the same time, use worker_fanout.
 Example: const { workflowId } = await tools.workflow_start({ title: "Blog post", steps: [{ title: "Research", prompt: "List 5 facts about tide pools." }, { title: "Draft", prompt: "Write a 300-word post from these facts." }] })`,Type.Object({
    title:Type.String({minLength:1,maxLength:160,description:'Name of the whole workflow, shown in the chat, e.g. "Blog post".'}),
@@ -109,8 +109,12 @@ Example: const { workflowId } = await tools.workflow_start({ title: "Blog post",
    },ctx);
    await api.memo('workflow-id',id,ctx);await api.details({workflowId:String(id)},ctx);return{workflowId:String(id),title:args.title,status:'started',background:true};
   },args=>{
+   // A checklist sent here by mistake ({step, status}, no prompt) is the agent's own plan:
+   // refuse with the right tool rather than start helper models on it.
+   const raw=forgivingList(args?.steps,'prompt');
+   if(Array.isArray(raw)&&raw.some(step=>step&&typeof step==='object'&&'status' in step&&!step.prompt))throw Error('These look like checklist steps with a status, not briefs for helper models. To show your own progress, call plan_update with the same steps. To have helper models run steps in order, give each step a prompt.');
    // Forgiving: a JSON string or plain step briefs become {title, prompt} steps.
-   const steps=forgivingList(args?.steps,'prompt');
+   const steps=raw;
    return {...args,steps:Array.isArray(steps)?steps.map((step,index)=>step&&typeof step==='object'&&step.prompt&&!step.title?{...step,title:`Step ${index+1}`}:step):steps};
   }),
   make('workflow_status',`Check a workflow's progress and read each finished step's answer.

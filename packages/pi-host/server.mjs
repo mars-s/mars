@@ -15,6 +15,7 @@ import { createDevTools } from "./dev-tools.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
+import { createPlanExtension, readPlan } from "./plans.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -133,6 +134,7 @@ registry.install(createSideChatExtension({
 }));
 registry.install(createWorkspaceFilesExtension({ files: () => late.workbenchTools.files }));
 registry.install(createPluginControlExtension({ plugins }));
+registry.install(createPlanExtension());
 const extensions = new ExtensionStore(registry);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();
@@ -603,6 +605,7 @@ const server = http.createServer(async (req, res) => {
         hostVersion: "mars-monorepo-1",
         ...thread,
         subthreads: subthreads.filter(thread => !thread.workflowId),
+        plan: await readPlan(harness, conversation.id, context),
         workflows: await listWorkflows({ harness, conversationId: conversation.id, context }),
         providerQueue: budget.status(),
         pid: process.pid,
