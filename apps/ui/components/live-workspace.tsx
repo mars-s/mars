@@ -158,6 +158,7 @@ export function LiveWorkspace() {
                 modelId: next.model,
                 provider: "",
                 running: next.running,
+                sideChats: [],
               },
             ],
       );

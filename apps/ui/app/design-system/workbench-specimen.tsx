@@ -27,8 +27,8 @@ const noop = () => undefined;
 const sampleWorkspace: Workspace = {
   snapshot: null,
   conversations: [
-    { id: "901", title: "Tidy the Pi host deploy script", modelId: "", provider: "", running: false },
-    { id: "902", title: "Name the release", modelId: "", provider: "", running: false },
+    { id: "901", title: "Tidy the Pi host deploy script", modelId: "", provider: "", running: false, sideChats: [] },
+    { id: "902", title: "Name the release", modelId: "", provider: "", running: false, sideChats: [] },
   ],
   selectedId: "901",
   pending: false,

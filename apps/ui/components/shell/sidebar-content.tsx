@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { Blocks, MessageSquare, PanelLeft, Plus, X } from "lucide-react";
+import { Blocks, MessageSquare, MessageSquareDashed, PanelLeft, Plus, X } from "lucide-react";
 import { MarsMark } from "@/components/mars-mark";
 import { useWorkspace } from "@/components/workspace-context";
 import { ChildNavigation } from "./child-navigation";
@@ -109,6 +109,7 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
               )}
             </button>
             {conversation.id === rootId && <ChildNavigation />}
+            <SideChats parentId={conversation.id} sideChats={conversation.sideChats} />
           </div>
         ))}
       </div>
@@ -130,5 +131,40 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
         </span>
       </button>
     </>
+  );
+}
+
+/**
+ * Side chats nested under the conversation they were opened from (docs/WORKBENCH.md).
+ * The open side chat stays listed even before the next conversations refresh.
+ */
+function SideChats({ parentId, sideChats }: { parentId: string; sideChats: { id: string; title: string; running: boolean }[] }) {
+  const { snapshot, selectedId, extensionsOpen, selectConversation } = useWorkspace();
+  const rows = [...sideChats];
+  if (snapshot?.sideChatOf === parentId && !rows.some((row) => row.id === snapshot.conversationId))
+    rows.unshift({ id: snapshot.conversationId, title: snapshot.conversationTitle || "Side chat", running: snapshot.running });
+  if (!rows.length) return null;
+  return (
+    <ul className="live-side-chats" aria-label="Side chats">
+      {rows.map((row) => (
+        <li key={row.id}>
+          <button
+            type="button"
+            className="live-nav live-subthread live-side-chat"
+            aria-current={!extensionsOpen && selectedId === row.id ? "page" : undefined}
+            onClick={() => selectConversation(row.id)}
+          >
+            <MessageSquareDashed size={13} aria-hidden="true" className="live-side-chat-icon" />
+            <span className="live-nav-label">{row.title}</span>
+            {row.running && (
+              <>
+                <span className="live-running-dot" aria-hidden="true" />
+                <span className="sr-only">Running</span>
+              </>
+            )}
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

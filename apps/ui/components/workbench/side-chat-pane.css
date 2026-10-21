@@ -260,3 +260,8 @@
     transition: none;
   }
 }
+
+.wb-chat-list li[data-side] button {
+  padding-left: 28px;
+  font-size: 13px;
+}

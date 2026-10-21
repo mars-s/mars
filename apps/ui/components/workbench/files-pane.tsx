@@ -2,6 +2,7 @@
 
 import {
   ChevronRight,
+  Download,
   File,
   FileCode,
   FileImage,
@@ -351,6 +352,33 @@ function TreeItem({
   );
 }
 
+const DOWNLOAD_LIMIT = 20 * 1024 * 1024;
+/** The host serves the file as an inert attachment (docs/WORKBENCH.md "File downloads"). */
+export const downloadUrl = (path: string) => `/api/workbench/download?path=${encodeURIComponent(path)}`;
+
+function DownloadLink({ path, size, labelled = false }: { path: string; size: number; labelled?: boolean }) {
+  const name = baseName(path);
+  if (size > DOWNLOAD_LIMIT)
+    return (
+      <span className="wb-files-download" aria-disabled="true" title="Files over 20 MiB cannot be downloaded from the workbench.">
+        <Download size={14} aria-hidden="true" />
+        {labelled && "Too large to download"}
+      </span>
+    );
+  return (
+    <a
+      className="wb-files-download"
+      href={downloadUrl(path)}
+      download={name}
+      aria-label={labelled ? undefined : `Download ${name}`}
+      title={`Download ${name} (${formatSize(size)})`}
+    >
+      <Download size={14} aria-hidden="true" />
+      {labelled && `Download ${formatSize(size)}`}
+    </a>
+  );
+}
+
 function ViewerBody({ viewer, onOpen, shortcut }: { viewer: Viewer | null; onOpen: (path: string) => void; shortcut: string }) {
   if (!viewer)
     return (
@@ -403,6 +431,7 @@ function FileView({ file, onOpen }: { file: FileContent; onOpen: (path: string) 
             </button>
           </div>
         )}
+        <DownloadLink path={file.path} size={file.size} />
       </header>
       {file.truncated && (
         <p className="wb-files-warning" role="status">
@@ -419,7 +448,10 @@ function FileView({ file, onOpen }: { file: FileContent; onOpen: (path: string) 
         </div>
       ) : file.kind === "binary" ? (
         <div className="wb-empty">
-          <p>Binary file, {formatSize(file.size)}</p>
+          <div className="wb-files-binary">
+            <p>Binary file, {formatSize(file.size)}. It cannot be previewed here.</p>
+            <DownloadLink path={file.path} size={file.size} labelled />
+          </div>
         </div>
       ) : markdown && !source ? (
         <MarkdownView file={file} onOpen={onOpen} />

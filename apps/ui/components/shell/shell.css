@@ -180,6 +180,22 @@
   padding-left: 28px;
   font-size: 13px;
 }
+.live-side-chats {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.live-side-chat {
+  width: 100%;
+  padding-left: 22px;
+}
+.live-side-chat-icon {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+.live-side-chat[aria-current="page"] .live-side-chat-icon {
+  color: var(--text-muted);
+}
 .live-subthread small {
   flex-shrink: 0;
   color: var(--text-faint);

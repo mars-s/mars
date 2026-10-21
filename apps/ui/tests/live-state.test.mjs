@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseSnapshot } from "../lib/pi/live-state.ts";
+import { parseConversations, parseSnapshot } from "../lib/pi/live-state.ts";
 
 test("Claude connection and model namespace stay distinct without projecting credentials", () => {
   const source = snapshot([]);
@@ -376,4 +376,30 @@ test("models carry provider and Pi effort levels in order; unknown levels are dr
   assert.equal(state.models[1].provider, "anthropic");
   assert.deepEqual(state.models[1].efforts, []);
   assert.equal(state.thinkingLevel, "low");
+});
+
+test("conversation rows carry nested side chats, and a side chat's state names its parent", () => {
+  const rows = parseConversations([
+    { id: "1", title: "Parent", sideChats: [{ id: "8", title: "Names", running: true }, { id: "bad" }, { id: "9" }] },
+    { id: "2", title: "Plain" },
+  ]);
+  assert.deepEqual(rows[0].sideChats, [
+    { id: "8", title: "Names", running: true },
+    { id: "9", title: "Side chat", running: false },
+  ]);
+  assert.deepEqual(rows[1].sideChats, [], "rows without side chats get an empty list");
+});
+
+test("a side chat snapshot keeps its parent for sidebar nesting", () => {
+  const snapshot = parseSnapshot({
+    runtime: "Pi Durable 1.3.0",
+    conversationId: "8",
+    parentConversationId: "1",
+    sideChatOf: "1",
+    auth: { connected: true },
+    view: { entries: [] },
+  });
+  assert.equal(snapshot.sideChatOf, "1");
+  assert.equal(snapshot.parentConversationId, "1");
+  assert.equal(parseSnapshot({ runtime: "x", conversationId: "1", auth: { connected: true }, view: { entries: [] } }).sideChatOf, "");
 });

@@ -194,14 +194,50 @@ export function createFiles({ work }) {
     }
   }
 
+  /**
+   * Any regular file in WORK as an attachment. Same confinement as reads (openInside);
+   * octet-stream, nosniff and a sandbox CSP so nothing in it can run in the Mars origin.
+   */
+  async function download(rel, res) {
+    const { handle, info, target } = await openInside(work, rel);
+    let streaming = false;
+    try {
+      if (info.size > FILE_LIMITS.raw) throw fail("Downloads are limited to 20 MiB.", 413);
+      const name = target.relative.split("/").pop() || "download";
+      const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, "_");
+      res.writeHead(200, {
+        "content-type": "application/octet-stream",
+        "content-length": info.size,
+        "content-disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "default-src 'none'; sandbox",
+      });
+      streaming = true;
+      await pipeline(handle.createReadStream({ start: 0, end: Math.max(0, info.size - 1), autoClose: true }), res);
+    } finally {
+      if (!streaming) await handle.close();
+    }
+  }
+
+  /** What the agent tool reports: the checked path, its size and a download URL. */
+  async function link(rel) {
+    const { handle, info, target } = await openInside(work, rel);
+    await handle.close();
+    if (info.size > FILE_LIMITS.raw) throw fail("Downloads are limited to 20 MiB.", 413);
+    return { path: target.relative, size: info.size, url: `/api/workbench/download?path=${encodeURIComponent(target.relative)}` };
+  }
+
   return {
+    link,
     async handle(req, res, url, route, { send }) {
-      if (req.method !== "GET" || !["files", "file", "raw", "search"].includes(route)) return false;
+      if (req.method !== "GET" || !["files", "file", "raw", "search", "download"].includes(route)) return false;
       const rel = url.searchParams.get("path") ?? "";
       try {
         if (route === "files") send(res, 200, await listing(rel));
         else if (route === "file") send(res, 200, await file(rel));
         else if (route === "raw") await raw(rel, res);
+        else if (route === "download") await download(rel, res);
         else {
           const q = (url.searchParams.get("q") ?? "").slice(0, FILE_LIMITS.query);
           send(res, 200, { query: q, ...(await searchFiles(work, q)) });

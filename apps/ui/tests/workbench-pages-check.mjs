@@ -204,7 +204,7 @@ try {
   await pane.getByRole("button", { name: "New side conversation" }).click();
   const side = pane.getByRole("textbox", { name: "Message side chat" });
   await side.waitFor();
-  assert.deepEqual(db.created, [{ title: "Side chat", provider: "openai", modelId: "gpt-6-sol" }]);
+  assert.deepEqual(db.created, [{ title: "Side chat", parentId: "1", provider: "openai", modelId: "gpt-6-sol" }], "the side chat is created under the main chat");
   await until(async () => !(await side.isDisabled()), "side composer enables");
   await side.fill("Side question");
   await side.press("Enter");

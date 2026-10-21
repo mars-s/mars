@@ -13,6 +13,7 @@ import { createVmControl } from "./vm-control.mjs";
 import { createWebSearchExtension } from "./web-search.mjs";
 import { createDevTools } from "./dev-tools.mjs";
 import { createConversationManager } from "./conversations.mjs";
+import { createSideChatExtension } from "./side-chats.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -120,6 +121,27 @@ registry.install(defineExtension({ name: "persistent-output", hooks: [{ task: "p
 registry.install(CodingTools);
 registry.install(createOrchestrationExtension({ models, maxConcurrent: Math.min(32, budget.status().maxConcurrent), loadImages: images.content }));
 registry.install(createWorkflowExtension({ models, loadImages: images.content, abortTask: (id, ctx) => harness.abortTask(id, ctx) }));
+// Host objects created after the registry (harness, conversations, workbench tools).
+// Agent tools below reach them through `late` when they run, never at install time.
+const late = {};
+// Side chats: the agent opens, lists and messages its own (docs/WORKBENCH.md).
+registry.install(createSideChatExtension({
+  createConversation: (options) => late.conversations.create(options),
+  harness: () => late.harness,
+}));
+// The agent can hand the owner a working download link for a workspace file. It checks
+// the path exactly like the Files pane and never returns the file's contents.
+registry.install(defineExtension({ name: "mars-workspace-files", tools: [
+  defineTool({ name: "workspace_file_link",
+    description: "Get a download link for a file in the workspace, to give the owner in chat. Returns { path, size, url }; the url is relative to the Mars app. Files outside the workspace, folders and files over 20 MiB are refused.",
+    parameters: Type.Object({ path: Type.String({ minLength: 1, maxLength: 4096 }) }),
+    deferred: true, replay: "safe", structuredOutputSchema: Type.Any(),
+    execute: async (args) => {
+      const value = await late.workbenchTools.files.link(args.path);
+      return { output: [{ type: "text", text: JSON.stringify(value) }], structuredOutput: value };
+    },
+  }),
+] }));
 registry.install(defineExtension({ name: "plugin-control", tools: [
   defineTool({ name: "plugin_list", description: "Discover installed plugin summaries or a bounded page of tools for one plugin. Exposure controls also apply to MCP-wrapped plugins.",
     parameters: Type.Object({ name: Type.Optional(Type.String()), offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 25 })) }),
@@ -288,6 +310,7 @@ const root = await harness.root(context, {
 const conversations = createConversationManager({ harness, root, context, defaultAgent: {
   model: { provider: "openai", modelId: "gpt-6-luna" }, cwd: WORK, modelTools: discovery.modelTools,
 } });
+Object.assign(late, { harness, conversations });
 // Only migrate the historical single-chat tool filter once. Model and transcript stay native.
 const migrationPath = ROOT + "/data/progressive-discovery-v1.json";
 try { await readFile(migrationPath); }
@@ -365,7 +388,7 @@ const workbench = createWorkbench({
   work: WORK,
   send,
   jsonBody,
-  tools: workbenchTools({ work: WORK, hostPort: PORT, uiPort: UI_PORT }),
+  tools: (late.workbenchTools = workbenchTools({ work: WORK, hostPort: PORT, uiPort: UI_PORT })),
   extensionUis: () =>
     extensions.catalogue
       .filter((row) => plugins.list().find((plugin) => plugin.name === row.name)?.enabled !== false && plugins.isUiEnabled(row.name))
@@ -491,7 +514,7 @@ const server = http.createServer(async (req, res) => {
       const modelId = selection.modelId || data.modelId;
       if ((provider || modelId) && (!provider || !modelId || !models.getModel(provider, modelId))) throw Error("Unknown model");
       const conversation = await conversations.create({ ...data, ...selection });
-      send(res, 201, { conversation: { id: String(conversation.id), title: data.title || "New conversation" } }); return;
+      send(res, 201, { conversation: { id: String(conversation.id), title: data.title || (data.parentId ? "Side chat" : "New conversation"), ...(data.parentId ? { parentId: String(data.parentId) } : {}) } }); return;
     }
     if (url.pathname === "/api/conversations/fork" && req.method === "POST") {
       const conversation = await conversations.fork(await jsonBody(req));

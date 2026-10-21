@@ -295,3 +295,11 @@ with zsh. Nothing was pushed, deployed or run against a live service.
 ## 2026-10-21 Workbench decision log
 
 - Decision trail updated in `.agents/goals/workbench-log.tsv`. Lane worktrees removed; their branches are kept (codex/wb-*).
+
+## 2026-10-21 Side chats nested under their parent, file downloads, agent tools
+
+- Side chats are ordinary ownerless Pi conversations plus a native `mars.side-chat` document naming their parent (`packages/pi-host/side-chats.mjs`). Pi stays the only store. `POST /api/conversations` takes `parentId`; parents are checked before anything is created, so a refused side chat leaves no orphan, and nesting is one level only.
+- Recents lists top-level conversations only; each row carries `sideChats`. `/api/state` gives a side chat `parentConversationId` and `sideChatOf`. The sidebar nests side chats under their parent with a side-chat glyph and keeps the open one listed. The workbench side chat is created under the chat in the main view, and its picker shows side chats nested.
+- Agent control: deferred tools `side_chat_open` (optional first task, replay-safe through `memo`), `side_chat_list` and `side_chat_send` (only the caller's own side chats), and `workspace_file_link` (a checked download URL, never contents). Codemode namespaces `sideChats` and `workspaceFiles`. All are listed and switchable in Extensions like other host tools.
+- `GET /api/workbench/download?path=`: any regular file in WORK up to 20 MiB through `openInside`, as an octet-stream attachment with nosniff and a sandbox CSP. The Files viewer has a Download button, and binary files get a labelled one. The dev proxy keeps `content-disposition` for this route.
+- Checks: new `check-side-chats.mjs` on a real harness, where a scripted model drives the agent tools (with a mutation run proving the ownership check); download and `link()` cases in `check-workbench-files.mjs`; new `side-chats-download-check.mjs` in the browser (nesting, parentId on create, real downloads with exact bytes, phone and light); two parser unit tests.

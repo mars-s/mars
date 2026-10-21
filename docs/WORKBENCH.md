@@ -239,6 +239,49 @@ Each opens in its own tab through the exact `ExtensionPanel` mount used by the
 Extensions page (`/extensions/<hash>/client.js`). A tab whose extension was since
 disabled or removed says so instead of loading.
 
+## Side chats belong to their parent
+
+A side chat is an ordinary ownerless Pi conversation plus a native document
+`mars.side-chat` (`{ parentId }`, latest-only) naming the conversation it was opened
+from. Pi stays the only store: the link lives in Pi, so the UI, the HTTP API and the
+agent all see the same thing.
+
+- `POST /api/conversations { title?, provider?, modelId?, parentId? }`: with `parentId`
+  (which must exist and must not itself be a side chat or a worker), creates the
+  conversation and writes the link in the same request. Answers
+  `{ conversation: { id, title, parentId } }`.
+- `GET /api/conversations` and `GET /api/state` `conversations`: top-level rows only.
+  Each row has `sideChats: [{ id, title, running }]`, newest first, at most 20.
+  A side chat never appears as its own Recents row.
+- `GET /api/state` for a side chat includes `parentConversationId` and `sideChatOf`, so
+  the sidebar keeps it nested under its parent while open.
+- Sidebar: side chats sit indented under their parent with a small side-chat glyph,
+  like subthreads, and open in the main view on click.
+
+Agent tools (deferred, discovered on demand like the worker tools):
+
+- `side_chat_open { title?, task? }`: opens a side chat of the calling conversation,
+  optionally sends `task` as its first message, and returns `{ id, title }`. It does not
+  wait for an answer.
+- `side_chat_list {}`: the calling conversation's side chats, `{ id, title, running }`.
+- `side_chat_send { sideChatId, text }`: sends text to one of the caller's own side
+  chats and returns at once. A side chat that is not the caller's is refused.
+
+## File downloads
+
+- `GET /api/workbench/download?path=<rel>`: any regular file inside `WORK`, at most
+  20 MiB, opened with the same confinement as reads (`openInside`: no `..`, no symlink
+  escape, handle checked after open). The response is
+  `content-type: application/octet-stream`, `content-disposition: attachment;
+  filename*=UTF-8''<name>`, `x-content-type-options: nosniff` and
+  `content-security-policy: sandbox`, so nothing in it can run in the Mars origin.
+  Folders, FIFOs and devices are refused.
+- Files pane: a Download button in the viewer header for every file, including the
+  binary-file view, and a "Download" item on each file row's context action.
+- Agent tool `workspace_file_link { path }` (deferred): checks the path the same way
+  and returns `{ path, size, url }` with the relative download URL, so the agent can
+  hand the owner a working download link in chat. It never returns file contents.
+
 ## UI files
 
 `apps/ui/components/workbench/`: `workbench.tsx` (shell, divider, tabs),

@@ -190,6 +190,10 @@ export async function proxyPi(request: Request, options: ProxyOptions = {}): Pro
           : (upstream.headers.get("content-type") ?? "application/json"),
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
+        // Downloads keep their attachment name (docs/WORKBENCH.md "File downloads").
+        ...(local.pathname === "/api/workbench/download" && upstream.headers.get("content-disposition")
+          ? { "content-disposition": upstream.headers.get("content-disposition") as string }
+          : {}),
         // Keep the host's policy (a sandbox on browse pages, frame-ancestors elsewhere).
         ...(upstream.headers.get("content-security-policy")
           ? { "content-security-policy": upstream.headers.get("content-security-policy") as string }

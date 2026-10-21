@@ -38,7 +38,7 @@ export function SideChatPane({ tab }: { tab: SideChatTab }) {
 }
 
 function ConversationPicker({ onPick }: { onPick: (id: string) => void }) {
-  const { conversations, selectedId, snapshot } = useWorkspace();
+  const { conversations, selectedId, snapshot, refresh } = useWorkspace();
   const [creating, setCreating] = useState(false);
   const [problem, setProblem] = useState("");
   const create = async () => {
@@ -49,9 +49,16 @@ function ConversationPicker({ onPick }: { onPick: (id: string) => void }) {
       const model = snapshot?.model ?? "";
       const [provider, ...rest] = model.includes("/") ? model.split("/") : ["openai", model];
       const modelId = rest.join("/");
+      // Nested under the chat in the main view (its parent, if that is itself a side chat).
+      const parentId = snapshot?.sideChatOf || snapshot?.parentConversationId || selectedId;
       const created = parseCreatedConversation(
-        await piRequest("/api/conversations", { title: "Side chat", ...(modelId ? { provider, modelId } : {}) }),
+        await piRequest("/api/conversations", {
+          title: "Side chat",
+          ...(parentId ? { parentId } : {}),
+          ...(modelId ? { provider, modelId } : {}),
+        }),
       );
+      void refresh();
       onPick(created.id);
     } catch (failure) {
       setProblem(messageOf(failure, "Could not create a conversation."));
@@ -77,18 +84,23 @@ function ConversationPicker({ onPick }: { onPick: (id: string) => void }) {
         <section aria-labelledby="wb-chat-existing">
           <h3 id="wb-chat-existing">Or open an existing conversation</h3>
           <ul className="wb-chat-list">
-            {conversations.map((conversation) => {
-              const main = conversation.id === selectedId;
-              return (
-                <li key={conversation.id}>
-                  <button type="button" onClick={() => onPick(conversation.id)} disabled={main} aria-describedby={main ? "wb-chat-main-note" : undefined}>
-                    <MessagesSquare size={15} aria-hidden="true" />
-                    <span>{conversation.title}</span>
-                    {main ? <small id="wb-chat-main-note">Open in the chat</small> : conversation.running ? <small>Working</small> : null}
-                  </button>
-                </li>
-              );
-            })}
+            {conversations
+              .flatMap((conversation) => [
+                { ...conversation, side: false },
+                ...conversation.sideChats.map((side) => ({ ...side, side: true })),
+              ])
+              .map((conversation) => {
+                const main = conversation.id === selectedId;
+                return (
+                  <li key={conversation.id} data-side={conversation.side ? "" : undefined}>
+                    <button type="button" onClick={() => onPick(conversation.id)} disabled={main} aria-describedby={main ? "wb-chat-main-note" : undefined}>
+                      <MessagesSquare size={15} aria-hidden="true" />
+                      <span>{conversation.side ? <span className="sr-only">Side chat: </span> : null}{conversation.title}</span>
+                      {main ? <small id="wb-chat-main-note">Open in the chat</small> : conversation.running ? <small>Working</small> : null}
+                    </button>
+                  </li>
+                );
+              })}
           </ul>
         </section>
       )}

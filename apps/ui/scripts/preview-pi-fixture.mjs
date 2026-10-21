@@ -102,6 +102,18 @@ const conversations = new Map([
       entries: [{ id: 41, model: [{ role: "user", content: text("Check the systemd unit generator for path bugs") }] }],
     },
   ],
+  [
+    "8",
+    {
+      title: "Name the release (side chat)",
+      running: false,
+      sideOf: "1",
+      entries: [
+        { id: 81, model: [{ role: "user", content: text("Three names for the workbench release?") }] },
+        { id: 82, model: [{ role: "assistant", content: [{ type: "text", text: "**Split Pane**, **Side Table** or **Second Desk**. (Fixture reply.)" }] }] },
+      ],
+    },
+  ],
 ]);
 
 function state(id) {
@@ -112,7 +124,15 @@ function state(id) {
     conversationId: id,
     selectedConversationId: id,
     conversationTitle: conversation.title,
-    conversations: [...conversations].filter(([, row]) => !row.child).map(([key, row]) => ({ id: key, title: row.title, running: row.running })),
+    // Workers (child) and side chats (sideOf) nest under their parent, never their own rows.
+    conversations: [...conversations]
+      .filter(([, row]) => !row.child && !row.sideOf)
+      .map(([key, row]) => ({
+        id: key,
+        title: row.title,
+        running: row.running,
+        sideChats: [...conversations].filter(([, side]) => side.sideOf === key).reverse().map(([sideId, side]) => ({ id: sideId, title: side.title, running: side.running })),
+      })),
     subthreads: id === "1" ? [{ id: "4", conversationId: "1", title: "Audit service units", status: "running", modelId: "gpt-6-sol", provider: "openai" }] : [],
     workflows:
       id === "1"
@@ -143,6 +163,7 @@ function state(id) {
     thinkingLevel: conversation.thinkingLevel ?? "medium",
     extensions: [],
     ...(conversation.child ? { parentConversationId: "1" } : {}),
+    ...(conversation.sideOf ? { parentConversationId: conversation.sideOf, sideChatOf: conversation.sideOf } : {}),
     view: {
       entries: conversation.entries,
       docs: {
@@ -251,6 +272,19 @@ createServer(async (req, res) => {
       if (rel === "assets/mark.png") return json(res, 200, { path: rel, size: PNG.length, modified: now, kind: "image", mime: "image/png" });
       if (rel in binaries) return json(res, 200, { path: rel, size: binaries[rel].length, modified: now, kind: "binary" });
       return json(res, 404, { error: "Fixture: that file does not exist." });
+    }
+    if (url.pathname === "/api/workbench/download") {
+      const bytes = rel in files ? Buffer.from(files[rel]) : rel === "assets/mark.png" ? PNG : binaries[rel];
+      if (!bytes) return json(res, 404, { error: "Fixture: that file does not exist." });
+      const name = rel.split("/").pop();
+      res.writeHead(200, {
+        "content-type": "application/octet-stream",
+        "content-length": bytes.length,
+        "content-disposition": `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "default-src 'none'; sandbox",
+      });
+      return res.end(bytes);
     }
     if (url.pathname === "/api/workbench/raw") {
       if (rel !== "assets/mark.png") return json(res, 415, { error: "Fixture: only images can be shown directly." });
@@ -446,9 +480,13 @@ createServer(async (req, res) => {
       opencode: { configured: false, enabled: false },
     });
   if (url.pathname === "/api/conversations" && req.method === "POST") {
-    const next = String(conversations.size + 1);
-    conversations.set(next, { title: "New conversation", running: false, entries: [] });
-    return json(res, 201, { conversation: { id: next, title: "New conversation" } });
+    const next = String(Math.max(...[...conversations.keys()].map(Number)) + 1);
+    const parent = body.parentId === undefined ? undefined : String(body.parentId);
+    if (parent !== undefined && (!conversations.has(parent) || conversations.get(parent).sideOf || conversations.get(parent).child))
+      return json(res, 400, { error: "A side chat needs a top-level parent conversation" });
+    const title = body.title || (parent ? "Side chat" : "New conversation");
+    conversations.set(next, { title, running: false, entries: [], ...(parent ? { sideOf: parent } : {}) });
+    return json(res, 201, { conversation: { id: next, title, ...(parent ? { parentId: parent } : {}) } });
   }
   if (url.pathname === "/api/model") {
     const conversation = conversations.get(id);

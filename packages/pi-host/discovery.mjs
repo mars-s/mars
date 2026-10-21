@@ -15,6 +15,8 @@ export function createDiscovery() {
       { name: 'host', prefix: 'host_', description: 'Owner-authorised shell, files and OS control.' },
       { name: 'workers', prefix: 'worker_', description: 'Selected-model native child agents and workflows.' },
       { name: 'artefacts', prefix: 'artefact_', description: 'Read/search saved results without loading whole files.' },
+      { name: 'sideChats', prefix: 'side_chat_', description: 'Open, list and message side chats nested under this conversation.' },
+      { name: 'workspaceFiles', prefix: 'workspace_file_', description: 'Download links for workspace files, to hand to the owner.' },
     ],
   });
   const codemode = nativeCode.tools.find(t => t.name === 'codemode');

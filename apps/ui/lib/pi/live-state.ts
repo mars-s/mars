@@ -85,12 +85,15 @@ export type LoginState = {
   code: string;
   prompt: string | null;
 };
+export type SideChatSummary = { id: string; title: string; running: boolean };
 export type ConversationSummary = {
   id: string;
   title: string;
   modelId: string;
   provider: string;
   running: boolean;
+  /** Side chats opened from this conversation, newest first (docs/WORKBENCH.md). */
+  sideChats: SideChatSummary[];
 };
 export type WorkerSummary = {
   id: string;
@@ -149,6 +152,8 @@ export function parseContext(value: unknown): ContextUsage {
 export type LiveSnapshot = {
   context: ContextUsage;
   parentConversationId: string;
+  /** Set when this conversation is a side chat: the conversation it belongs to. */
+  sideChatOf: string;
   conversationTitle: string;
   subthreads: Subthread[];
   workflows: Workflow[];
@@ -237,6 +242,12 @@ export function parseConversations(value: unknown): ConversationSummary[] {
               modelId: string(row.modelId),
               provider: string(row.provider),
               running: row.running === true,
+              sideChats: list(row.sideChats)
+                .map(record)
+                .flatMap((side) => {
+                  const sideId = identifier(side.id);
+                  return sideId ? [{ id: sideId, title: string(side.title) || "Side chat", running: side.running === true }] : [];
+                }),
             },
           ]
         : [];
@@ -430,6 +441,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
   const provider = string(selectedModel.provider);
   return {
     parentConversationId: identifier(data.parentConversationId),
+    sideChatOf: identifier(data.sideChatOf),
     conversationTitle: string(data.conversationTitle),
     subthreads: list(data.subthreads)
       .map(record)
