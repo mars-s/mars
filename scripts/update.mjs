@@ -35,6 +35,7 @@ export function run(file, args, { cwd, env, timeoutMs = 20 * 60 * 1000, input } 
     child.stdout.on('data', keep); child.stderr.on('data', keep);
     child.on('error', error => { clearTimeout(timer); resolve({ code: -1, output: output + error.message }); });
     child.on('close', code => { clearTimeout(timer); resolve({ code: code ?? 128, output }); });
+    child.stdin.on('error', () => {}); // a command that exits without reading stdin (EPIPE on Linux)
     child.stdin.end(input ?? '');
   });
 }

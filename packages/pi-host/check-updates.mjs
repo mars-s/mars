@@ -65,7 +65,9 @@ try {
 
 // The agent tools, on the same checkout, through the extension the host installs.
 // Not systemd services (injected, so this holds on a Linux server too): the tool refuses with the command to run.
-const updates = createUpdates({ repo, root: join(base, "tool-root"), env: { ...process.env, MARS_PI_STAGING: "", MARS_UPDATE_CHECK_HOURS: "0" }, managed: async () => false, systemdRun: "/nonexistent-systemd-run" });
+// Without the service's MARS_REPO_ROOT, which would point the updater at the real checkout.
+const { MARS_REPO_ROOT: _service, ...serviceFree } = process.env;
+const updates = createUpdates({ repo, root: join(base, "tool-root"), env: { ...serviceFree, MARS_PI_STAGING: "", MARS_UPDATE_CHECK_HOURS: "0" }, managed: async () => false, systemdRun: "/nonexistent-systemd-run" });
 const tools = Object.fromEntries(updates.extension.tools.map((tool) => [tool.name, tool]));
 const call = async (name, args = {}) => (await tools[name].execute(args, {}, {})).structuredOutput;
 const status = await call("mars_update_status", { refresh: true });
@@ -106,7 +108,7 @@ git(repo, "reset", "-q", "--hard", "origin/main~1");
 const record = join(base, "systemd-run.args");
 const fake = join(base, "systemd-run");
 await writeFile(fake, `#!/bin/sh\nprintf '%s\\n' "$@" > "${record}"\n`, { mode: 0o755 });
-const server = createUpdates({ repo, root: join(base, "server-root"), env: { ...process.env, MARS_PI_STAGING: "", MARS_UPDATE_CHECK_HOURS: "0" }, managed: async () => true, systemdRun: fake, busy: async () => false });
+const server = createUpdates({ repo, root: join(base, "server-root"), env: { ...serviceFree, MARS_PI_STAGING: "", MARS_UPDATE_CHECK_HOURS: "0" }, managed: async () => true, systemdRun: fake, busy: async () => false });
 const launch = await server.apply();
 assert.equal(launch.started, true, JSON.stringify(launch));
 const argv = (await readFile(record, "utf8")).trim().split("\n");
