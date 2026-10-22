@@ -203,3 +203,13 @@ test("the proxy is off in production builds and refuses DNS-rebound Host headers
   const local = new Request("http://127.0.0.1:3200/api/state", { headers: { host: "localhost:3200" } });
   assert.equal((await proxyPi(local, options)).status, 200);
 });
+test("a page opened at 127.0.0.1 can POST, though Next reports the request URL as localhost", async () => {
+  const options = { origin: "http://127.0.0.1:3191", token: "fixture-owner-token", fetcher: async () => Response.json({ ok: true }) };
+  const post = (host, origin) =>
+    proxyPi(new Request("http://localhost:3211/api/chat", { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: "{}" }), options);
+  assert.equal((await post("127.0.0.1:3211", "http://127.0.0.1:3211")).status, 200);
+  assert.equal((await post("localhost:3211", "http://localhost:3211")).status, 200);
+  assert.equal((await post("127.0.0.1:3211", "http://localhost:3211")).status, 403, "the Origin must match the host the browser addressed");
+  assert.equal((await post("127.0.0.1:3211", "http://127.0.0.1:9999")).status, 403, "another local port is a different origin");
+  assert.equal((await post("127.0.0.1:3211", "https://evil.example")).status, 403);
+});

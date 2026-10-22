@@ -9,15 +9,11 @@ INTERVAL=${MARS_DEPLOY_HEALTH_INTERVAL:-2}
 SYSTEMCTL=${MARS_DEPLOY_SYSTEMCTL:-systemctl}
 
 log() { echo "$(date -Is) $*" >> "$DIR/watchdog.log"; }
-# Each status records this watchdog's pid and start time, so host_deploy_status can
-# tell a deploy whose watchdog died (status "interrupted") from one still running.
 status() {
-  STATUS="$1" DETAIL="$2" OUT="$DIR/status.json" WD_PID=$ node -e '
-    const fs = require("fs"); const env = process.env; const tmp = env.OUT + ".wd.tmp";
-    let prior = {}; try { prior = JSON.parse(fs.readFileSync(env.OUT, "utf8")); } catch {}
-    let pidStart = null; try { const s = fs.readFileSync("/proc/" + env.WD_PID + "/stat", "utf8"); pidStart = s.slice(s.lastIndexOf(")") + 2).split(" ")[19] || null; } catch {}
-    fs.writeFileSync(tmp, JSON.stringify({ startedAt: prior.startedAt, commit: prior.commit, subject: prior.subject, pid: Number(env.WD_PID), pidStart, status: env.STATUS, at: new Date().toISOString(), detail: env.DETAIL }), { mode: 0o600 });
-    fs.renameSync(tmp, env.OUT);'
+  STATUS="$1" DETAIL="$2" OUT="$DIR/status.json" node -e '
+    const fs = require("fs"); const tmp = process.env.OUT + ".wd.tmp";
+    fs.writeFileSync(tmp, JSON.stringify({ status: process.env.STATUS, at: new Date().toISOString(), detail: process.env.DETAIL }), { mode: 0o600 });
+    fs.renameSync(tmp, process.env.OUT);'
   log "status $1"
 }
 healthy() {
@@ -52,11 +48,6 @@ done
 status restarting "Restarting $SERVICE"
 $SYSTEMCTL --user restart "$SERVICE"
 if [ -z "${COPY_FAILED:-}" ] && healthy; then
-  # Tell the live host which commit it runs (GET /api/host/version reads this).
-  PLAN="$DIR/plan.json" OUT="$APP/deployed.json" ID=$(basename "$DIR") node -e '
-    const fs = require("fs"); const env = process.env; const plan = JSON.parse(fs.readFileSync(env.PLAN, "utf8"));
-    fs.writeFileSync(env.OUT + ".tmp", JSON.stringify({ commit: plan.commit, subject: plan.subject, ref: plan.ref, id: env.ID, deployedAt: new Date().toISOString() }, null, 1) + "\n");
-    fs.renameSync(env.OUT + ".tmp", env.OUT);' || log "could not write deployed.json"
   status deployed "$SERVICE healthy on port $PORT"
   rm -rf "$APP/node_modules.prev"
   [ -L "$STAGE/node_modules" ] || rm -rf "$STAGE/node_modules"

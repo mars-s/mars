@@ -55,7 +55,7 @@ export function Launcher({ onOpen }: { onOpen: (target: TabTarget) => void }) {
                 {ready ? (
                   <kbd aria-hidden="true">{tool.shortcut.label}</kbd>
                 ) : (
-                  <small id={`wb-tool-why-${tool.kind}`}>{cap ? cap.reason : "Checking…"}</small>
+                  <small id={`wb-tool-why-${tool.kind}`}>{cap ? cap.reason : caps.error ? "Unavailable" : "Checking…"}</small>
                 )}
               </button>
             );

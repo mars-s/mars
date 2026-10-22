@@ -1,0 +1,146 @@
+.update-settings h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.update-settings .update-state h3 {
+  font-size: 15px;
+}
+.update-settings .update-state[data-tone="warn"] h3 {
+  color: var(--red);
+}
+.update-state p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.update-settings code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.update-commits {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  font-size: 13px;
+}
+.update-commits li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+.update-commits code {
+  color: var(--text-muted);
+}
+.update-commits span {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.update-blocker {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.update-blocker p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+.update-blocker ul {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.update-blocker li code {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.update-steps {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.update-steps li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+  color: var(--text);
+}
+.update-steps li[data-status="skipped"] {
+  color: var(--text-muted);
+}
+.update-steps svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+.update-steps li[data-status="done"] svg {
+  color: var(--green);
+}
+.update-steps li[data-status="failed"] svg {
+  color: var(--red);
+}
+.update-steps small {
+  grid-column: 2;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.update-step-spin {
+  animation: update-spin 900ms linear infinite;
+}
+@keyframes update-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-step-spin {
+    animation: none;
+  }
+}
+.update-outcome {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 14px;
+}
+.update-outcome[data-outcome="rollback_failed"] {
+  color: var(--red);
+}
+.update-detail {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.update-auto {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  /* Room for the switch's larger invisible touch target. */
+  padding-right: 6px;
+}
+.update-auto [role="switch"] {
+  margin-top: 2px;
+}
+.update-auto > div {
+  min-width: 0;
+}

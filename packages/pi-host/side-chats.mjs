@@ -109,7 +109,7 @@ export async function createSideChat({ harness, parentId, agent, title, context,
   return parentConversation.commit(async (tx) => {
     const parent = await checkParentInTx(tx, parentId);
     const index = await tx.doc(SideChatIndexDoc, parent.id);
-    index.requests ??= {};
+    if (!index.requests) index.requests = {};
     if (requestKey && index.requests[requestKey]) return { id: index.requests[requestKey] };
     if (index.children.length >= SIDE_CHAT_MAX) throw fail(`This conversation already has ${SIDE_CHAT_MAX} side chats.`, 409);
     const child = await tx.createConversation({ ownership: { kind: 'ownerless' } });

@@ -49,6 +49,22 @@ up code, restarts the configured service and rolls back if unhealthy. The same
 flow is available to Pi as host_deploy. It requires Linux user services; manual
 launch mode does not promise automatic host restarts.
 
+## Update from GitHub
+
+docs/UPDATES.md has the design. On a server with the user services installed:
+
+```sh
+npm run update -- check
+npm run update -- apply
+```
+
+Check fetches main and says whether an update is ready. Apply builds the new version
+beside the running one, restarts both services and goes back to the old version if the
+new one is unhealthy. Settings, Updates does the same from the browser, and can install
+updates automatically. Local commits are merged with main; a merge that conflicts waits
+for you (or for Mars, if you ask it to reconcile). Without the user services, stop Mars
+first; apply then updates the files and you start Mars again.
+
 ## Production and Linux startup
 
 ```sh
@@ -93,11 +109,31 @@ Important environment settings:
 | MARS_PUBLIC_ORIGIN | Explicit trusted proxy origin |
 | MARS_ALLOWED_ORIGINS | Explicit additional proxy origins |
 | MARS_PI_SERVICE | Native host service name for self-deployment |
+| MARS_UPDATE_CHECK_HOURS | Hours between update checks, default 6; 0 turns them off |
+| MARS_UPDATE_REMOTE, MARS_UPDATE_BRANCH | Where updates come from, default origin and main |
+| MARS_GATEWAY_TELEGRAM | `1` starts the Telegram chat client (docs/GATEWAY.md) |
+| MARS_TELEGRAM_TOKEN | Telegram bot token from BotFather |
+| MARS_TELEGRAM_OWNER | Your own Telegram user id(s), comma separated |
+| MARS_GATEWAY_DISCORD | `1` starts the Discord chat client, using the bot token saved in Settings, Apps, or MARS_DISCORD_TOKEN |
+| MARS_DISCORD_OWNER | Your own Discord user id(s), comma separated |
+| MARS_DISCORD_MESSAGE_CONTENT | `1` asks for the privileged Message Content intent (enable it in the Discord Developer Portal first); without it, server messages must mention the bot |
 
 For private Tailscale access, proxy the gateway and configure the exact HTTPS
 origin. This setup does not publish a public internet service or provision a node.
 For a Mac UI editing an existing remote host, see apps/ui/docs/MAC-DEVELOPMENT.md.
 Keep its bridge token server-only in .env.local. It is not a browser env variable.
+
+## Chat with Mars from Telegram or Discord
+
+docs/GATEWAY.md has the design. To turn on Telegram:
+
+1. Create a bot with BotFather and copy its token.
+2. Find your own Telegram user id (for example by messaging @userinfobot).
+3. Put the variables above in the host's environment (the user service environment file, never Git), set `MARS_GATEWAY_TELEGRAM=1`, and restart the host.
+4. Message your bot. Settings, Gateway shows it running and the chat as a linked conversation.
+
+Messages from anyone else get a pairing code and are not passed to Mars until you approve
+the code in Settings, Gateway. Approving gives that person the same power as you.
 
 ## Verify
 

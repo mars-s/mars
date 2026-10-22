@@ -176,6 +176,15 @@ try {
   assert.ok(Math.abs(narrowBox.width - narrowValue) < 2, "separator value matches the rendered width");
   assert.equal(await narrow.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "no overflow at 1024px");
 
+  // The host cannot answer: the launcher says so once and no tile keeps waiting.
+  const down = await page({ width: 1440, height: 900 });
+  await down.route("**/api/workbench/capabilities", (route) => route.fulfill({ status: 502, json: { error: "Cannot reach the private Pi backend." } }));
+  await down.getByRole("button", { name: "Open workbench" }).click();
+  await down.getByRole("region", { name: "Workbench" }).getByRole("alert").filter({ hasText: "Cannot reach the private Pi backend." }).first().waitFor();
+  assert.equal(await down.getByText("Checking…").count(), 0, "no tile waits forever once capabilities failed");
+  assert.equal(await down.getByRole("button", { name: /^Files/ }).isDisabled(), true, "tiles stay disabled while the host is unreachable");
+  await down.screenshot({ path: evidence + "/desktop-host-down.png" });
+
   const mobile = await page({ width: 390, height: 844 });
   const mobileToggle = mobile.getByRole("button", { name: "Open workbench" });
   await mobileToggle.click();

@@ -77,7 +77,26 @@ const sideChat = {
 const shell = new Map<string, { out: string; line: string }>();
 const PROMPT = "\x1b[2msample\x1b[0m:workspace $ ";
 
+// Gateway (docs/GATEWAY.md): one running Telegram bot, one pending pairing, one linked chat.
+const gateway = {
+  adapters: [
+    { channel: "api", state: "running", detail: "", failures: 0 },
+    { channel: "telegram", state: "running", detail: "@mars_sample_bot", failures: 0 },
+    { channel: "discord", state: "failed", detail: "Discord closed the connection (4014): enable the Message Content intent in the Developer Portal", failures: 2 },
+  ],
+  bindings: [{ route: "telegram:999:dm:5550001", channel: "telegram", conversationId: "903", title: "Weekly reading list" }],
+  pairings: [{ code: "K7QX2M9P", channel: "telegram", sender: "5550002", name: "sam_k", expiresAt: "2026-10-22T10:00:00Z" }],
+  audit: [
+    { at: "2026-10-22T09:05:00Z", channel: "telegram", decision: "denied" },
+    { at: "2026-10-22T09:04:00Z", channel: "telegram", decision: "accepted" },
+    { at: "2026-10-22T09:02:00Z", channel: "telegram", decision: "duplicate" },
+  ],
+  outbox: 0,
+};
+
 function answer(url: URL, method: string, body: Record<string, unknown>): Answer | undefined {
+  if (url.pathname === "/api/gateway") return ok(gateway);
+  if (url.pathname === "/api/gateway/pairings" || url.pathname === "/api/gateway/bindings/delete") return ok(gateway);
   const path = url.pathname;
   const param = url.searchParams.get("path") ?? "";
   if (path === "/api/workbench/capabilities")

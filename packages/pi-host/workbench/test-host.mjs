@@ -8,11 +8,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { freePort } from "../dev-tools.mjs";
 
-export async function startHost(extraEnv = {}) {
-  const base = await mkdtemp(join(tmpdir(), "mars workbench "));
+/** Boot a real host. `reuse` ({ base, port, uiPort }) restarts one on the same data root. */
+export async function startHost(extraEnv = {}, reuse) {
+  const base = reuse?.base ?? (await mkdtemp(join(tmpdir(), "mars workbench ")));
   const root = join(base, "data");
-  const port = await freePort();
-  const uiPort = await freePort();
+  const port = reuse?.port ?? (await freePort());
+  const uiPort = reuse?.uiPort ?? (await freePort());
   const env = { ...process.env, MARS_PI_ROOT: root, MARS_PI_PORT: String(port), MARS_UI_PORT: String(uiPort), MARS_PI_STAGING: "1", MARS_PUBLIC_ORIGIN: "", MARS_ALLOWED_ORIGINS: "", ...extraEnv };
   const child = spawn(process.execPath, [fileURLToPath(new URL("../server.mjs", import.meta.url))], { cwd: base, env, stdio: ["ignore", "pipe", "pipe"] });
   let log = "";
@@ -61,11 +62,16 @@ export async function startHost(extraEnv = {}) {
       req.on("error", reject);
       req.end(payload);
     });
+  /** Kill the process at once, as a crash or power loss would: no shutdown code runs. */
+  const crash = async () => {
+    child.kill("SIGKILL");
+    await exited;
+  };
   const stop = async () => {
     child.kill("SIGTERM");
     const timer = setTimeout(() => child.kill("SIGKILL"), 5000);
     await exited;
     clearTimeout(timer);
   };
-  return { root, work: join(root, "workspace"), port, uiPort, token, request, stop, log: () => log };
+  return { base, root, work: join(root, "workspace"), port, uiPort, token, request, stop, crash, log: () => log };
 }

@@ -206,6 +206,7 @@ export function LiveWorkspace() {
                 sideChatTotal: 0,
                 group: "",
                 archived: false,
+                channel: "",
               },
             ],
       );

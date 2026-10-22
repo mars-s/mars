@@ -40,6 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useWorkspace } from "@/components/workspace-context";
 import type { ConversationSummary, SideChatSummary } from "@/lib/pi/live-state";
+import { ChannelMark } from "./channel-mark";
 import { ChildNavigation } from "./child-navigation";
 
 /** Must match GROUP_MAX in packages/pi-host/conversations.mjs. */
@@ -231,6 +232,7 @@ function ConversationRow({
           onClick={() => selectConversation(conversation.id)}
         >
           <span className="live-nav-label">{conversation.title}</span>
+          {conversation.channel && <ChannelMark channel={conversation.channel} label />}
           {conversation.running && (
             <>
               <span className="live-running-dot" aria-hidden="true" />

@@ -39,6 +39,8 @@ try {
   await page.waitForFunction(() => new URL(location.href).searchParams.get("conversation") === "8");
   await page.getByText("Second Desk", { exact: false }).waitFor();
   assert.equal(await nested.getAttribute("aria-current"), "page");
+  // A side chat names its parent like a subthread does, but it must not also be listed as one.
+  assert.equal(await recents(page).locator(".live-nav").filter({ hasText: "Name the release" }).count(), 1, "the open side chat is listed once");
   await page.screenshot({ path: `${evidence}/desktop-dark-side-chat-open.png` });
 
   // A side chat started from the workbench is created under the chat in the main view.

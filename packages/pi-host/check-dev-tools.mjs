@@ -2,9 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, copyFile, chmod, rm, stat, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
-import { utimes } from 'node:fs/promises';
-import { applyPatch, createDevTools, createHostVersion, procStart, sh, freePort } from './dev-tools.mjs';
+import { applyPatch, createDevTools, sh, freePort } from './dev-tools.mjs';
 
 const base = await mkdtemp(join(tmpdir(), 'mars-devtools-'));
 const git = (cwd, ...args) => sh('git', ['-c', 'user.name=check', '-c', 'user.email=check@local', '-C', cwd, ...args]);
@@ -52,6 +50,9 @@ await mkdir(join(app, 'node_modules'), { recursive: true });
 await writeFile(join(app, 'server.mjs'), server('v1'));
 await writeFile(join(app, 'package.json'), '{"dependencies":{}}\n');
 await writeFile(join(app, 'live-only.txt'), 'keep me\n');
+// A real live app already runs the same checks and watchdog it was deployed with.
+await copyFile(join(host, 'run-checks.mjs'), join(app, 'run-checks.mjs'));
+await copyFile(join(host, 'deploy-watchdog.sh'), join(app, 'deploy-watchdog.sh'));
 const port = await freePort();
 
 const fake = join(base, 'bin'); await mkdir(fake);
@@ -93,9 +94,6 @@ try {
   let s = await call('host_deploy_status');
   assert.equal(s.status, 'deployed', JSON.stringify(s));
   assert.equal(await liveVersion(), 'v2');
-  const recorded = JSON.parse(await readFile(join(app, 'deployed.json'), 'utf8'));
-  assert.equal(recorded.commit, (await git(repo, 'rev-parse', 'HEAD')).stdout.trim(), 'the watchdog records the deployed commit for the live app');
-  assert.equal(recorded.subject, 'v2');
   assert.equal(await readFile(join(app, 'live-only.txt'), 'utf8'), 'keep me\n');
   assert.equal(await exists(join(app, 'feature.mjs')), true);
   assert.equal((await call('host_deploy')).status, 'noop');
@@ -157,62 +155,6 @@ try {
   assert.equal((await workspaceDev.status({ id: failed.id })).status, 'rolled_back');
   assert.equal(await realpath(join(app, 'node_modules')), priorDeps);
   assert.equal(await liveVersion(), 'workspace-v3');
-
-  // Interrupted deploys: a dead owner or no status at all is reported, never left as "scheduled".
-  const deploysDir = join(root, 'deploys');
-  const fakeDeploy = async (id, state) => { await mkdir(join(deploysDir, id), { recursive: true }); if (state) await writeFile(join(deploysDir, id, 'status.json'), JSON.stringify(state)); return id; };
-  const old = new Date(Date.now() - 3600e3);
-  const silent = await fakeDeploy('20991231T000000001-deadbeef-0001');
-  await utimes(join(deploysDir, silent), old, old);
-  let st = await dev.status({ id: silent });
-  assert.equal(st.status, 'interrupted', JSON.stringify(st));
-  assert.match(st.detail, /never recorded a status.*not changed/);
-  const gone = spawn(process.execPath, ['-e', '0']); await new Promise(r => gone.once('close', r));
-  const staging = await fakeDeploy('20991231T000000002-deadbeef-0002', { status: 'staging', detail: 'Running host checks', startedAt: new Date().toISOString(), at: new Date().toISOString(), pid: gone.pid });
-  st = await dev.status({ id: staging });
-  assert.equal(st.status, 'interrupted'); assert.equal(st.lastStatus, 'staging');
-  assert.match(st.detail, /while staging \(Running host checks\).*no longer running/);
-  // A live watchdog blocks a new deploy; once it dies the next deploy proceeds and reports it.
-  const sleeper = spawn('sleep', ['60']);
-  const applying = await fakeDeploy('20991231T000000003-deadbeef-0003', { status: 'applying', at: new Date().toISOString(), pid: sleeper.pid, pidStart: await procStart(sleeper.pid) });
-  assert.equal((await dev.status({ id: applying })).status, 'applying');
-  await assert.rejects(call('host_deploy', { dryRun: true }), /still applying/);
-  const wrongStart = await fakeDeploy('20991231T000000004-deadbeef-0004', { status: 'restarting', at: new Date().toISOString(), pid: sleeper.pid, pidStart: '1' });
-  assert.equal((await dev.status({ id: wrongStart })).status, 'interrupted', 'a reused pid with another start time is not the watchdog');
-  sleeper.kill('SIGKILL'); await new Promise(r => sleeper.once('close', r));
-  st = await dev.status({ id: applying });
-  assert.equal(st.status, 'interrupted'); assert.match(st.detail, /partly updated/);
-  const stale = await fakeDeploy('20991231T000000005-deadbeef-0005', { status: 'scheduled', at: old.toISOString(), restartAt: old.toISOString() });
-  assert.equal((await dev.status()).status, 'interrupted', 'latest deploy scheduled long ago is reported');
-  const versionOf = createHostVersion({ root, appDir: app, repo, deploysDir });
-  let ver = await versionOf();
-  assert.equal(ver.interrupted, true); assert.equal(ver.latestDeploy.id, stale);
-  v = await call('host_deploy', { dryRun: true });
-  assert.equal(v.status, 'dry_run', 'an interrupted deploy does not block the next');
-  assert.equal(v.previous.id, stale); assert.match(v.previous.detail, /watchdog never started/);
-  assert.equal((await dev.status({ id: v.id })).status, 'dry_run');
-  for (const id of [silent, staging, applying, wrongStart, stale]) await rm(join(deploysDir, id), { recursive: true });
-
-  // GET /api/host/version facts against a temporary repo: live commit, main and commits behind.
-  const vrepo = join(base, 'version-repo'), vapp = join(base, 'version-app');
-  await mkdir(vrepo); await mkdir(vapp);
-  const commitFile = async (msg) => { await writeFile(join(vrepo, 'f.txt'), msg); await git(vrepo, 'add', '.'); await git(vrepo, 'commit', '-qm', msg); return (await git(vrepo, 'rev-parse', 'HEAD')).stdout.trim(); };
-  await git(vrepo, 'init', '-q', '-b', 'main');
-  const c1 = await commitFile('one'); await commitFile('two'); const c3 = await commitFile('three');
-  const noApp = createHostVersion({ root: join(base, 'none'), appDir: vapp, repo: vrepo });
-  ver = await noApp();
-  assert.deepEqual([ver.commit, ver.behind, ver.repoHead, ver.interrupted, ver.latestDeploy], [null, null, c3, false, null]);
-  await writeFile(join(vapp, 'deployed.json'), JSON.stringify({ commit: c1, subject: 'one', deployedAt: '2026-10-21T10:00:00.000Z' }));
-  const cachedVersion = createHostVersion({ root: join(base, 'none'), appDir: vapp, repo: vrepo });
-  ver = await cachedVersion();
-  assert.deepEqual([ver.commit, ver.subject, ver.deployedAt, ver.repoHead, ver.behind], [c1, 'one', '2026-10-21T10:00:00.000Z', c3, 2]);
-  const c4 = await commitFile('four');
-  assert.equal((await cachedVersion()).behind, 2, 'git facts are cached');
-  ver = await createHostVersion({ root: join(base, 'none'), appDir: vapp, repo: vrepo, cacheMs: 0 })();
-  assert.deepEqual([ver.repoHead, ver.behind], [c4, 3]);
-  await writeFile(join(vapp, 'deployed.json'), JSON.stringify({ commit: 'f'.repeat(40) }));
-  assert.equal((await createHostVersion({ root: join(base, 'none'), appDir: vapp, repo: vrepo })()).behind, null, 'unknown live commit gives behind null');
-  console.log('interrupted deploy detection and host version checks passed');
   console.log('dev-tools standalone and monorepo host-only staging, boot, deployment and dependency rollback checks passed');
 } finally {
   const pid = await readFile(join(fake, 'pid'), 'utf8').catch(() => '');

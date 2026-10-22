@@ -119,6 +119,8 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
+  /* The composer narrows when the workbench opens, so the model picker sizes to this, not the viewport. */
+  container: composer-toolbar / inline-size;
 }
 .live-composer-spacer {
   flex: 1;
