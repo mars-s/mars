@@ -128,6 +128,10 @@ export class Connections {
   getOpenCodeApiKey() {
     return this.#state.openCodeApiKey ?? undefined;
   }
+  /** The saved Discord bot token, for the gateway's Discord adapter only. Never returned over HTTP. */
+  getDiscordToken() {
+    return this.#state.discordToken ?? undefined;
+  }
   #clean(value) {
     let text = JSON.stringify(value);
     for (const secret of [this.#state.discordToken, this.#state.openCodeApiKey]) {

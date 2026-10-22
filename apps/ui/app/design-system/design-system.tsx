@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import { MarsMark } from "@/components/mars-mark";
 import { PlanCard } from "@/components/ai/plan-card";
 import { ComponentGallery } from "./component-gallery";
+import { GatewaySpecimen } from "./gateway-specimen";
 import { WorkbenchSpecimen } from "./workbench-specimen";
 import "./design-system.css";
 
@@ -257,6 +258,10 @@ export function DesignSystem() {
               </div>
             </div>
           </div>
+        </Section>
+
+        <Section title="Gateway" note="Chat apps that reach Mars (docs/GATEWAY.md). A quiet mark after a Recents title says where a conversation came from. Settings, Gateway lists the apps, pairing requests with a plain warning, linked chats and activity without message text.">
+          <GatewaySpecimen />
         </Section>
 
         <Section title="Plan" note="The agent's own checklist from plan_update, pinned above the run status. Dashed circle to do, spinner in progress, tick done. A finished plan collapses to its count.">

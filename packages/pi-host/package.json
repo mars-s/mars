@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "check": "node run-checks.mjs"
+    "check": "node run-checks.mjs",
+    "typecheck:names": "node self-edit.mjs names"
   },
   "dependencies": {
     "@earendil-works/chord": "1.3.0",

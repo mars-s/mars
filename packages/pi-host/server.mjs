@@ -12,10 +12,13 @@ import { loadConfig } from "./config.mjs";
 import { createVmControl } from "./vm-control.mjs";
 import { createWebSearchExtension } from "./web-search.mjs";
 import { createDevTools } from "./dev-tools.mjs";
+import { createSelfEdit } from "./self-edit.mjs";
+import { createUpdates } from "./updates.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
+import { createGatewayExtension, gatewayRoute, loopbackGatewayEnv, startGateway, withChannels } from "./gateway/host.mjs";
 import { contextMeter } from "./context-meter.mjs";
 import { createWorkbench } from "./workbench/index.mjs";
 import { workbenchTools } from "./workbench/tools.mjs";
@@ -39,7 +42,7 @@ import {
   defineTask,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { ROOT, WORK, APP, PORT, UI_PORT, DEPENDENCIES, requestPolicy, Credentials, atomicJson } from "./security.mjs";
+import { ROOT, WORK, APP, REPO, PORT, UI_PORT, DEPENDENCIES, requestPolicy, Credentials, atomicJson } from "./security.mjs";
 import { ExtensionStore } from "./extension-store.mjs";
 import { UiPatchStore } from "./ui-patches.mjs";
 await mkdir(ROOT + "/data", { recursive: true, mode: 0o700 });
@@ -87,6 +90,25 @@ const models = createModels({
 models.setProvider(openaiProvider());
 models.setProvider(anthropicProvider());
 models.setProvider(opencodeGoProvider());
+// Staging checks only (MARS_PI_STAGING=1 and MARS_ECHO_MODEL=1): a free local "echo" model
+// that answers "echo: <last message>", so end-to-end checks get real answers with no
+// provider. Never installed in a normal run.
+const echoModel = STAGING && process.env.MARS_ECHO_MODEL === "1";
+if (echoModel) {
+  const { fauxProvider, fauxAssistantMessage } = await import("@earendil-works/pi-ai/providers/faux");
+  const echo = fauxProvider({ provider: "echo", models: [{ id: "echo", name: "Echo (checks only)" }] });
+  // "SLOW <ms> <text>" waits before answering, so a check can kill the host mid-answer.
+  const reply = async (context) => {
+    const last = context.messages.findLast((m) => m.role === "user");
+    const text = typeof last?.content === "string" ? last.content : last?.content?.find?.((c) => c.type === "text")?.text ?? "";
+    echo.appendResponses([reply]);
+    const slow = /^SLOW (\d{1,5}) ([\s\S]*)$/.exec(text);
+    if (slow) await new Promise((resolve) => setTimeout(resolve, Number(slow[1])));
+    return fauxAssistantMessage("echo: " + (slow ? slow[2] : text));
+  };
+  echo.setResponses([reply]);
+  models.setProvider(echo.provider);
+}
 const marsConfig = await loadConfig();
 for (const layer of marsConfig.layers) {
   if (layer.error) console.warn(`Mars config: skipped ${layer.name} layer (${layer.error})`);
@@ -135,7 +157,14 @@ registry.install(createSideChatExtension({
 registry.install(createWorkspaceFilesExtension({ files: () => late.workbenchTools.files }));
 registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
-const extensions = new ExtensionStore(registry);
+registry.install(createGatewayExtension({ gateway: () => late.gateway }));
+registry.install(createSelfEdit().extension);
+// Updates from GitHub main (docs/UPDATES.md). conversations is created later; busy() runs after boot.
+const updates = createUpdates({ repo: REPO, root: ROOT, busy: async () => (await late.conversations.list()).some((row) => row.running) });
+registry.install(updates.extension);
+// Host names are captured before installed extensions load, so none can replace them.
+const hostNames = { extensions: plugins.definitions().map((row) => row.extension).filter((name, i, all) => all.indexOf(name) === i), tools: plugins.definitions().map((row) => row.tool.name) };
+const extensions = new ExtensionStore(registry, undefined, () => hostNames);
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();
 // Host tools below: each has a typed result so codemode scripts get an object, not a
@@ -190,8 +219,8 @@ registry.install(
     tools: [
       tool(
         "discord_connection_status",
-        `Check whether the owner's Discord server is connected.
-Use it before the other discord_ tools. Discord works only after the owner clicks Connect in Settings, Apps; the bot token is never shown. If it is not connected, tell the owner to connect it there.
+        `Check whether Mars can read the owner's Discord server with the discord_ read tools.
+Use it only before discord_list_channels or discord_read_messages. It is about reading a server's channels, not chatting: to check whether the owner can chat with Mars from Telegram or Discord, or who is waiting for approval, use gateway_status. The read tools work only after the owner clicks Connect in Settings, Apps; the bot token is never shown. If it is not connected, tell the owner to connect it there.
 Example: const { connected } = await tools.discord_connection_status({})`,
         Type.Object({}),
         loose({
@@ -347,11 +376,12 @@ const harness = await Harness.open(
   },
   context,
 );
+const defaultModel = echoModel ? { provider: "echo", modelId: "echo" } : { provider: "openai", modelId: "gpt-6-luna" };
 const root = await harness.root(context, {
-  agent: { model: { provider: "openai", modelId: "gpt-6-luna" }, cwd: WORK, modelTools: discovery.modelTools },
+  agent: { model: defaultModel, cwd: WORK, modelTools: discovery.modelTools },
 });
 const conversations = createConversationManager({ harness, root, context, defaultAgent: {
-  model: { provider: "openai", modelId: "gpt-6-luna" }, cwd: WORK, modelTools: discovery.modelTools,
+  model: defaultModel, cwd: WORK, modelTools: discovery.modelTools,
 } });
 Object.assign(late, { harness, conversations });
 // Only migrate the historical single-chat tool filter once. Model and transcript stay native.
@@ -371,12 +401,22 @@ function connectionStatus() {
 }
 async function providerReady(view) {
   const selected = view.docs?.["pi.agent"]?.model;
+  if (echoModel && selected?.provider === "echo") return true;
   return selected?.provider === "opencode-go"
     ? !!connections.getOpenCodeApiKey()
     : ["openai", "anthropic"].includes(selected?.provider) &&
         !!(await credentials.read(selected.provider));
 }
 harness.resume();
+// Chat clients (docs/GATEWAY.md). Staging and tool dumps never reach a real platform: a
+// staging check may only start adapters whose API is a fake on loopback (MARS_GATEWAY_FAKE=1).
+const gatewayEnv = process.env.MARS_DUMP_TOOLS ? {} : STAGING ? loopbackGatewayEnv(process.env) : process.env;
+const gatewayHost = await startGateway({ harness, conversations, context,
+  env: gatewayEnv, discordToken: STAGING ? undefined : connections.getDiscordToken(),
+  ready: async (id) => (await providerReady(await conversations.state(id))) ? null : "Mars cannot answer yet: connect the selected model provider in Mars Settings, then send your message again.",
+  workersOf: (id) => listWorkers({ harness, conversationId: id, context, limit: 20 }) });
+late.gateway = gatewayHost.gateway;
+late.conversations = conversations;
 async function evaluationStatus() {
   try {
     return JSON.parse(await readFile(ROOT + "/evidence/evaluation.json", "utf8"));
@@ -559,7 +599,7 @@ const server = http.createServer(async (req, res) => {
       const cursor = url.searchParams.get("cursor");
       const page = await conversations.listPage({ limit: Number(url.searchParams.get("limit") || 100),
         cursor: cursor ? JSON.parse(Buffer.from(cursor, "base64url").toString()) : undefined });
-      send(res, 200, { conversations: page.items, rootId: String(root.id),
+      send(res, 200, { conversations: await withChannels(harness, context, page.items), rootId: String(root.id),
         nextCursor: page.next ? Buffer.from(JSON.stringify(page.next)).toString("base64url") : null }); return;
     }
     if (url.pathname === "/api/conversations" && req.method === "POST") {
@@ -611,10 +651,11 @@ const server = http.createServer(async (req, res) => {
         pid: process.pid,
         conversationId: String(conversation.id),
         selectedConversationId: String(conversation.id),
-        conversations: await conversations.list(),
+        conversations: await withChannels(harness, context, await conversations.list()),
         workers: (await listWorkers({ harness, conversationId: conversation.id, context })).filter(worker => !worker.workflowId),
         usage: state.docs?.["pi.usage"],
         evaluation: await evaluationStatus(),
+        update: await updates.badge(),
         view: images.browserView(state),
         extensions: extensions.catalogue.map(row => ({ ...row, enabled: plugins.list().find(plugin => plugin.name === row.name)?.enabled !== false, uiEnabled: plugins.isUiEnabled(row.name) })),
         auth: { connected: !!(await credentials.read("openai")), ...oauth.state("openai") },
@@ -641,6 +682,8 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    if (await gatewayRoute({ req, url, res, send, jsonBody, ...gatewayHost })) return;
+    if (await updates.route({ req, url, res, send, jsonBody })) return;
     if (url.pathname === "/api/connections" && req.method === "GET") {
       send(res, 200, connectionStatus());
       return;
@@ -700,6 +743,7 @@ const server = http.createServer(async (req, res) => {
         { type: "input", content: prepared.content, entry: { kind: "mars.user", data: { attachments: prepared.attachments } }, requestId: data.requestId || randomUUID() },
         context,
       );
+      await gatewayHost.gateway.watchSubmission(conversation.id, submission.id);
       send(res, 202, { submissionId: submission.id });
       return;
     }
@@ -806,6 +850,8 @@ attachNextUpgrade(server, (req) => {
   return valid(cookie);
 });
 server.listen(PORT, "127.0.0.1", () => console.log(`Mars Pi agent ready on ${PORT}${STAGING ? " (staging)" : ""}`));
+// Staging and check hosts never check GitHub on a timer.
+if (!STAGING) updates.start();
 let closing = false;
 for (const signal of ["SIGTERM", "SIGINT"])
   process.on(signal, async () => {
@@ -813,6 +859,8 @@ for (const signal of ["SIGTERM", "SIGINT"])
     closing = true;
     oauth.close();
     server.close();
+    updates.stop();
+    await gatewayHost.gateway.close();
     await harness.close(context);
     process.exit(0);
   });

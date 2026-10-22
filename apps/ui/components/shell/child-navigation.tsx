@@ -24,7 +24,12 @@ export function ChildNavigation() {
   const { snapshot, rootId, selectedId, extensionsOpen, selectConversation } = useWorkspace();
   const children = snapshot?.subthreads.filter((child) => child.conversationId === rootId) ?? [];
   // A child's own snapshot does not list its siblings, so keep the open child visible under its parent.
-  if (snapshot?.parentConversationId && !children.some((child) => child.id === snapshot.conversationId))
+  // A side chat also names a parent, but SideChats lists it, so it is not a subthread here.
+  if (
+    snapshot?.parentConversationId &&
+    !snapshot.sideChatOf &&
+    !children.some((child) => child.id === snapshot.conversationId)
+  )
     children.push({
       id: snapshot.conversationId,
       conversationId: snapshot.parentConversationId,

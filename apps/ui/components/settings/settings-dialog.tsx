@@ -1,13 +1,15 @@
 "use client";
 
-import { Check, LayoutGrid, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, Check, LayoutGrid, MessagesSquare, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectionSettings } from "@/components/settings/connection-settings";
+import { GatewaySettings } from "@/components/settings/gateway-settings";
 import { ThemeSettings } from "@/components/settings/theme-settings";
+import { UpdateSettings } from "@/components/settings/update-settings";
 import { useWorkspace } from "@/components/workspace-context";
 import type { LoginState } from "@/lib/pi/live-state";
 import "./settings.css";
@@ -17,6 +19,8 @@ const sections: { id: string; label: string; icon: LucideIcon; summary: string }
   { id: "appearance", label: "Appearance", icon: Palette, summary: "How Mars looks on this device." },
   { id: "connection", label: "Connection", icon: Server, summary: "The Pi host this workspace talks to." },
   { id: "apps", label: "Apps", icon: LayoutGrid, summary: "Private connections Pi can use." },
+  { id: "gateway", label: "Gateway", icon: MessagesSquare, summary: "Chat with Mars from Telegram, Discord and scripts." },
+  { id: "updates", label: "Updates", icon: ArrowDownToLine, summary: "New versions of Mars from GitHub main." },
 ];
 
 type Provider = {
@@ -71,7 +75,7 @@ function ProviderAccount({ provider, auth }: { provider: Provider; auth: LoginSt
   const [answer, setAnswer] = useState("");
   const waiting = auth?.state === "pending";
   return (
-    <section className="live-account" aria-label={`${provider.name} account`}>
+    <section className="live-settings-account" aria-label={`${provider.name} account`}>
       <div className="live-settings-row">
         <div>
           <h3>{provider.name}</h3>
@@ -162,7 +166,7 @@ function Section({ id, children }: { id: string; children: ReactNode }) {
 }
 
 export function SettingsDialog() {
-  const { snapshot, connectionError, settingsOpen, setSettingsOpen, settingsTab, setSettingsTab } =
+  const { snapshot, connectionError, settingsOpen, setSettingsOpen, settingsTab, setSettingsTab, selectConversation } =
     useWorkspace();
   const narrow = useSyncExternalStore(subscribeNarrow, () => matchMedia(narrowQuery).matches, () => false);
   return (
@@ -223,6 +227,17 @@ export function SettingsDialog() {
             </Section>
             <Section id="apps">
               <ConnectionSettings />
+            </Section>
+            <Section id="gateway">
+              <GatewaySettings
+                onOpenConversation={(id) => {
+                  setSettingsOpen(false);
+                  selectConversation(id);
+                }}
+              />
+            </Section>
+            <Section id="updates">
+              <UpdateSettings />
             </Section>
           </div>
         </Tabs>

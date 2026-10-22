@@ -113,7 +113,13 @@ export type ConversationSummary = {
   sideChats: SideChatSummary[];
   /** How many side chats exist in all, when more than the listed page. */
   sideChatTotal: number;
+  /** Chat app this conversation was started from or linked to (docs/GATEWAY.md), or "". */
+  channel: GatewayChannel | "";
 };
+export const GATEWAY_CHANNELS = ["telegram", "discord", "api"] as const;
+export type GatewayChannel = (typeof GATEWAY_CHANNELS)[number];
+const gatewayChannel = (value: unknown): GatewayChannel | "" =>
+  (GATEWAY_CHANNELS as readonly unknown[]).includes(value) ? (value as GatewayChannel) : "";
 export type WorkerSummary = {
   id: string;
   conversationId: string;
@@ -199,7 +205,19 @@ export type LiveSnapshot = {
   conversations: ConversationSummary[];
   workers: WorkerSummary[];
   usage: { label: string; value: number }[];
+  /** Whether a newer Mars is on main (docs/UPDATES.md). */
+  update: UpdateBadge;
 };
+
+export const UPDATE_STATES = ["up_to_date", "ahead", "fast_forward", "merge", "needs_reconcile", "blocked", "updating", "unknown"] as const;
+export type UpdateState = (typeof UPDATE_STATES)[number];
+/** The small update summary /api/state carries (docs/UPDATES.md). */
+export type UpdateBadge = { state: UpdateState; behind: number };
+export function parseUpdateBadge(value: unknown): UpdateBadge {
+  const row = record(value);
+  const state = UPDATE_STATES.find((item) => item === row.state) ?? "unknown";
+  return { state, behind: Number.isInteger(row.behind) && Number(row.behind) >= 0 ? Number(row.behind) : 0 };
+}
 
 export function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -270,6 +288,7 @@ export function parseConversations(value: unknown): ConversationSummary[] {
                   return sideId ? [{ id: sideId, title: string(side.title) || "Side chat", running: side.running === true }] : [];
                 }),
               sideChatTotal: Number.isInteger(row.sideChatTotal) ? Number(row.sideChatTotal) : 0,
+              channel: gatewayChannel(row.channel),
             },
           ]
         : [];
@@ -465,6 +484,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
     parentConversationId: identifier(data.parentConversationId),
     sideChatOf: identifier(data.sideChatOf),
     plan: parsePlan(data.plan),
+    update: parseUpdateBadge(data.update),
     conversationTitle: string(data.conversationTitle),
     subthreads: list(data.subthreads)
       .map(record)

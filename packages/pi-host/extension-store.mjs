@@ -4,10 +4,17 @@ import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { WORK, atomicJson, ROOT } from "./security.mjs";
 export class ExtensionStore {
-  constructor(registry, base = ROOT + "/data") {
+  /**
+   * `builtIn()` returns the host's own extension and tool names. An installed extension may
+   * not reuse one, so it can never replace a host tool such as host_deploy or a whole host
+   * extension such as host-dev (docs/SELF-EDIT.md audit, finding 6).
+   */
+  constructor(registry, base = ROOT + "/data", builtIn = () => ({ extensions: [], tools: [] })) {
     this.registry = registry;
     this.base = base;
+    this.builtIn = builtIn;
     this.catalogue = [];
+    this.skipped = [];
     this.chain = Promise.resolve();
   }
   async boot() {
@@ -16,9 +23,21 @@ export class ExtensionStore {
     } catch (e) {
       if (e.code !== "ENOENT") throw e;
     }
-    for (const row of this.catalogue) await this.load(row);
+    // A tampered package still stops boot (integrity). An installed package that clashes with
+    // a newer built-in Mars name still loads its tasks, hooks and other tools, so its
+    // unfinished tasks resume; only the clashing tools are left out, and that is reported.
+    // A package whose extension name is a Mars name is not loaded at all.
+    this.skipped = [];
+    for (const row of this.catalogue) {
+      try { await this.load(row, { atBoot: true }); }
+      catch (error) {
+        if (!error.nameClash) throw error;
+        this.skipped.push({ name: row.name, error: String(error.message).slice(0, 300) });
+        console.error(`Extension ${row.name} not loaded: ${error.message}`);
+      }
+    }
   }
-  async load(row) {
+  async load(row, { atBoot = false } = {}) {
     const dir = join(this.base, "extensions", row.hash);
     const files = {};
     for (const name of ["manifest.json", "extension.mjs", "client.js"])
@@ -33,7 +52,17 @@ export class ExtensionStore {
       !["tools", "tasks", "hooks", "sections", "wraps"].some(key => Array.isArray(extension[key]) && extension[key].length)
     )
       throw Error("Invalid native Pi extension");
-    for (const t of extension.tools || []) {
+    const host = this.builtIn();
+    const clash = (message) => Object.assign(Error(message), { nameClash: true });
+    if (host.extensions.includes(extension.name))
+      throw clash(`Extension name "${extension.name}" belongs to Mars itself; choose another name`);
+    const clashing = (extension.tools || []).filter((t) => host.tools.includes(t.name)).map((t) => t.name);
+    if (clashing.length && !atBoot) throw clash(`Invalid extension tool: "${clashing[0]}" is a Mars tool; choose another name`);
+    if (clashing.length) {
+      this.skipped.push({ name: row.name, error: `Tools ${clashing.join(", ")} left out: they are Mars tools` });
+      console.error(`Extension ${row.name}: tools ${clashing.join(", ")} left out (Mars tool names)`);
+    }
+    for (const t of (extension.tools || []).filter((tool) => !clashing.includes(tool.name))) {
       if (
         [
           "read",
@@ -58,7 +87,7 @@ export class ExtensionStore {
         throw Error("Invalid extension tool");
     }
     // Keep new plugin schemas discoverable instead of adding every schema to every request.
-    this.registry.install({ ...extension, marsPlugin: { title: row.title, description: row.description, version: row.version, kind: row.kind || "extension", hasUi: true }, tools: (extension.tools || []).map(t => ({ ...t, deferred: true })) });
+    this.registry.install({ ...extension, marsPlugin: { title: row.title, description: row.description, version: row.version, kind: row.kind || "extension", hasUi: true }, tools: (extension.tools || []).filter(t => !clashing.includes(t.name)).map(t => ({ ...t, deferred: true })) });
     return extension;
   }
   install(target) {

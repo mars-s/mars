@@ -63,7 +63,7 @@ const conversations = new Map([
     },
   ],
   ["2", { title: "New conversation", running: false, entries: [] }],
-  ["3", { title: "Weekly reading list", running: false, entries: [] }],
+  ["3", { title: "Weekly reading list", running: false, channel: "telegram", entries: [{ id: 31, model: [{ role: "user", content: text("Add the Hindsight paper to my reading list") }, { role: "assistant", content: text("Added. It is third on this week's list.") }] }] }],
   [
     "7",
     {
@@ -116,11 +116,67 @@ const conversations = new Map([
   ],
 ]);
 
+const gatewayStart = Date.parse("2026-10-22T09:00:00Z");
+const freshGateway = () => ({
+  adapters: [
+    { channel: "api", state: "running", detail: "", failures: 0 },
+    { channel: "telegram", state: "running", detail: "@mars_fixture_bot", failures: 0 },
+    { channel: "discord", state: "failed", detail: "Discord closed the connection (4014): enable the Message Content intent in the Developer Portal", failures: 3 },
+  ],
+  bindings: [{ route: "telegram:999:dm:5550001", channel: "telegram", conversationId: "3", title: "Weekly reading list" }],
+  pairings: [{ code: "K7QX2M9P", channel: "telegram", sender: "5550002", name: "sam_k", expiresAt: new Date(gatewayStart + 3600000).toISOString() }],
+  allowed: { telegram: ["5550001"], api: ["owner"] },
+  outbox: 0,
+  audit: [
+    { at: new Date(gatewayStart + 300000).toISOString(), channel: "telegram", decision: "denied" },
+    { at: new Date(gatewayStart + 240000).toISOString(), channel: "telegram", decision: "accepted", conversationId: "3" },
+    { at: new Date(gatewayStart + 120000).toISOString(), channel: "telegram", decision: "duplicate" },
+    { at: new Date(gatewayStart + 60000).toISOString(), channel: "discord", decision: "adapter_failed" },
+  ],
+});
+let gateway = freshGateway();
+
+// Updates (docs/UPDATES.md): two fixture commits ready on main. Update now steps through the
+// real step names on a timer, then reports updated. Labelled fixture data only.
+const UPDATE_STEPS = ["check", "merge", "tree", "dependencies", "syntax", "build", "runtime", "boot", "checks", "stop", "checkout", "swap_dependencies", "swap_ui", "swap_runtime", "start", "health"];
+const freshUpdates = () => ({
+  head: "c1787bd53fc8",
+  auto: false,
+  startedAt: 0,
+  status: {
+    state: "fast_forward", checkedAt: new Date(Date.now() - 4 * 60000).toISOString(), remote: "origin", branch: "main",
+    head: "c1787bd53fc8", target: "9a41e02b7c10", behind: 2, ahead: 0,
+    commits: ["9a41e02 Fixture: tidy the composer toolbar", "5d0c7a1 Fixture: faster gateway reconnect"],
+    blockers: [], reconciled: false, next: "2 new commits on main. Update when ready.",
+  },
+  last: null,
+});
+let updates = freshUpdates();
+function updateView() {
+  if (updates.startedAt) {
+    const done = Math.floor((Date.now() - updates.startedAt) / 350);
+    if (done >= UPDATE_STEPS.length) {
+      updates.last = { id: "fixture", outcome: "updated", detail: "Now on 9a41e02b7c10.", from: "c1787bd53fc8", result: "9a41e02b7c10", restarted: true, next: "Updated and healthy. Nothing else to do.", steps: UPDATE_STEPS.map((name) => ({ name, status: name === "checks" ? "skipped" : "done" })) };
+      updates.head = "9a41e02b7c10";
+      updates.status = { ...updates.status, state: "up_to_date", head: "9a41e02b7c10", behind: 0, commits: [], checkedAt: new Date().toISOString(), next: "Mars is up to date. Nothing to do." };
+      updates.startedAt = 0;
+    } else {
+      return { running: { id: "fixture", phase: done > 8 ? "switching" : "preparing", step: UPDATE_STEPS[done], steps: UPDATE_STEPS.slice(0, done + 1).map((name, i) => ({ name, status: i < done ? (name === "checks" ? "skipped" : "done") : "running" })) } };
+    }
+  }
+  return { running: null };
+}
+const updateStatus = () => {
+  const { running } = updateView();
+  return { status: updates.status, installed: updates.last ? { commit: updates.head, at: new Date().toISOString() } : null, head: updates.head, settings: { auto: updates.auto }, running, last: running ? null : updates.last };
+};
+
 function state(id) {
   const conversation = conversations.get(id) ?? conversations.get("1");
   return {
     runtime: "Pi Durable 1.3.0 (preview fixture)",
     providerReady: true,
+    update: (() => { const view = updateStatus(); return { state: view.running ? "updating" : view.status.state, behind: view.status.behind }; })(),
     conversationId: id,
     selectedConversationId: id,
     conversationTitle: conversation.title,
@@ -131,6 +187,7 @@ function state(id) {
         id: key,
         title: row.title,
         running: row.running,
+        ...(row.channel ? { channel: row.channel } : {}),
         sideChats: [...conversations].filter(([, side]) => side.sideOf === key).reverse().map(([sideId, side]) => ({ id: sideId, title: side.title, running: side.running })),
       })),
     subthreads: id === "1" ? [{ id: "4", conversationId: "1", title: "Audit service units", status: "running", modelId: "gpt-6-sol", provider: "openai" }] : [],
@@ -483,6 +540,32 @@ createServer(async (req, res) => {
       res.writeHead(200, { ...sandbox, "content-type": file[0], "cache-control": "no-store" });
       return res.end(file[1]);
     }
+  }
+  // Gateway (docs/GATEWAY.md): Telegram linked to conversation 3, one pending pairing.
+  if (url.pathname === "/api/gateway/pairings" && req.method === "POST") {
+    gateway.pairings = gateway.pairings.filter((p) => p.code !== body.code);
+    if (body.approve) gateway.audit.unshift({ at: new Date().toISOString(), channel: "telegram", decision: "paired" });
+    return json(res, 200, { channel: "telegram", sender: "5550002", approved: !!body.approve });
+  }
+  if (url.pathname === "/api/gateway/bindings/delete" && req.method === "POST") {
+    gateway.bindings = gateway.bindings.filter((b) => b.route !== body.route);
+    return json(res, 200, { unbound: body.route });
+  }
+  // Tests reset the fixture gateway first, so one run's approval does not leak into the next.
+  if (url.pathname === "/api/gateway/fixture-reset" && req.method === "POST") return json(res, 200, (gateway = freshGateway()));
+  if (url.pathname === "/api/gateway") return json(res, 200, gateway);
+  if (url.pathname === "/api/update/fixture-reset" && req.method === "POST") { updates = freshUpdates(); if (body.state === "needs_reconcile") Object.assign(updates.status, { state: "needs_reconcile", ahead: 1, blockers: [{ code: "conflict", message: "This copy and main both changed the same lines. Merge them by hand (git merge origin/main) or ask Mars to reconcile.", files: ["apps/ui/components/composer/composer.tsx"] }], next: "This copy and main both changed the same lines." }); return json(res, 200, updateStatus()); }
+  if (url.pathname === "/api/update" && req.method === "GET") return json(res, 200, updateStatus());
+  if (url.pathname === "/api/update/check" && req.method === "POST") { updates.status = { ...updates.status, checkedAt: new Date().toISOString() }; return json(res, 200, updateStatus()); }
+  if (url.pathname === "/api/update/settings" && req.method === "POST") {
+    if (typeof body.auto !== "boolean") return json(res, 400, { error: "Send { auto: true } or { auto: false }" });
+    updates.auto = body.auto;
+    return json(res, 200, updateStatus());
+  }
+  if (url.pathname === "/api/update/apply" && req.method === "POST") {
+    if (!["fast_forward", "merge"].includes(updates.status.state) || updates.startedAt) return json(res, 202, { started: false, outcome: "nothing_to_do", detail: updates.status.next, next: updates.status.next });
+    updates.startedAt = Date.now();
+    return json(res, 202, { started: true, outcome: "started", detail: "Updating to 9a41e02b7c10 (2 new commits).", next: "Mars builds the new version first, then restarts." });
   }
   if (url.pathname === "/api/plugins") return json(res, 200, { plugins: [] });
   if (url.pathname === "/api/connections")

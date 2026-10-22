@@ -28,6 +28,7 @@
     "install:service": "node scripts/install-service.mjs",
     "test:smoke": "node scripts/smoke-install.mjs",
     "test:scripts": "node scripts/run-script-tests.mjs",
-    "host:deploy": "node scripts/deploy-host.mjs"
+    "host:deploy": "node scripts/deploy-host.mjs",
+    "update": "node scripts/update.mjs"
   }
 }

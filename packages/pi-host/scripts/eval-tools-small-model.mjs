@@ -35,20 +35,44 @@ const TASKS = [
   ["I am about to do these myself, one by one: find the video in the PR, work out a CDN URL, add the player, check it plays. Show the owner my checklist with the first step in progress.", "plan_update", (a) => Array.isArray(a.steps) && a.steps.length === 4 && a.steps[0].status === "in_progress"],
   ["I have finished step 1 of my checklist and am starting step 2. Steps: 'Run tests', 'Fix failures', 'Commit'. Update the checklist the owner sees.", "plan_update", (a) => Array.isArray(a.steps) && a.steps[0]?.status === "completed" && a.steps[1]?.status === "in_progress"],
   ["Have helper models do this in the background, in order: first research tide pools, then write a post from that research.", "workflow_start", (a) => Array.isArray(a.steps) && a.steps.length >= 2],
+  // Gateway (docs/GATEWAY.md): the agent answers questions about chat apps with gateway_status.
+  ["Is my Telegram bot connected to Mars right now?", "gateway_status", () => true],
+  ["Is anyone waiting for me to approve them on Discord or Telegram?", "gateway_status", () => true],
+  // Updates (docs/UPDATES.md): status to look, apply to install, reconcile only for conflicts.
+  ["Is there a newer version of Mars on GitHub?", "mars_update_status", (a) => a.refresh !== false],
+  ["Yes, install the Mars update now.", "mars_update_apply", () => true],
+  ["The Mars update has conflicts. Please merge them for me.", "mars_update_reconcile_start", () => true],
+  ["I have fixed the conflicted files in the reconcile worktree. Commit the merge so it can be installed.", "mars_update_reconcile_finish", () => true],
+  ["Did the last deploy of my own host change finish or roll back?", "host_deploy_status", () => true],
+  // Changing Mars itself: isolated worktree, check, then a dry run before any real deploy (docs/SELF-EDIT.md).
+  ["I want to change the Mars host code so plan steps are trimmed. Start that change safely, without touching the live checkout.", "self_edit_start", (a) => typeof a.title === "string" && /plan|trim/i.test(a.title)],
+  ["I have edited files in self-edit trim-plan-steps-3f2a. Check them before committing.", "self_edit_check", (a) => a.id === "trim-plan-steps-3f2a" && (!a.scope || a.scope === "related")],
+  ["Self-edit trim-plan-steps-3f2a passed its checks. Commit it and test it with a dry run, without restarting the host.", "self_edit_finish", (a) => a.id === "trim-plan-steps-3f2a" && (!a.deploy || a.deploy === "dry_run")],
+  ["The dry run of self-edit trim-plan-steps-3f2a passed. Ship it to the live host now.", "self_edit_finish", (a) => a.id === "trim-plan-steps-3f2a" && a.deploy === "deploy"],
+  ["Throw away self-edit trim-plan-steps-3f2a; it is not worth finishing.", "self_edit_abandon", (a) => a.id === "trim-plan-steps-3f2a"],
 ];
 const toTool = (row) => ({ type: "function", function: { name: row.name, description: row.description, parameters: row.parameters ?? { type: "object", properties: {} } } });
 
+// A small model sometimes repeats itself until the server gives up; cap each reply at 400
+// tokens and 120 s and count a capped reply as no call, as harness/runner.mjs does.
 async function ask(tools, task) {
-  const response = await fetch("http://127.0.0.1:11434/api/chat", {
-    method: "POST",
-    body: JSON.stringify({
-      model: MODEL, stream: false, tools, options: { temperature: 0.7, seed: Math.floor(Math.random() * 1e9) },
-      messages: [
-        { role: "system", content: "You are an assistant with tools. Use exactly one tool call to do the user's request." },
-        { role: "user", content: task },
-      ],
-    }),
-  });
+  let response;
+  try {
+    response = await fetch("http://127.0.0.1:11434/api/chat", {
+      method: "POST",
+      signal: AbortSignal.timeout(120000),
+      body: JSON.stringify({
+        model: MODEL, stream: false, tools, options: { temperature: 0.7, seed: Math.floor(Math.random() * 1e9), num_predict: 400 },
+        messages: [
+          { role: "system", content: "You are an assistant with tools. Use exactly one tool call to do the user's request." },
+          { role: "user", content: task },
+        ],
+      }),
+    });
+  } catch (error) {
+    if (error.name === "TimeoutError" || error.cause?.code === "UND_ERR_HEADERS_TIMEOUT") return { name: null, args: null };
+    throw error;
+  }
   const data = await response.json();
   const call = data.message?.tool_calls?.[0]?.function;
   if (!call) return { name: null, args: null };

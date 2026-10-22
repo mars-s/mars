@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { mkdir, readFile, writeFile, readdir, cp, symlink, rm, stat, chmod, copyFile, rename, realpath } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { ROOT, APP, REPO, UI_DIR, PORT, DEPENDENCIES } from './security.mjs';
+import { ROOT, WORK, APP, REPO, UI_DIR, PORT, DEPENDENCIES } from './security.mjs';
+import { guardChanges } from './protected-files.mjs';
 import { join, relative, resolve } from 'node:path';
 import { Type } from '@earendil-works/pi-ai';
 import { defineExtension, defineTool } from '@earendil-works/pi-durable';
@@ -55,7 +56,8 @@ export function freePort() {
 /** Apply a unified diff relative to cwd, refusing patches that touch nothing. */
 export async function applyPatch({ patch, cwd, strip = 1, check = false }) {
   if (!patch.trim()) throw Error('Empty patch');
-  cwd = resolve(cwd);
+  // git reports the real path, so resolve symlinks (macOS /var is /private/var) before comparing.
+  cwd = await realpath(resolve(cwd)).catch(() => { throw Error('Folder not found: ' + cwd + '. Pass a folder relative to the workspace, or an absolute path.'); });
   const top = await sh('git', ['-C', cwd, 'rev-parse', '--show-toplevel']);
   const inRepo = top.code === 0;
   const runIn = inRepo ? top.stdout.trim() : cwd;
@@ -74,7 +76,7 @@ export async function applyPatch({ patch, cwd, strip = 1, check = false }) {
 }
 
 export function createDevTools({
-  root = ROOT, appDir = APP, repo = REPO, subdir = 'packages/pi-host',
+  root = ROOT, appDir = APP, repo = REPO, subdir = 'packages/pi-host', work = WORK,
   service = process.env.MARS_HOST_SERVICE || process.env.MARS_PI_SERVICE || 'mars-pi-host.service', livePort = PORT, deploysDir = root + '/deploys', keep = 12,
   systemdRun = 'systemd-run', bootTimeoutMs = 45000,
 } = {}) {
@@ -116,7 +118,7 @@ export function createDevTools({
   }
 
   /** Build the exact post-deploy app from a commit, run checks and boot it in isolation. Never touches the live app. */
-  async function stage({ ref = 'main', skipChecks = false, skipBoot = false } = {}, signal) {
+  async function stage({ ref = 'main', skipChecks = false, skipBoot = false, agentDeploy = false } = {}, signal) {
     const rev = await sh('git', ['-C', repo, 'rev-parse', '--verify', ref + '^{commit}']);
     if (rev.code !== 0) throw Error('Unknown ref ' + ref + ': ' + rev.stderr.trim());
     const commit = rev.stdout.trim();
@@ -183,6 +185,18 @@ export function createDevTools({
       if (!(await exists(join(appDir, file)))) added.push(file);
       else if (!(await same(join(stageApp, file), join(appDir, file)))) changed.push(file);
     }
+    // Trust boundary (docs/SELF-EDIT.md): when the agent deploys, a commit that changes a
+    // file that judges a change (checks, the deploy gate, the watchdog, the rules) is
+    // refused before anything runs. The owner's own `npm run host:deploy` is not limited.
+    if (agentDeploy) {
+      const refused = guardChanges([...changed.map((path) => ({ status: 'M', path: subdir + '/' + path })), ...added.map((path) => ({ status: 'A', path: subdir + '/' + path }))]);
+      if (refused.length) {
+        const plan = { id, commit, subject, ref, createdAt: new Date().toISOString(), ok: false, refused, changed, added, appOnly, depsChanged, checks: { skipped: true }, boot: { skipped: true }, dir };
+        await writeFile(join(dir, 'plan.json'), JSON.stringify(plan, null, 1), { mode: 0o600 });
+        await prune();
+        return plan;
+      }
+    }
     let checks = { skipped: true };
     if (!skipChecks) {
       const run = await sh(process.execPath, ['run-checks.mjs', '--json'], { cwd: stageApp, env: { MARS_PI_ROOT: stageRoot, MARS_REPO_ROOT: repo, MARS_UI_DIR: UI_DIR, MARS_PUBLIC_ORIGIN: '', MARS_ALLOWED_ORIGINS: '' }, timeoutMs: 600000, signal });
@@ -198,12 +212,16 @@ export function createDevTools({
     return plan;
   }
 
-  async function deploy({ ref = 'main', dryRun = false, skipChecks = false, restartDelaySeconds = 5, force = false } = {}, signal) {
-    const plan = await stage({ ref, skipChecks }, signal);
+  async function deploy({ ref = 'main', dryRun = false, skipChecks = false, restartDelaySeconds = 5, force = false, agentDeploy = false } = {}, signal) {
+    const plan = await stage({ ref, skipChecks, agentDeploy }, signal);
     const summary = { id: plan.id, commit: plan.commit.slice(0, 12), subject: plan.subject, ok: plan.ok, changed: plan.changed, added: plan.added, appOnly: plan.appOnly, depsChanged: plan.depsChanged, checks: plan.checks, boot: plan.boot };
-    if (!plan.ok) { await writeStatus(plan.dir, 'staging_failed', 'Live app untouched'); return { ...summary, status: 'staging_failed', note: 'Live app untouched.' }; }
-    if (dryRun) { await writeStatus(plan.dir, 'dry_run', 'Staging passed; nothing deployed'); return { ...summary, status: 'dry_run' }; }
-    if (!force && !plan.changed.length && !plan.added.length && !plan.depsChanged) { await writeStatus(plan.dir, 'noop', 'Live app already matches'); return { ...summary, status: 'noop' }; }
+    if (plan.refused) {
+      await writeStatus(plan.dir, 'refused', 'Changes a protected file');
+      return { ...summary, refused: plan.refused, status: 'refused', note: 'Live app untouched.', next: `This commit changes ${plan.refused[0].path}, which judges changes to Mars; only the owner deploys that (npm run host:deploy). Revert that file in a new commit and deploy again.` };
+    }
+    if (!plan.ok) { await writeStatus(plan.dir, 'staging_failed', 'Live app untouched'); return { ...summary, status: 'staging_failed', note: 'Live app untouched.', next: 'Nothing was deployed. Fix what checks.failed or boot.error names, commit, and run host_deploy with dryRun: true again.' }; }
+    if (dryRun) { await writeStatus(plan.dir, 'dry_run', 'Staging passed; nothing deployed'); return { ...summary, status: 'dry_run', next: 'Staging passed and nothing was restarted. To ship it, call host_deploy again with the same ref and without dryRun.' }; }
+    if (!force && !plan.changed.length && !plan.added.length && !plan.depsChanged) { await writeStatus(plan.dir, 'noop', 'Live app already matches'); return { ...summary, status: 'noop', next: 'The live host already runs this code. Nothing to do.' }; }
     const backup = await sh('tar', ['-czf', join(plan.dir, 'backup.tgz'), '-C', appDir, '--exclude=./node_modules', '--exclude=./node_modules.prev*', '--exclude=./.backup-*', '.']);
     if (backup.code !== 0) throw Error('Backup failed: ' + backup.stderr);
     if (plan.depsChanged) await writeFile(join(plan.dir, 'deps-changed'), '');
@@ -241,11 +259,11 @@ export function createDevTools({
       defineTool({
         name: 'apply_patch',
         description: `Apply a unified diff to files on disk, all or nothing.
-Use it for changes across several files or large rewrites, in git diff format. Either every hunk applies or nothing changes. Run with check: true first to test without writing. For one exact replacement in one file, edit is simpler. Not run again after an interruption.
+Use it for changes across several files or large rewrites, in git diff format. Either every hunk applies or nothing changes. Run with check: true first to test without writing. For one exact replacement in one file, edit is simpler. To change Mars itself, use self_edit_start first and pass its worktree as cwd. Not run again after an interruption.
 Example: await tools.apply_patch({ cwd: "projects/site", patch: "--- a/README.md\\n+++ b/README.md\\n@@ -1 +1 @@\\n-Old\\n+New\\n", check: true })`,
         parameters: Type.Object({
           patch: Type.String({ minLength: 1, description: 'The unified diff text, as from git diff, with --- a/ and +++ b/ headers.' }),
-          cwd: Type.String({ minLength: 1, description: 'Folder the diff paths are relative to, usually the repository root, e.g. "projects/site".' }),
+          cwd: Type.String({ minLength: 1, description: 'Folder the diff paths are relative to, usually the repository root. Relative to the workspace or absolute, e.g. "projects/site".' }),
           strip: Type.Optional(Type.Integer({ minimum: 0, maximum: 5, default: 1, description: 'Leading path parts to drop, as patch -p. Default 1 removes the a/ and b/ prefixes.' })),
           check: Type.Optional(Type.Boolean({ default: false, description: 'true only tests that the patch applies; nothing is written.' })),
         }),
@@ -260,12 +278,12 @@ Example: await tools.apply_patch({ cwd: "projects/site", patch: "--- a/README.md
             removed: Type.Integer({ description: 'Lines removed.' }),
           })),
         }),
-        execute: async args => output(await applyPatch(args)),
+        execute: async args => output(await applyPatch({ ...args, cwd: resolve(work, args.cwd) })),
       }),
       defineTool({
         name: 'host_deploy',
         description: `Deploy a committed change to the running Mars host, with automatic rollback.
-Use it after committing a change to ${subdir} in ${repo}; the host does not reload by itself. It stages the commit, runs every host check and a test boot, backs up the live app, then restarts ${service}. A watchdog rolls back automatically if the restarted host is unhealthy. Run with dryRun: true first to check without restarting. The restart interrupts running calls, including this one; afterwards call host_deploy_status with the returned id.
+Use it after committing a change to ${subdir} in ${repo}; the host does not reload by itself. For your own change to Mars, self_edit_finish runs this for you after its checks. It stages the commit, runs every host check and a test boot, backs up the live app, then restarts ${service}. A watchdog rolls back automatically if the restarted host is unhealthy. Run with dryRun: true first to check without restarting. The restart interrupts running calls, including this one; afterwards call host_deploy_status with the returned id.
 Example: await tools.host_deploy({ ref: "main", dryRun: true })`,
         parameters: Type.Object({
           ref: Type.Optional(Type.String({ description: 'Git branch, tag or commit to deploy. Default "main".' })),
@@ -276,12 +294,12 @@ Example: await tools.host_deploy({ ref: "main", dryRun: true })`,
         replay: 'unsafe', executionMode: 'sequential', outputLimits: { maxBytes: 20000, maxLines: 300 },
         structuredOutputSchema: Type.Object({
           id: Type.String({ description: 'Deploy id. Pass it to host_deploy_status.' }),
-          status: Type.String({ description: '"scheduled", "dry_run", "noop" or "staging_failed".' }),
+          status: Type.String({ description: '"scheduled", "dry_run", "noop", "staging_failed" or "refused" (the commit changes a protected file).' }),
           ok: Type.Boolean({ description: 'True when staging, checks and the test boot passed.' }),
           note: Type.Optional(Type.String({ description: 'Plain explanation, e.g. "Live app untouched."' })),
-          next: Type.Optional(Type.String({ description: 'What to do after the restart.' })),
+          next: Type.Optional(Type.String({ description: 'What to do next, in plain words.' })),
         }, { additionalProperties: true }),
-        execute: async (args, _api, context) => output(await deploy(args, context?.abortSignal)),
+        execute: async (args, _api, context) => output(await deploy({ ...args, skipChecks: false, agentDeploy: true }, context?.abortSignal)),
       }),
       defineTool({
         name: 'host_deploy_status',
