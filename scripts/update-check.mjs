@@ -17,6 +17,7 @@ export function git(cwd, args, { input, timeoutMs = 60000, env } = {}) {
     child.stderr.on('data', data => { stderr += data; });
     child.on('error', error => { clearTimeout(timer); resolve({ code: -1, stdout, stderr: String(error.message) }); });
     child.on('close', code => { clearTimeout(timer); resolve({ code: code ?? 128, stdout, stderr }); });
+    child.stdin.on('error', () => {}); // a command that exits without reading stdin (EPIPE on Linux)
     child.stdin.end(input ?? '');
   });
 }
