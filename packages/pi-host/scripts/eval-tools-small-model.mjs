@@ -38,6 +38,12 @@ const TASKS = [
   // Gateway (docs/GATEWAY.md): the agent answers questions about chat apps with gateway_status.
   ["Is my Telegram bot connected to Mars right now?", "gateway_status", () => true],
   ["Is anyone waiting for me to approve them on Discord or Telegram?", "gateway_status", () => true],
+  // Updates (docs/UPDATES.md): status to look, apply to install, reconcile only for conflicts.
+  ["Is there a newer version of Mars on GitHub?", "mars_update_status", (a) => a.refresh !== false],
+  ["Yes, install the Mars update now.", "mars_update_apply", () => true],
+  ["The Mars update has conflicts. Please merge them for me.", "mars_update_reconcile_start", () => true],
+  ["I have fixed the conflicted files in the reconcile worktree. Commit the merge so it can be installed.", "mars_update_reconcile_finish", () => true],
+  ["Did the last deploy of my own host change finish or roll back?", "host_deploy_status", () => true],
   // Changing Mars itself: isolated worktree, check, then a dry run before any real deploy (docs/SELF-EDIT.md).
   ["I want to change the Mars host code so plan steps are trimmed. Start that change safely, without touching the live checkout.", "self_edit_start", (a) => typeof a.title === "string" && /plan|trim/i.test(a.title)],
   ["I have edited files in self-edit trim-plan-steps-3f2a. Check them before committing.", "self_edit_check", (a) => a.id === "trim-plan-steps-3f2a" && (!a.scope || a.scope === "related")],

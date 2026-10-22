@@ -17,8 +17,10 @@ export const PROTECTED = [
   [/^packages\/pi-host\/workbench\/test-host\.mjs$/, 'is the test host many checks share'],
   [/^packages\/pi-host\/tsconfig\.json$/, 'holds the names and imports check settings'],
   [/^scripts\/(check-[^/]*|test-[^/]*|run-script-tests)\.mjs$/, 'is a root gate or its test'],
+  [/^scripts\/(update|update-check|run)\.mjs$/, 'installs updates and undoes a failed one'],
+  [/^packages\/pi-host\/updates\.mjs$/, 'starts updates and decides when they install'],
   [/^architecture-policy\.json$/, 'holds the workspace boundary rules'],
-  [/^(AGENTS\.md|\.agents\/DECISIONS\.md|\.agents\/verification\.md|docs\/SELF-EDIT\.md)$/, 'holds the rules for changing Mars'],
+  [/^(AGENTS\.md|\.agents\/DECISIONS\.md|\.agents\/verification\.md|docs\/SELF-EDIT\.md|docs\/UPDATES\.md)$/, 'holds the rules for changing Mars'],
   [/^(\.gitignore|\.github\/.*)$/, 'decides what may be committed, or runs CI'],
 ];
 export const NEVER = [

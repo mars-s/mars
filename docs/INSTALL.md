@@ -49,6 +49,22 @@ up code, restarts the configured service and rolls back if unhealthy. The same
 flow is available to Pi as host_deploy. It requires Linux user services; manual
 launch mode does not promise automatic host restarts.
 
+## Update from GitHub
+
+docs/UPDATES.md has the design. On a server with the user services installed:
+
+```sh
+npm run update -- check
+npm run update -- apply
+```
+
+Check fetches main and says whether an update is ready. Apply builds the new version
+beside the running one, restarts both services and goes back to the old version if the
+new one is unhealthy. Settings, Updates does the same from the browser, and can install
+updates automatically. Local commits are merged with main; a merge that conflicts waits
+for you (or for Mars, if you ask it to reconcile). Without the user services, stop Mars
+first; apply then updates the files and you start Mars again.
+
 ## Production and Linux startup
 
 ```sh
@@ -93,6 +109,8 @@ Important environment settings:
 | MARS_PUBLIC_ORIGIN | Explicit trusted proxy origin |
 | MARS_ALLOWED_ORIGINS | Explicit additional proxy origins |
 | MARS_PI_SERVICE | Native host service name for self-deployment |
+| MARS_UPDATE_CHECK_HOURS | Hours between update checks, default 6; 0 turns them off |
+| MARS_UPDATE_REMOTE, MARS_UPDATE_BRANCH | Where updates come from, default origin and main |
 | MARS_GATEWAY_TELEGRAM | `1` starts the Telegram chat client (docs/GATEWAY.md) |
 | MARS_TELEGRAM_TOKEN | Telegram bot token from BotFather |
 | MARS_TELEGRAM_OWNER | Your own Telegram user id(s), comma separated |

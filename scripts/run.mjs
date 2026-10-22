@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { checkRuntime } from './check-runtime.mjs';
 import { bootstrap, childEnvironment, configuration, loadEnvironment } from './setup.mjs';
+import { createUpdater } from './update.mjs';
 
 // Own each descendant group so Ctrl+C, systemd stop and one failed service stop the whole launch.
 export async function supervise(commands, { env = process.env, graceMs = 5000, onSpawn } = {}) {
@@ -61,6 +62,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   checkRuntime(); loadEnvironment();
   const mode = process.argv[2] || 'development', role = process.argv[3] || 'all';
   const config = await bootstrap(configuration());
+  // An update killed while switching over is undone before anything starts (docs/UPDATES.md).
+  const recovered = await createUpdater(config).recover();
+  if (recovered) console.log(`Mars update ${recovered.id}: ${recovered.outcome}. ${recovered.detail}`);
   if (role === 'all') console.log(`Mars ${mode}. Sign in: ${config.signInUrl}`);
   process.exitCode = await supervise(commands(config, mode, role), {
     env: { ...childEnvironment(config), MARS_BUILD_CHECK: mode === 'production' ? '1' : '0' },

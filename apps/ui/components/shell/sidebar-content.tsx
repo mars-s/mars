@@ -32,7 +32,16 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
     setSidebarOpen(false);
   };
   const extensionCount = snapshot?.extensions.length ?? 0;
-  const readiness = !snapshot ? "Connecting" : canChat ? "Model ready" : "Model not connected";
+  const updateReady = snapshot?.update.state === "fast_forward" || snapshot?.update.state === "merge";
+  const readiness = !snapshot
+    ? "Connecting"
+    : snapshot.update.state === "updating"
+      ? "Updating Mars"
+      : updateReady
+        ? "Update available"
+        : canChat
+          ? "Model ready"
+          : "Model not connected";
   return (
     <>
       <div className="live-brand">
@@ -121,7 +130,7 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
         aria-label="Open settings"
         aria-describedby={accountId}
         title={hint(`Pi workspace, ${readiness}`)}
-        onClick={() => openSettings()}
+        onClick={() => openSettings(updateReady || snapshot?.update.state === "updating" ? "updates" : undefined)}
       >
         <span className="live-avatar" aria-hidden="true">
           P
@@ -129,7 +138,7 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
         </span>
         <span className="live-nav-label live-account-text" id={accountId}>
           <span>Pi workspace</span>
-          <small>{readiness}</small>
+          <small data-update={updateReady || snapshot?.update.state === "updating" ? "" : undefined}>{readiness}</small>
         </span>
       </button>
     </>

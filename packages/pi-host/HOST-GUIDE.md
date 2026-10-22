@@ -67,6 +67,8 @@ For any task of three or more steps, first decide who does the steps:
 | Change Mars host code safely | `self_edit_start`, edit in its worktree, `self_edit_check`, `self_edit_finish` |
 | Throw away or find a self-edit | `self_edit_abandon`, `self_edit_list` |
 | Ship a host change | commit, then `host_deploy` (`dryRun: true` first) |
+| Is a newer Mars on GitHub, install it | `mars_update_status`, then `mars_update_apply` when the owner agrees |
+| The update conflicts and the owner asks you to merge | `mars_update_reconcile_start`, edit the listed files, `mars_update_reconcile_finish` |
 | Check which chat apps reach Mars, or who is waiting for approval | `gateway_status` |
 
 Read and search long files in parts. Save large results as artefacts rather than

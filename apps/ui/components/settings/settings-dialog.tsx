@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, LayoutGrid, MessagesSquare, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, Check, LayoutGrid, MessagesSquare, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectionSettings } from "@/components/settings/connection-settings";
 import { GatewaySettings } from "@/components/settings/gateway-settings";
 import { ThemeSettings } from "@/components/settings/theme-settings";
+import { UpdateSettings } from "@/components/settings/update-settings";
 import { useWorkspace } from "@/components/workspace-context";
 import type { LoginState } from "@/lib/pi/live-state";
 import "./settings.css";
@@ -19,6 +20,7 @@ const sections: { id: string; label: string; icon: LucideIcon; summary: string }
   { id: "connection", label: "Connection", icon: Server, summary: "The Pi host this workspace talks to." },
   { id: "apps", label: "Apps", icon: LayoutGrid, summary: "Private connections Pi can use." },
   { id: "gateway", label: "Gateway", icon: MessagesSquare, summary: "Chat with Mars from Telegram, Discord and scripts." },
+  { id: "updates", label: "Updates", icon: ArrowDownToLine, summary: "New versions of Mars from GitHub main." },
 ];
 
 type Provider = {
@@ -233,6 +235,9 @@ export function SettingsDialog() {
                   selectConversation(id);
                 }}
               />
+            </Section>
+            <Section id="updates">
+              <UpdateSettings />
             </Section>
           </div>
         </Tabs>

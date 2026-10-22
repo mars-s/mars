@@ -13,6 +13,7 @@ import { createVmControl } from "./vm-control.mjs";
 import { createWebSearchExtension } from "./web-search.mjs";
 import { createDevTools } from "./dev-tools.mjs";
 import { createSelfEdit } from "./self-edit.mjs";
+import { createUpdates } from "./updates.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
@@ -41,7 +42,7 @@ import {
   defineTask,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { ROOT, WORK, APP, PORT, UI_PORT, DEPENDENCIES, requestPolicy, Credentials, atomicJson } from "./security.mjs";
+import { ROOT, WORK, APP, REPO, PORT, UI_PORT, DEPENDENCIES, requestPolicy, Credentials, atomicJson } from "./security.mjs";
 import { ExtensionStore } from "./extension-store.mjs";
 import { UiPatchStore } from "./ui-patches.mjs";
 await mkdir(ROOT + "/data", { recursive: true, mode: 0o700 });
@@ -158,6 +159,9 @@ registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
 registry.install(createGatewayExtension({ gateway: () => late.gateway }));
 registry.install(createSelfEdit().extension);
+// Updates from GitHub main (docs/UPDATES.md). conversations is created later; busy() runs after boot.
+const updates = createUpdates({ repo: REPO, root: ROOT, busy: async () => (await late.conversations.list()).some((row) => row.running) });
+registry.install(updates.extension);
 // Host names are captured before installed extensions load, so none can replace them.
 const hostNames = { extensions: plugins.definitions().map((row) => row.extension).filter((name, i, all) => all.indexOf(name) === i), tools: plugins.definitions().map((row) => row.tool.name) };
 const extensions = new ExtensionStore(registry, undefined, () => hostNames);
@@ -412,6 +416,7 @@ const gatewayHost = await startGateway({ harness, conversations, context,
   ready: async (id) => (await providerReady(await conversations.state(id))) ? null : "Mars cannot answer yet: connect the selected model provider in Mars Settings, then send your message again.",
   workersOf: (id) => listWorkers({ harness, conversationId: id, context, limit: 20 }) });
 late.gateway = gatewayHost.gateway;
+late.conversations = conversations;
 async function evaluationStatus() {
   try {
     return JSON.parse(await readFile(ROOT + "/evidence/evaluation.json", "utf8"));
@@ -650,6 +655,7 @@ const server = http.createServer(async (req, res) => {
         workers: (await listWorkers({ harness, conversationId: conversation.id, context })).filter(worker => !worker.workflowId),
         usage: state.docs?.["pi.usage"],
         evaluation: await evaluationStatus(),
+        update: await updates.badge(),
         view: images.browserView(state),
         extensions: extensions.catalogue.map(row => ({ ...row, enabled: plugins.list().find(plugin => plugin.name === row.name)?.enabled !== false, uiEnabled: plugins.isUiEnabled(row.name) })),
         auth: { connected: !!(await credentials.read("openai")), ...oauth.state("openai") },
@@ -677,6 +683,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (await gatewayRoute({ req, url, res, send, jsonBody, ...gatewayHost })) return;
+    if (await updates.route({ req, url, res, send, jsonBody })) return;
     if (url.pathname === "/api/connections" && req.method === "GET") {
       send(res, 200, connectionStatus());
       return;
@@ -843,6 +850,8 @@ attachNextUpgrade(server, (req) => {
   return valid(cookie);
 });
 server.listen(PORT, "127.0.0.1", () => console.log(`Mars Pi agent ready on ${PORT}${STAGING ? " (staging)" : ""}`));
+// Staging and check hosts never check GitHub on a timer.
+if (!STAGING) updates.start();
 let closing = false;
 for (const signal of ["SIGTERM", "SIGINT"])
   process.on(signal, async () => {
@@ -850,6 +859,7 @@ for (const signal of ["SIGTERM", "SIGINT"])
     closing = true;
     oauth.close();
     server.close();
+    updates.stop();
     await gatewayHost.gateway.close();
     await harness.close(context);
     process.exit(0);

@@ -205,7 +205,19 @@ export type LiveSnapshot = {
   conversations: ConversationSummary[];
   workers: WorkerSummary[];
   usage: { label: string; value: number }[];
+  /** Whether a newer Mars is on main (docs/UPDATES.md). */
+  update: UpdateBadge;
 };
+
+export const UPDATE_STATES = ["up_to_date", "ahead", "fast_forward", "merge", "needs_reconcile", "blocked", "updating", "unknown"] as const;
+export type UpdateState = (typeof UPDATE_STATES)[number];
+/** The small update summary /api/state carries (docs/UPDATES.md). */
+export type UpdateBadge = { state: UpdateState; behind: number };
+export function parseUpdateBadge(value: unknown): UpdateBadge {
+  const row = record(value);
+  const state = UPDATE_STATES.find((item) => item === row.state) ?? "unknown";
+  return { state, behind: Number.isInteger(row.behind) && Number(row.behind) >= 0 ? Number(row.behind) : 0 };
+}
 
 export function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -472,6 +484,7 @@ export function parseSnapshot(value: unknown): LiveSnapshot {
     parentConversationId: identifier(data.parentConversationId),
     sideChatOf: identifier(data.sideChatOf),
     plan: parsePlan(data.plan),
+    update: parseUpdateBadge(data.update),
     conversationTitle: string(data.conversationTitle),
     subthreads: list(data.subthreads)
       .map(record)
