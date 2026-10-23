@@ -540,3 +540,8 @@ Built by three helper agents in their own worktrees (day/connectors, day/schedul
 - New packages/pi-host/lanes.mjs (spec docs/LANES.md): lane_start gives a chat its own worktree and branch (lane/<id>) beside the checkout, with node_modules linked; lane_preview runs that lane's own host (fresh data root, owner token only) and webpack dev interface as memory-limited transient user services, published in the tailnet with tailscale serve on 8601 and up; lane_submit commits and queues it. The queue merges one lane at a time in order: rebase onto main, protected-files guard, syntax, interface types and lint for changed UI files, and the host checks the change reaches, then a fast-forward of main and cleanup. A conflict or failed check blocks only that lane. Restart recovery is idempotent.
 - Settings, Lanes lists lanes with state, preview link and chat, the queue with up and down, "Merge automatically" and "Merge now". Routes /api/lanes*.
 - check-lanes.mjs covers parallel order, conflicts, the guard, reached checks, pause and reorder, a dirty checkout and restart recovery. HOST-GUIDE.md points agents to lanes.
+
+## 2026-10-23 Resizable sidebar, on by default (built in the first lane)
+
+- Drag the sidebar's right edge to resize it (220 to 480 px), or focus the handle and use the arrow keys (Shift for bigger steps), Home, End or Enter; double-click resets to 288 px. The width is kept per browser (localStorage mars-sidebar-width) and collapse still goes to 56 px without a handle. tests/sidebar-resize-ui-check.mjs covers drag, clamping, keeping, keyboard, reset and collapse, and fails on the old sidebar.
+- Built and tried in lane resizable-sidebar-9e03 with its own preview, then merged through the lane queue (docs/LANES.md).

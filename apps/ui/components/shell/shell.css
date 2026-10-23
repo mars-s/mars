@@ -26,12 +26,52 @@
   line-height: 20px;
 }
 .live-sidebar {
-  width: 288px;
+  position: relative;
+  width: var(--live-sidebar-width, 288px);
   overflow: hidden;
   border-right: 1px solid var(--sidebar-border);
 }
 .live-sidebar[data-settled] {
   transition: width 200ms var(--ease-out);
+}
+/* Dragging follows the pointer exactly; the width animates only for collapse. */
+.live-sidebar[data-resizing] {
+  transition: none;
+  user-select: none;
+}
+/* The drag handle on the right edge (sidebar.tsx). A thin line shows on hover and focus. */
+.live-sidebar-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.live-sidebar-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--sidebar-ring);
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
+}
+.live-sidebar-resize:hover::after,
+.live-sidebar-resize:focus-visible::after,
+.live-sidebar[data-resizing] .live-sidebar-resize::after {
+  opacity: 0.7;
+}
+.live-sidebar-resize:focus-visible {
+  outline: none;
+}
+.live-sidebar[data-resizing],
+.live-sidebar[data-resizing] * {
+  cursor: col-resize;
 }
 .live-sidebar[data-collapsed] {
   width: 56px;
