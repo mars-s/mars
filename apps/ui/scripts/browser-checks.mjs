@@ -3,7 +3,7 @@
 // each check against http://localhost:<port>/ (the dev proxy compares the Origin with the page's
 // own host name, so use localhost, not 127.0.0.1), and stops only the processes it started.
 import { spawn } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const ui = fileURLToPath(new URL("..", import.meta.url));
@@ -61,3 +61,5 @@ console.log(`\n${results.length - failed.length} of ${results.length} browser ch
 process.exitCode = failed.length ? 1 : 0;
 stop();
 if (nextEnvText !== undefined) await writeFile(nextEnv, nextEnvText);
+// The dev server's files in .next-build break the next production build there; remove them.
+await rm(new URL("../.next-build/dev", import.meta.url), { recursive: true, force: true });
