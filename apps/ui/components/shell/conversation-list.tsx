@@ -5,6 +5,7 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import {
@@ -17,6 +18,8 @@ import {
   Folder,
   MessageSquareDashed,
   Pencil,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +35,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -86,13 +90,14 @@ export function ConversationList() {
   const { conversations, selectedId, extensionsOpen } = useWorkspace();
   const [folded, toggle] = useFolded();
   const [naming, setNaming] = useState<Naming>(null);
-  const { groups, recents, archived } = useMemo(() => {
-    const live = conversations.filter((row) => !row.archived);
+  const { pinned, groups, recents, archived } = useMemo(() => {
+    const live = conversations.filter((row) => !row.archived && !row.pinned);
     const byGroup = new Map<string, ConversationSummary[]>();
     for (const row of live)
       if (row.group)
         byGroup.set(row.group, [...(byGroup.get(row.group) ?? []), row]);
     return {
+      pinned: conversations.filter((row) => row.pinned && !row.archived),
       groups: [...byGroup.entries()].sort(([a], [b]) =>
         a.localeCompare(b, undefined, { sensitivity: "base" }),
       ),
@@ -114,6 +119,8 @@ export function ConversationList() {
     !extensionsOpen && list.some((row) => row.id === selectedId);
   return (
     <>
+      {pinned.length > 0 && <p className="live-section-label">Pinned</p>}
+      {rows(pinned)}
       {groups.map(([name, list]) => (
         <section key={name} className="live-group" aria-label={`Group ${name}`}>
           <SectionToggle
@@ -218,6 +225,19 @@ function ConversationRow({
   const organise = (change: Parameters<typeof organiseConversation>[1]) =>
     safely(organiseConversation(conversation.id, change));
   const others = groupNames.filter((name) => name !== conversation.group);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const rename = () => onName({ kind: "rename", id: conversation.id, title: conversation.title });
+  const togglePin = () => organise({ pinned: !conversation.pinned });
+  const toggleArchive = () => organise({ archived: !conversation.archived });
+  /** Single-letter shortcuts while the menu is open: R rename, P pin, A archive. */
+  const menuHotkeys = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const run = { r: rename, p: togglePin, a: toggleArchive }[event.key.toLowerCase()];
+    if (!run) return;
+    event.preventDefault();
+    setMenuOpen(false);
+    run();
+  };
   return (
     <div>
       <div className="live-conversation-row">
@@ -240,7 +260,7 @@ function ConversationRow({
             </>
           )}
         </button>
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
@@ -254,12 +274,17 @@ function ConversationRow({
             align="start"
             side="bottom"
             className="live-conversation-menu-content"
+            onKeyDown={menuHotkeys}
           >
-            <DropdownMenuItem
-              onSelect={() => onName({ kind: "rename", id: conversation.id, title: conversation.title })}
-            >
+            <DropdownMenuItem onSelect={rename}>
               <Pencil aria-hidden="true" />
               Rename
+              <DropdownMenuShortcut>R</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={togglePin}>
+              {conversation.pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
+              {conversation.pinned ? "Unpin" : "Pin"}
+              <DropdownMenuShortcut>P</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
@@ -296,7 +321,7 @@ function ConversationRow({
             </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onSelect={() => organise({ archived: !conversation.archived })}
+              onSelect={toggleArchive}
             >
               {conversation.archived ? (
                 <ArchiveRestore aria-hidden="true" />
@@ -304,6 +329,7 @@ function ConversationRow({
                 <Archive aria-hidden="true" />
               )}
               {conversation.archived ? "Unarchive" : "Archive"}
+              <DropdownMenuShortcut>A</DropdownMenuShortcut>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

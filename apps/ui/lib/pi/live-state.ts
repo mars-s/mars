@@ -124,6 +124,8 @@ export type ConversationSummary = {
   group: string;
   /** Archived chats leave Recents for the Archived section; they still open and run. */
   archived: boolean;
+  /** Pinned chats sit above groups and Recents. */
+  pinned: boolean;
   /** Chat app this conversation was started from or linked to (docs/GATEWAY.md), or "". */
   channel: GatewayChannel | "";
 };
@@ -342,6 +344,7 @@ export function parseConversations(value: unknown): ConversationSummary[] {
               sideChatTotal: Number.isInteger(row.sideChatTotal) ? Number(row.sideChatTotal) : 0,
               group: string(row.group).trim(),
               archived: row.archived === true,
+              pinned: row.pinned === true,
               channel: gatewayChannel(row.channel),
             },
           ]

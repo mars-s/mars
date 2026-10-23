@@ -8,7 +8,7 @@ import type { ConversationSummary, LiveSnapshot } from "@/lib/pi/live-state";
  * components read it here instead of receiving props through each layer.
  */
 /** A change to how a chat is filed. Only the given fields change; group "" means ungrouped. */
-export type ConversationChange = { title?: string; group?: string; archived?: boolean };
+export type ConversationChange = { title?: string; group?: string; archived?: boolean; pinned?: boolean };
 
 export type Workspace = {
   snapshot: LiveSnapshot | null;

@@ -47,7 +47,7 @@ await page.route("**/api/**", async (route) => {
   requests.push({ path: url.pathname, body });
   if (url.pathname === "/api/conversations/organise") {
     const row = conversations.find((item) => String(item.id) === body.conversationId);
-    Object.assign(row, body.title ? { title: body.title } : {}, "group" in body ? { group: body.group } : {}, "archived" in body ? { archived: body.archived } : {});
+    Object.assign(row, body.title ? { title: body.title } : {}, "group" in body ? { group: body.group } : {}, "archived" in body ? { archived: body.archived } : {}, "pinned" in body ? { pinned: body.pinned } : {});
     return route.fulfill({ json: { conversation: row } });
   }
   if (url.pathname === "/api/conversations") {
@@ -79,6 +79,28 @@ try {
   await page.screenshot({ path: `${evidence}/archived.png` });
   await menuFor("Release notes");
   await page.getByRole("menuitem", { name: "Unarchive" }).click();
+  await sidebar.getByRole("button", { name: /^Archived/ }).waitFor({ state: "detached" });
+  assert.deepEqual(organised().at(-1), { conversationId: "3", archived: false });
+
+  // Menu hotkeys: P pins and unpins, A archives and unarchives, and each closes the menu.
+  await menuFor("Release notes");
+  await page.keyboard.press("p");
+  await sidebar.getByText("Pinned", { exact: true }).waitFor();
+  assert.deepEqual(organised().at(-1), { conversationId: "3", pinned: true });
+  assert.equal(await page.getByRole("menu").count(), 0, "a hotkey closes the menu");
+  await page.screenshot({ path: `${evidence}/pinned.png` });
+  await menuFor("Release notes");
+  await page.getByRole("menuitem", { name: "Unpin" }).waitFor();
+  await page.keyboard.press("p");
+  await sidebar.getByText("Pinned", { exact: true }).waitFor({ state: "detached" });
+  assert.deepEqual(organised().at(-1), { conversationId: "3", pinned: false });
+  await menuFor("Release notes");
+  await page.keyboard.press("a");
+  await sidebar.getByRole("button", { name: /^Archived/ }).waitFor();
+  assert.deepEqual(organised().at(-1), { conversationId: "3", archived: true });
+  // Archived is already unfolded from the check above; the browser remembers it.
+  await menuFor("Release notes");
+  await page.keyboard.press("a");
   await sidebar.getByRole("button", { name: /^Archived/ }).waitFor({ state: "detached" });
   assert.deepEqual(organised().at(-1), { conversationId: "3", archived: false });
 

@@ -53,6 +53,7 @@ export function createConversationManager({ harness, root, context, defaultAgent
       running: !!live?.run,
       group: filed?.group || '',
       archived: filed?.archived === true,
+      pinned: filed?.pinned === true,
     };
   }
   /** A top-level row with its newest side chats nested inside it, and how many there are. */
@@ -120,20 +121,22 @@ export function createConversationManager({ harness, root, context, defaultAgent
       return conversation;
     },
     /**
-     * File a conversation: rename it, move a top-level chat to a group ('' for none), or archive
+     * File a conversation: rename it, move or pin a top-level chat (group '' for none), or archive
      * any chat, side chat or sub-thread. Only the fields given change.
      */
-    async organise({ conversationId, title: label, group, archived } = {}) {
+    async organise({ conversationId, title: label, group, archived, pinned } = {}) {
       if (!/^\d+$/.test(String(conversationId ?? ''))) throw fail('conversationId must be a conversation id');
       const conversation = await resolve(String(conversationId));
       const record = await harness.commit(tx => tx.conversation(conversation.id), context);
       const nested = record.owner ? 'A sub-thread' : (await sideChatParent(harness, conversation.id, context)) ? 'A side chat' : '';
       if (nested && group !== undefined) throw fail(`${nested} stays under its parent; only top-level chats go in groups`);
+      if (nested && pinned !== undefined) throw fail(`${nested} stays under its parent; only top-level chats can be pinned`);
       if (label !== undefined && (typeof label !== 'string' || !oneLine(label, 160))) throw fail('title must be non-empty text');
       if (group !== undefined && typeof group !== 'string') throw fail('group must be text');
       if (group !== undefined && group.trim().length > GROUP_MAX) throw fail(`group must be at most ${GROUP_MAX} characters`);
       if (archived !== undefined && typeof archived !== 'boolean') throw fail('archived must be true or false');
-      if (label === undefined && group === undefined && archived === undefined) throw fail('Nothing to change: give title, group or archived');
+      if (pinned !== undefined && typeof pinned !== 'boolean') throw fail('pinned must be true or false');
+      if (label === undefined && group === undefined && archived === undefined && pinned === undefined) throw fail('Nothing to change: give title, group, archived or pinned');
       await conversation.commit(async tx => {
         if (label !== undefined) {
           // The owner's own name: the background model never replaces it.
@@ -141,10 +144,11 @@ export function createConversationManager({ harness, root, context, defaultAgent
           doc.title = oneLine(label, 160);
           doc.auto = false;
         }
-        if (group !== undefined || archived !== undefined) {
+        if (group !== undefined || archived !== undefined || pinned !== undefined) {
           const filed = await tx.doc(OrganiseDoc, conversation.id);
           if (group !== undefined) filed.group = oneLine(group, GROUP_MAX);
           if (archived !== undefined) filed.archived = archived;
+          if (pinned !== undefined) filed.pinned = pinned;
         }
       }, context);
       return row(record);

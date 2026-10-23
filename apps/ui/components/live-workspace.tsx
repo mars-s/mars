@@ -206,6 +206,7 @@ export function LiveWorkspace() {
                 sideChatTotal: 0,
                 group: "",
                 archived: false,
+                pinned: false,
                 channel: "",
               },
             ],
@@ -339,7 +340,7 @@ export function LiveWorkspace() {
         );
     }
   };
-  /** Rename, regroup or archive a top-level chat. Rows update at once and the host confirms. */
+  /** Rename, regroup, pin or archive a top-level chat. Rows update at once and the host confirms. */
   const organiseConversation = async (id: string, change: ConversationChange) => {
     const before = conversations;
     setConversations((rows) =>
@@ -350,6 +351,7 @@ export function LiveWorkspace() {
               ...(change.title !== undefined ? { title: change.title.trim() || row.title } : {}),
               ...(change.group !== undefined ? { group: change.group.trim() } : {}),
               ...(change.archived !== undefined ? { archived: change.archived } : {}),
+              ...(change.pinned !== undefined ? { pinned: change.pinned } : {}),
             }
           : row.sideChats.some((side) => side.id === id)
             ? {
