@@ -10,7 +10,7 @@ function viewOf(task,includeResults=false){
  return {id:String(task.id),conversationId:String(task.conversationId),title:task.input.title,status,
  currentStep:saved.index??0,startedAt:task.input.startedAt,...(saved.finishedAt?{finishedAt:saved.finishedAt}:{}),
  ...(task.state.outcome?.error?{error:task.state.outcome.error.message}:{}),
- steps:(saved.steps||task.input.steps.map((step,index)=>({index,title:step.title,status:'pending',...step.selection}))).map(step=>{
+ steps:(saved.steps||task.input.steps.map((step,index)=>({index,title:step.title,...(step.phase?{phase:step.phase}:{}),status:'pending',...step.selection}))).map(step=>{
   const {result,...metadata}=step;return {...metadata,...(includeResults&&result?{result}:{})};
  })};
 }
@@ -23,7 +23,7 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
   },ctx);
  }
  const workflow=defineTask({name:KIND,version:1,
-  initial:input=>({phase:'launch',index:0,steps:input.steps.map((step,index)=>({index,title:step.title,status:'pending',...step.selection}))}),
+  initial:input=>({phase:'launch',index:0,steps:input.steps.map((step,index)=>({index,title:step.title,...(step.phase?{phase:step.phase}:{}),status:'pending',...step.selection}))}),
   phases:{
    launch:async(task,runtime,ctx)=>{
     const state=task.state.checkpoint;
@@ -67,6 +67,7 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
  });
  const step=Type.Object({
   title:Type.String({minLength:1,maxLength:160,description:'Short name for this step, e.g. "Draft outline".'}),
+  phase:Type.Optional(Type.String({minLength:1,maxLength:60,description:'Phase this step belongs to, e.g. "Research", "Build" or "Review". Consecutive steps with the same phase are grouped in the Background tasks panel. You choose the phases per workflow.'})),
   prompt:Type.String({minLength:1,maxLength:16000,description:'Complete brief for this step. It also receives the previous step\'s answer, and nothing else from this chat.'}),
   model:Type.Optional(Type.Union([Type.Literal('luna'),Type.Literal('sol'),Type.Literal('astra'),Type.Literal('opus')],{default:'luna',description:'luna: fast and cheap (default). sol: strong all-rounder. astra: hardest reasoning. opus: Claude, for writing.'})),
   provider:Type.Optional(Type.String({description:'Advanced: exact provider, e.g. "openai". Use with modelId instead of model.'})),
@@ -89,7 +90,7 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
  const make=(name,description,parameters,result,execute,prepareArguments)=>defineTool({name,description,parameters,deferred:true,replay:'safe',executionMode:'parallel',structuredOutputSchema:result,outputLimits:{maxBytes:10000},...(prepareArguments?{prepareArguments}:{}),execute:async(args,api,ctx)=>{const value=await execute(args,api,ctx);return{output:[{type:'text',text:JSON.stringify(value)}],structuredOutput:value};}});
  const tools=[
   make('workflow_start',`Have helper models run several steps one after another in the background, each using the previous step's answer.
-Use it for multi-stage work where each step builds on the last, e.g. research, then outline, then draft: put one entry per stage in steps. Each step gets its own brief plus the previous step's answer. It returns at once with workflowId; check progress and answers with workflow_status. It keeps running after a restart. For independent jobs at the same time, use worker_fanout.
+Use it for multi-stage work where each step builds on the last, e.g. research, then outline, then draft: put one entry per stage in steps. Optionally group steps into phases you define (e.g. Research, Build, Review) by giving each step a phase. Each step gets its own brief plus the previous step's answer. It returns at once with workflowId; check progress and answers with workflow_status. It keeps running after a restart. For independent jobs at the same time, use worker_fanout.
 Example: const { workflowId } = await tools.workflow_start({ title: "Blog post", steps: [{ title: "Research", prompt: "List 5 facts about tide pools." }, { title: "Draft", prompt: "Write a 300-word post from these facts." }] })`,Type.Object({
    title:Type.String({minLength:1,maxLength:160,description:'Name of the whole workflow, shown in the chat, e.g. "Blog post".'}),
    steps:Type.Array(step,{minItems:1,maxItems:16,description:'The steps in order, 1 to 16.'}),
