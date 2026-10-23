@@ -13,6 +13,7 @@ import { createVmControl } from "./vm-control.mjs";
 import { createWebSearchExtension } from "./web-search.mjs";
 import { createDevTools } from "./dev-tools.mjs";
 import { createHostVersion } from "./host-version.mjs";
+import { createVoice, voiceRoute } from "./voice.mjs";
 import { createSelfEdit } from "./self-edit.mjs";
 import { createUpdates } from "./updates.mjs";
 import { createConversationManager } from "./conversations.mjs";
@@ -521,6 +522,8 @@ if (process.env.MARS_DUMP_TOOLS) {
 }
 // GET /api/host/version: the commit the live host runs and how far main is ahead.
 const hostVersion = createHostVersion({ root: ROOT, appDir: APP, repo: REPO });
+// Voice input through the owner's Claude sign-in (docs/VOICE.md). The token stays on the host.
+const voice = createVoice({ getToken: async () => (await models.getAuth("anthropic").catch(() => undefined))?.auth?.apiKey });
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://local");
@@ -607,6 +610,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/plugins" && req.method === "POST") {
       send(res, 200, { plugin: await plugins.set(await jsonBody(req)) }); return;
     }
+    if (url.pathname.startsWith("/api/voice") && (await voiceRoute({ voice, req, res, url, send, jsonBody }))) return;
     if (url.pathname === "/api/attachments" && req.method === "POST") {
       const mimeType = req.headers["content-type"]?.split(";")[0];
       const rawName = req.headers["x-file-name"];

@@ -7,6 +7,7 @@ import { ContextMeter } from "@/components/ai/context-meter";
 import { ModelPicker, ProviderMark } from "@/components/ai/model-picker";
 import { LiveImageAttachment } from "@/components/composer/live-image-attachment";
 import { useSlashMenu } from "@/components/composer/slash-menu";
+import { VoiceButton } from "@/components/composer/voice-button";
 import { useWorkspace } from "@/components/workspace-context";
 import "./composer.css";
 
@@ -220,6 +221,7 @@ export function Composer() {
                 onEffortChange={(effort) => safely(action("/api/effort", { effort }))}
               />
               <span className="live-composer-spacer" />
+              <VoiceButton disabled={!snapshot || !canChat} />
               {snapshot && (
                 <ContextMeter
                   context={snapshot.context}

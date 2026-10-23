@@ -504,3 +504,63 @@
   }
 }
 
+
+/* Voice input (components/composer/voice-button.tsx). */
+.live-voice {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 150ms var(--ease-out),
+    color 150ms var(--ease-out);
+}
+.live-voice:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+.live-voice:disabled {
+  opacity: 0.45;
+}
+.live-voice[data-recording] {
+  background: color-mix(in srgb, var(--clay) 16%, transparent);
+  color: var(--text);
+}
+.live-voice-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--clay);
+  animation: live-running-pulse 1.2s var(--ease-out) infinite;
+}
+.live-voice-spin {
+  animation: live-voice-spin 0.9s linear infinite;
+}
+@keyframes live-voice-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (pointer: coarse) {
+  .live-voice {
+    min-width: 40px;
+    height: 40px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-voice-dot,
+  .live-voice-spin {
+    animation: none;
+  }
+}
+

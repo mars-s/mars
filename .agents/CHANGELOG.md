@@ -505,3 +505,11 @@ Surveyed every surface at 1440x900 and 390x844 in dark and light against the pre
 - Unions: conversation rows carry group, archived and channel; the gateway channel mark sits in the new conversation list rows; Settings has Models, Gateway and Updates; HOST-GUIDE and test:ui keep both sides' rows.
 - Found on Bot Box, not fixed here because the files are protected: the updater's git() and run() end a child's stdin without an error handler, so on Linux a command that exits before reading stdin raises an unhandled EPIPE. The CLI check crashes every time; check-updates.mjs crashed the test host 1 run in 3; test-update.mjs fails 9 of 32. A one-line handler in each fixes all of them (32/32, 3/3). check-updates.mjs also reads MARS_REPO_ROOT from the environment, so inside a Mars service it checks the real checkout instead of its temporary one.
 
+
+## 2026-10-23 Voice input; worker_run ids; side chats archived
+
+- Voice proof of concept (docs/VOICE.md): the ChatGPT sign-in cannot transcribe (chatgpt.com transcribe is behind Cloudflare, /v1/audio/transcriptions refuses the subscription token, the realtime socket fails on missing residency info). The Claude sign-in works with Claude Code's speech-to-text stream: live interim text, a punctuated final transcript, tested with a real recording.
+- Built: `voice.mjs` relays 16 kHz PCM from the composer to that stream with the token kept on the host, transcripts by long polling; the composer has a microphone button (live words, stop keeps them, Escape cancels). Checks: `check-voice.mjs` (fake upstream, real HTTP route), `tests/voice.test.mjs` (PCM conversion), `tests/voice-ui-check.mjs` (Chromium fake microphone, routed host). A live run of voice.mjs against Claude returned the full sentence.
+- Fixed: worker_run and worker_followup returned Pi's numeric ids, which codemode rejects against their schema; `check-orchestration.mjs` now validates the result against the schema (fails before, passes after).
+- The five side chats under the main chat (run progress and the four overnight helpers) are archived.
+
