@@ -6,7 +6,7 @@ import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { createDiscovery } from "./discovery.mjs";
 import { installModelBudget } from "./model-budget.mjs";
 import { createPluginRegistry } from "./plugin-registry.mjs";
-import { createImageStore } from "./image-store.mjs";
+import { createImageStore, plainImageChips } from "./image-store.mjs";
 import { createWorkflowExtension, listWorkflows, stopWorkflow } from "./workflows.mjs";
 import { loadConfig } from "./config.mjs";
 import { createVmControl } from "./vm-control.mjs";
@@ -857,7 +857,7 @@ const server = http.createServer(async (req, res) => {
         context,
       );
       // Naming is a convenience: a failure here must not hide the accepted message.
-      await conversations.autoTitle(conversation, data.text).catch((error) => console.warn("Mars auto-title:", error.message));
+      await conversations.autoTitle(conversation, plainImageChips(data.text)).catch((error) => console.warn("Mars auto-title:", error.message));
       await gatewayHost.gateway.watchSubmission(conversation.id, submission.id);
       send(res, 202, { submissionId: submission.id });
       return;

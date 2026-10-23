@@ -8,6 +8,9 @@ import { ModelPicker, ProviderMark } from "@/components/ai/model-picker";
 import { LiveImageAttachment } from "@/components/composer/live-image-attachment";
 import { useSlashMenu } from "@/components/composer/slash-menu";
 import { VoiceButton } from "@/components/composer/voice-button";
+import { ImageChip, ImageChipsPlugin } from "@/components/composer/image-chips";
+import { LexicalComposerInput } from "@assistant-ui/react-lexical";
+import { withoutAttachmentLines } from "@/lib/pi/image-chips";
 import { useWorkspace } from "@/components/workspace-context";
 import "./composer.css";
 
@@ -31,7 +34,8 @@ function QueuePanel({ queue, model }: { queue: QueuedMessage[]; model: string })
       </p>
       <ul>
         {queue.map((item) => {
-          const label = item.text || (item.images === 1 ? "1 image" : `${item.images} images`);
+          const words = withoutAttachmentLines(item.text);
+          const label = words || (item.images === 1 ? "1 image" : `${item.images} images`);
           return (
             <li key={item.id} data-mode={item.mode}>
               {item.mode === "steer" ? (
@@ -39,9 +43,9 @@ function QueuePanel({ queue, model }: { queue: QueuedMessage[]; model: string })
               ) : (
                 <CornerDownRight size={14} aria-hidden="true" className="live-queue-icon" />
               )}
-              <span className="live-queue-text" title={item.text}>
+              <span className="live-queue-text" title={words}>
                 {label}
-                {item.text && item.images > 0 && <small> + {item.images === 1 ? "1 image" : `${item.images} images`}</small>}
+                {words && item.images > 0 && <small> + {item.images === 1 ? "1 image" : `${item.images} images`}</small>}
               </span>
               {item.mode === "steer" ? (
                 <small className="live-queue-state">Steering, after the current step</small>
@@ -180,7 +184,8 @@ export function Composer() {
             <div className="live-image-drafts">
               <ComposerPrimitive.Attachments components={{ Attachment: LiveImageAttachment }} />
             </div>
-            <ComposerPrimitive.Input
+            {/* assistant-ui's Lexical input, so images sit in the text as chips (docs/IMAGE-CHIPS.md). */}
+            <LexicalComposerInput
               aria-label="Message Mars"
               placeholder={
                 !canChat
@@ -190,18 +195,15 @@ export function Composer() {
                     : "How can I help you today?"
               }
               className="live-composer-input"
-              disabled={blocked}
-              rows={2}
-              minRows={2}
-              maxRows={9}
+              data-disabled={blocked || undefined}
               submitMode="enter"
-              addAttachmentOnPaste={true}
+              directiveChip={ImageChip}
               {...slash.inputProps}
-              onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing && event.key === "Enter") event.stopPropagation();
-                slash.onKeyDown(event);
-              }}
-            />
+              // Capture: the menu takes Enter and the arrows before the editor sees them.
+              onKeyDownCapture={slash.onKeyDown}
+            >
+              <ImageChipsPlugin editable={!blocked} />
+            </LexicalComposerInput>
             {slash.menu}
             <div className="live-composer-toolbar">
               <ComposerPrimitive.AddAttachment

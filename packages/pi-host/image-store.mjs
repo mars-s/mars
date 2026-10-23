@@ -7,6 +7,10 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_PIXELS = 32 * 1024 * 1024;
 const formats = new Map([['image/png', 'png'], ['image/jpeg', 'jpeg'], ['image/webp', 'webp'], ['image/gif', 'gif']]);
 const validId = (id) => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id);
+// The composer's image chip (apps/ui/lib/pi/image-chips.ts), with a host attachment id.
+const IMAGE_CHIP = /:image\[([^\]\n]{1,80})\]\{name=([A-Za-z0-9-]{1,80})\}/g;
+/** Message text as a person reads it: each image chip becomes "[Image 1]". */
+export const plainImageChips = (text) => String(text).replace(IMAGE_CHIP, (_whole, label) => `[${label}]`);
 
 /** Immutable, private normalised images. Receipts are the only browser-facing state. */
 export function createImageStore({ root }) {
@@ -58,19 +62,36 @@ export function createImageStore({ root }) {
     const { path: _path, ...stored } = await get(id);
     return stored;
   }
+  // An image the owner placed in the text is a chip, ":image[Image 1]{name=<id>}"
+  // (docs/IMAGE-CHIPS.md). Each image goes where its chip is; the rest follow the text.
   async function content(ids = [], text = '') {
     if (!Array.isArray(ids) || ids.length > 4 || ids.some((id) => !validId(id))) throw new Error('Expected at most four attachment IDs');
     if (new Set(ids).size !== ids.length) throw new Error('Duplicate attachment IDs');
     if (typeof text !== 'string') throw new Error('Message text must be a string');
     const attachments = [];
     const blocks = [];
-    if (text) blocks.push({ type: 'text', text });
-    for (const id of ids) {
+    const placed = new Set();
+    // A chip for an image that is not attached reads as its label.
+    const words = (piece) => piece.replace(IMAGE_CHIP, (_whole, label) => `[${label}]`);
+    const addText = (piece) => { if (piece.trim()) blocks.push({ type: 'text', text: words(piece) }); };
+    const addImage = async (id, label = '') => {
       const { path, ...receipt } = await get(id);
+      placed.add(id);
       attachments.push(receipt);
-      blocks.push({ type: 'text', text: `Attachment ${id}: ${receipt.name}` });
+      blocks.push({ type: 'text', text: `Attachment ${id}: ${receipt.name}${label ? ` [${label}]` : ''}` });
       blocks.push({ type: 'image', data: (await readFile(path)).toString('base64'), mimeType: receipt.mimeType });
+    };
+    let from = 0;
+    for (const match of text.matchAll(IMAGE_CHIP)) {
+      const [whole, label, id] = match;
+      if (!ids.includes(id) || placed.has(id)) continue;
+      addText(text.slice(from, match.index).trim());
+      await addImage(id, label);
+      from = match.index + whole.length;
     }
+    if (from === 0) { if (text) blocks.push({ type: 'text', text: words(text) }); }
+    else addText(text.slice(from).trim());
+    for (const id of ids) if (!placed.has(id)) await addImage(id);
     return { content: blocks, attachments };
   }
   function browserView(view) {

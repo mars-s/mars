@@ -6,20 +6,29 @@ import { MarkdownTextPrimitive, type CodeHeaderProps } from "@assistant-ui/react
 import { AlertCircle, Check, Copy } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import { record, type LiveMessage } from "@/lib/pi/live-state";
+import { userParts } from "@/lib/pi/image-chips";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import "./thread.css";
 
 export function convertMessage(message: LiveMessage): ThreadMessageLike {
+  // A sent message reads in order, each image where it was placed (docs/IMAGE-CHIPS.md).
+  const parts = message.role === "user" ? userParts(message.text, message.images ?? []) : null;
   return {
     id: message.id,
     role: message.role,
-    content: [{ type: "text", text: message.text }],
+    content: parts
+      ? parts.map((part) =>
+          part.type === "text"
+            ? { type: "text" as const, text: part.text }
+            : { type: "image" as const, image: part.image.url, filename: part.image.name },
+        )
+      : [{ type: "text", text: message.text }],
     metadata: {
       custom: {
         tools: message.tools,
         summary: message.summary,
         outcome: message.outcome,
-        images: message.images,
+        imageLabels: parts ? Object.fromEntries(parts.flatMap((part) => (part.type === "image" && part.label ? [[part.image.url, part.label]] : []))) : {},
       },
     },
     ...(message.role === "assistant"
@@ -86,23 +95,29 @@ function useHasText() {
     state.message.content.some((part) => part.type === "text" && part.text.trim().length > 0),
   );
 }
+/** An image inside a sent message, where it was placed, with its label ("Image 1") if it had one. */
+function InlineImage({ image, filename }: { image: string; filename?: string }) {
+  const labels = useAuiState((state) => state.message.metadata.custom?.imageLabels);
+  const label = typeof record(labels)[image] === "string" ? String(record(labels)[image]) : "";
+  return (
+    <figure className="live-inline-image">
+      <a href={image} target="_blank" rel="noreferrer">
+        <img src={image} alt={label ? `${label}: ${filename ?? "image"}` : (filename ?? "Image")} />
+      </a>
+      {label && <figcaption>{label}</figcaption>}
+    </figure>
+  );
+}
+const userComponents = { Image: InlineImage };
 export function UserMessage() {
-  const images = useAuiState((state) => state.message.metadata.custom?.images);
-  const hasText = useHasText();
+  const hasContent = useAuiState((state) =>
+    state.message.content.some((part) => part.type === "image" || (part.type === "text" && part.text.trim().length > 0)),
+  );
   return (
     <MessagePrimitive.Root className="live-message live-user">
-      {Array.isArray(images) && images.length > 0 && (
-        <div className="live-message-images">
-          {images.map(record).map((image) => (
-            <a key={String(image.id)} href={String(image.url)} target="_blank" rel="noreferrer">
-              <img src={String(image.url)} alt={String(image.name)} />
-            </a>
-          ))}
-        </div>
-      )}
-      {hasText && (
+      {hasContent && (
         <div className="live-user-bubble">
-          <MessagePrimitive.Parts />
+          <MessagePrimitive.Parts components={userComponents} />
         </div>
       )}
     </MessagePrimitive.Root>

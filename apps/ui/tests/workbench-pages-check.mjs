@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration, composerText } from "./browser-options.mjs";
 
 // Fixture-only: pages and conversations live in this file so the check needs no host.
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/workbench-pages";
@@ -189,7 +189,7 @@ try {
   // Back to the list shows the new page first.
   await pane.getByRole("button", { name: "All pages" }).click();
   await list.getByRole("button", { name: /Remote rewrite/ }).waitFor();
-  assert.equal(await main.inputValue(), "Main draft stays put", "pages never touch the main draft");
+  assert.equal(await composerText(main), "Main draft stays put", "pages never touch the main draft");
 
   // Side chat: scroll the main transcript first, then prove nothing in it moves.
   const viewport = desktop.locator(".live-viewport");
@@ -222,7 +222,7 @@ try {
   assert.deepEqual(db.aborts, [{ conversationId: "9" }], "stop aborts only the side conversation");
 
   assert.equal(new URL(desktop.url()).searchParams.get("conversation"), "1", "main selection unchanged");
-  assert.equal(await main.inputValue(), "Main draft stays put", "main draft unchanged");
+  assert.equal(await composerText(main), "Main draft stays put", "main draft unchanged");
   assert.equal(await desktop.locator(".live-main").getByText("Side question").count(), 0, "side messages stay out of the main transcript");
   assert.ok(Math.abs((await viewport.evaluate((node) => node.scrollTop)) - scrolled) < 2, "main scroll position unchanged");
 

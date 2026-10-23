@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration, composerText, waitForComposer } from "./browser-options.mjs";
 
 // Fixture-only: every workbench route is answered here so the check is independent of a host.
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/workbench-ui";
@@ -59,6 +59,7 @@ async function page(viewport) {
 }
 try {
   const desktop = await page({ width: 1440, height: 900 });
+  await waitForComposer(desktop);
   const input = desktop.getByRole("textbox", { name: "Message Mars" });
   await input.fill("Draft survives the split");
   const toggle = desktop.getByRole("button", { name: "Open workbench" });
@@ -67,7 +68,7 @@ try {
   const pane = desktop.getByRole("region", { name: "Workbench" });
   await pane.waitFor();
   assert.equal(await toggle.getAttribute("aria-pressed"), "true");
-  assert.equal(await input.inputValue(), "Draft survives the split", "opening keeps the draft");
+  assert.equal(await composerText(input), "Draft survives the split", "opening keeps the draft");
   await desktop.getByRole("heading", { name: "Tools" }).waitFor();
   await desktop.getByRole("heading", { name: "Suggested" }).waitFor();
   assert.equal(await desktop.getByRole("button", { name: /^Terminal/ }).isDisabled(), true, "unavailable tool is disabled");
@@ -116,7 +117,7 @@ try {
   await desktop.getByRole("button", { name: "Expand workbench" }).click();
   assert.equal(await input.isVisible(), false);
   await desktop.getByRole("button", { name: "Restore workbench" }).click();
-  assert.equal(await input.inputValue(), "Draft survives the split");
+  assert.equal(await composerText(input), "Draft survives the split");
 
   // Switching conversations remounts only the main chat; the workbench keeps its tabs.
   await desktop.getByRole("button", { name: "New workbench tab" }).click();

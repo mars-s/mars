@@ -105,14 +105,60 @@
   line-height: 1.5;
   caret-color: var(--clay);
 }
-.live-composer-input::placeholder {
-  color: var(--text-muted);
+/* The Lexical input (assistant-ui react-lexical): the wrapper above, the editable area and its
+   placeholder inside. It grows to about nine lines, then scrolls. */
+.live-composer-input {
+  position: relative;
 }
-.live-composer-input:disabled {
+.live-composer-input .aui-lexical-input {
+  min-height: 48px;
+  max-height: 216px;
+  overflow-y: auto;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.live-composer-input .aui-lexical-input p {
+  margin: 0;
+}
+.live-composer-input .aui-lexical-placeholder {
+  position: absolute;
+  inset: 0 4px auto 2px;
+  color: var(--text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+.live-composer-input[data-disabled] {
   cursor: not-allowed;
 }
-.live-composer-input:disabled::placeholder {
+.live-composer-input[data-disabled] .aui-lexical-placeholder {
   color: var(--text-faint);
+}
+/* An image in the text (image-chips.tsx): a thumbnail and its label, one unit. */
+.live-image-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  margin: 0 1px;
+  padding: 0 8px 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-raised, rgba(127, 127, 127, 0.14));
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1;
+  vertical-align: -5px;
+  user-select: none;
+}
+.live-image-chip img {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.live-image-chip:not(:has(img)) {
+  padding-left: 8px;
 }
 .live-composer-toolbar {
   display: flex;

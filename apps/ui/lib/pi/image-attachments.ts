@@ -7,6 +7,8 @@ export function createImageAdapter(
 ): AttachmentAdapter {
   const uploads = new WeakMap<File, Promise<ReturnType<typeof parseImages>[number]>>();
   const files = new Set<File>();
+  // A file keeps its id when a draft is put back, so its chip in the text still names it.
+  const ids = new WeakMap<File, string>();
   async function upload(attachment: PendingAttachment, signal?: AbortSignal) {
     const existing = uploads.get(attachment.file);
     if (existing) return existing;
@@ -54,8 +56,9 @@ export function createImageAdapter(
         throw Error(failure);
       }
       files.add(file);
+      if (!ids.has(file)) ids.set(file, crypto.randomUUID());
       const attachment: PendingAttachment = {
-        id: crypto.randomUUID(),
+        id: ids.get(file)!,
         type: "image",
         name: file.name,
         file,

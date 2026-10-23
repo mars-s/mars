@@ -455,21 +455,3 @@ Surveyed every surface at 1440x900 and 390x844 in dark and light against the pre
 - Extensions page: the copy says extensions throughout. Before, refresh, empty, loading and error text said plugins.
 
 ## 2026-10-24 Worker answers are no longer cut at 4,000 characters
-
-- worker_run, worker_followup and agent_run return up to 12,000 characters inline. A fanout shares 48,000 between its workers (at least 4,000 each), so a 16-worker fanout stays bounded.
-- A cut answer says so: `truncated: true` and `length`. The new `worker_read({ workerId, offset?, limit? })` returns the whole newest answer of one of the conversation's own workers, in parts of up to 60,000 characters.
-- check-worker-read.mjs covers the cut, the fanout share, reading in parts and reading the newest answer after a followup. It fails on the old 4,000-character code.
-- Found while researching Duet: six research workers' notes came back cut and nothing could read the rest.
-
-## 2026-10-24 Duet: an assistant thread over parallel tasks (built in a lane)
-
-- New Duet entry under Chats: one iMessage-style thread, Duet in orange, the owner in a lighter grey (both pass AA). docs/DUET.md describes it; workspace/duet-research/DUET-SPEC.md is the research and full design.
-- The thread's agent is a front desk that starts background tasks (duet_task_start) and returns at once. Each task is a side chat with a mars.duet-task document, so tasks run in parallel and survive restarts. A task's final answer is posted into the thread with its label and the owner's quoted request.
-- Replying to a task steers that task only (Pi's steer, at its next step). Stop ends one task. At most 6 run at once; the rest queue and start in order.
-- Tasks talk through duet_mail (to a task or the front desk, marked as mail, loop-limited) and a shared board with compare-and-set and claims.
-- chat_create, chat_list, chat_read and chat_send let any conversation make, find, read and message chats, including code sessions in a lane worktree.
-- check-duet.mjs runs all of it on a real Pi harness with a gated scripted model; tests/duet-ui-check.mjs covers the page against routed fixtures. Not built yet: approval cards, budget reservation, proactive briefs, chat-app binding (listed in docs/DUET.md).
-
-## 2026-10-24 Duet: a clear note on a host from before Duet
-
-- The interface reloads on merge but the host needs a deploy, so Duet could open against a host without its routes. The page now says the host has not been updated yet and disables Send, instead of showing a 404 error, and picks the thread up once the host answers. duet-ui-check.mjs covers both.

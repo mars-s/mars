@@ -74,29 +74,36 @@
   line-height: 1.55;
   white-space: pre-wrap;
 }
-.live-message-images {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  max-width: 85%;
+/* An image inside a sent message, where it was placed (messages.tsx InlineImage). */
+.live-inline-image {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 6px 6px 0;
+  vertical-align: top;
 }
-.live-message-images a {
+.live-inline-image a {
   display: block;
+  width: fit-content;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
   transition: border-color 160ms var(--ease-out);
 }
-.live-message-images a:hover {
+.live-inline-image a:hover {
   border-color: var(--text-faint);
 }
-.live-message-images img {
+.live-inline-image img {
   display: block;
   width: auto;
   max-width: min(240px, 60vw);
   height: 120px;
   object-fit: cover;
+}
+.live-inline-image figcaption {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 16px;
 }
 .live-assistant {
   color: var(--text);
@@ -373,8 +380,7 @@
   .live-transcript {
     padding: 20px 16px 8px;
   }
-  .live-user-bubble,
-  .live-message-images {
+  .live-user-bubble {
     max-width: 90%;
   }
   .live-welcome h1 {

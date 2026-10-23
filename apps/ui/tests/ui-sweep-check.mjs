@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForComposer, waitForHydration } from "./browser-options.mjs";
 
 // Cross-surface layout guards from the UI sweep, against the running preview and its fixture host:
 // no sideways scroll at 390px on any surface (document or body), no browser errors, and the model
@@ -23,7 +23,11 @@ async function open(path, viewport, theme = "dark") {
     if (message.type() === "error") errors.push(`${path}: ${message.text()}`);
   });
   await page.goto(new URL(path, uiBaseURL()).href, { waitUntil: "domcontentloaded", timeout: 180000 });
-  if (!path.startsWith("/design-system")) await waitForHydration(page);
+  // The page settles once the conversation has loaded; a click before that can be lost.
+  if (!path.startsWith("/design-system")) {
+    await waitForHydration(page);
+    await waitForComposer(page);
+  }
   else await page.getByRole("heading", { name: "Mars design system" }).waitFor({ timeout: 120000 });
   return page;
 }

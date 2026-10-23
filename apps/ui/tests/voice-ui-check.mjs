@@ -3,7 +3,7 @@
 // host returns them, stop keeps the final words after what was typed, and Escape cancels.
 import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration, composerText, waitForComposer } from "./browser-options.mjs";
 
 const options = browserLaunchOptions();
 const browser = await chromium.launch({ ...options, args: [...options.args, "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
@@ -51,27 +51,29 @@ try {
   claude = true;
   await page.waitForFunction(() => !document.querySelector('[aria-label="Dictate with your voice"]').disabled, null, { timeout: 10000 });
 
+  await waitForComposer(page);
+
   const input = page.getByRole("textbox", { name: "Message Mars" });
   await input.fill("Note:");
   await mic.click();
   const stop = page.getByRole("button", { name: "Stop dictation" });
   await stop.waitFor();
-  await page.waitForFunction(() => document.querySelector('[aria-label="Message Mars"]').value === "Note: Hello there Mars", null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('[aria-label="Message Mars"]').textContent === "Note: Hello there Mars", null, { timeout: 15000 });
   assert.ok(voice.chunks >= 3 && voice.audioBytes > 3000, `audio was sent (${voice.chunks} chunks, ${voice.audioBytes} bytes)`);
   assert.equal(voice.odd, 0, "whole 16-bit samples only");
   await stop.click();
   await mic.waitFor();
-  assert.equal(await input.inputValue(), "Note: Hello there, Mars.", "the final words follow what was typed");
+  assert.equal(await composerText(input), "Note: Hello there, Mars.", "the final words follow what was typed");
   assert.equal(voice.stopped, true);
 
   // Escape cancels and restores the text from before.
   await input.fill("Draft");
   await mic.click();
   await stop.waitFor();
-  await page.waitForFunction(() => document.querySelector('[aria-label="Message Mars"]').value.startsWith("Draft Hello"), null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector('[aria-label="Message Mars"]').textContent.startsWith("Draft Hello"), null, { timeout: 15000 });
   await page.keyboard.press("Escape");
   await mic.waitFor();
-  assert.equal(await input.inputValue(), "Draft");
+  assert.equal(await composerText(input), "Draft");
   assert.equal(voice.cancelled, true);
   assert.deepEqual(errors, []);
   process.stdout.write(JSON.stringify({ passed: true, checks: ["off without Claude", "PCM chunks sent", "live words in the box", "stop keeps final words after typed text", "Escape cancels and restores"] }));

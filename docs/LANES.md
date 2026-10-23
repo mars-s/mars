@@ -53,7 +53,11 @@ Queued lanes merge strictly in order, one at a time. For the lane at the front:
 4. **Fast-forward** `main` in the checkout to the lane. The checkout must be on `main`.
    Uncommitted edits in the checkout stay; if one is in a file the lane changed, git
    refuses and the lane is blocked until the owner commits or moves that edit.
-5. **Clean up:** stop the preview, remove the worktree and delete the merged branch.
+5. **Dependencies:** when the lane changed a `package.json` or `package-lock.json`, the
+   checkout runs `npm install`, so the live interface finds the new packages. A lane that
+   changes dependencies first replaces its linked `node_modules` with its own (`rm -rf
+   node_modules && npm ci` in the worktree), so installing never touches the checkout's files.
+6. **Clean up:** stop the preview, remove the worktree and delete the merged branch.
 
 Then the next queued lane goes. A blocked lane leaves the queue and does not hold up the
 others. After a host restart a lane caught mid-merge is queued again; if `main` already
@@ -78,3 +82,6 @@ Routes: `GET /api/lanes`, `POST /api/lanes/order {ids}`, `POST /api/lanes/pause 
 `lane_start`, `lane_preview`, `lane_submit`, `lane_list`, `lane_close`.
 
 Lanes were first used live on 23 October 2026.
+
+The changelog is append-only, so `.gitattributes` merges `.agents/CHANGELOG.md` with git's union
+driver: two lanes that each add a section both keep theirs instead of conflicting.

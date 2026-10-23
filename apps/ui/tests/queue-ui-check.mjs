@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
-import { browserLaunchOptions, uiBaseURL, waitForHydration } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, waitForHydration, composerText, waitForComposer } from "./browser-options.mjs";
 
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/queue-ui";
 await mkdir(evidence, { recursive: true });
@@ -62,6 +62,7 @@ const chats = () => requests.filter((request) => request.path === "/api/chat").m
 try {
   await page.goto(uiBaseURL(), { waitUntil: "domcontentloaded", timeout: 180000 });
   await waitForHydration(page);
+  await waitForComposer(page);
   const input = page.getByRole("textbox", { name: "Message Mars" });
   await page.getByText("Luna is working. New messages wait in a queue.").waitFor();
 
@@ -72,7 +73,7 @@ try {
   await queue.getByText("Use the blue button").waitFor();
   assert.equal(chats().at(-1).mode, "queue");
   assert.equal(chats().at(-1).conversationId, "1");
-  assert.equal(await input.inputValue(), "");
+  assert.equal(await composerText(input), "");
   assert.equal(await page.getByText("Luna is working.", { exact: false }).count(), 0, "the queue replaces the working line");
   await input.fill("Then write it up");
   await page.getByRole("button", { name: "Queue message" }).click();
@@ -101,7 +102,7 @@ try {
   await page.getByText("Luna on Pi").waitFor();
   await input.fill("Fresh question");
   await input.press("Enter");
-  await page.waitForFunction(() => document.querySelector('[aria-label="Message Mars"]').value === "");
+  await page.waitForFunction(() => document.querySelector('[aria-label="Message Mars"]').textContent === "");
   assert.equal(chats().at(-1).text, "Fresh question");
   assert.equal("mode" in chats().at(-1), false, "an idle send starts a reply as before");
   await page.setViewportSize({ width: 390, height: 844 });

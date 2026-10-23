@@ -37,3 +37,20 @@ export async function waitForHydration(page) {
     { timeout: 60000 },
   );
 }
+
+/** The composer's text. It is a Lexical editor (docs/IMAGE-CHIPS.md), not a textarea, so read its text content. */
+export async function composerText(locator) {
+  return (await locator.textContent()) ?? "";
+}
+/** Whether the composer accepts typing. */
+export async function composerEditable(locator) {
+  return (await locator.getAttribute("contenteditable")) === "true";
+}
+/**
+ * Wait until the composer takes typing. The conversation's saved draft is put back just after it
+ * becomes editable, which would replace text typed in the same instant, so allow a moment.
+ */
+export async function waitForComposer(page) {
+  await page.waitForFunction(() => document.querySelector('[aria-label="Message Mars"]')?.getAttribute("contenteditable") === "true", null, { timeout: 60000 });
+  await page.waitForTimeout(500);
+}

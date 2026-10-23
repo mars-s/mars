@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, composerText, composerEditable } from "./browser-options.mjs";
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/images-ui";
 await mkdir(evidence, { recursive: true });
 const browser = await chromium.launch(browserLaunchOptions());
@@ -117,10 +117,10 @@ await page.route("**/api/**", async (route) => {
 });
 async function paste() {
   await page.waitForFunction(() => {
-    const input = document.querySelector('textarea[aria-label="Message Mars"]');
+    const input = document.querySelector('[contenteditable][aria-label="Message Mars"]');
     return (
-      input instanceof HTMLTextAreaElement &&
-      !input.disabled &&
+      input instanceof HTMLElement &&
+      input.isContentEditable &&
       new URL(location.href).searchParams.has("conversation")
     );
   });
@@ -157,29 +157,33 @@ try {
   await page.getByRole("button", { name: "Remove pasted.png" }).click();
   await paste();
   await page.getByRole("button", { name: "Send message", exact: true }).click();
-  await page.locator(".live-message-images img").waitFor();
+  await page.locator(".live-inline-image img").waitFor();
   assert.deepEqual(sends[0].attachmentIds, [id]);
-  assert.equal(sends[0].text, "");
+  // A pasted image is a chip in the text, sent with the host's attachment id (docs/IMAGE-CHIPS.md).
+  assert.equal(sends[0].text, `:image[Image 1]{name=${id}}`);
   await page.reload();
-  await page.locator(".live-message-images img").waitFor();
+  await page.locator(".live-inline-image img").waitFor();
   await paste();
   await paste();
-  await page.getByRole("textbox", { name: "Message Mars" }).fill("Retry caption");
+  // Type after the two chips; replacing the text would delete them, and with them the images.
+  await page.getByRole("textbox", { name: "Message Mars" }).press("End");
+  await page.keyboard.type("Retry caption");
   failChat = true;
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await page.getByText("Retry this message", { exact: true }).waitFor();
   await page.waitForFunction(
-    () => document.querySelector('textarea[aria-label="Message Mars"]')?.value === "Retry caption",
+    () => document.querySelector('[aria-label="Message Mars"]')?.textContent?.endsWith("Retry caption"),
   );
-  assert.equal(
-    await page.getByRole("textbox", { name: "Message Mars" }).inputValue(),
-    "Retry caption",
+  assert.match(
+    await composerText(page.getByRole("textbox", { name: "Message Mars" })),
+    /Image 1.*Image 2.*Retry caption$/,
   );
   await page.getByRole("button", { name: "Remove pasted.png" }).first().waitFor();
   const failedSend = sends.at(-1);
   assert.deepEqual(failedSend.attachmentIds, [id]);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
-  await page.getByText("Retry caption", { exact: true }).waitFor();
+  // The fixture gives both pastes one host id, so the second chip reads as its label.
+  await page.locator(".live-user-bubble").getByText(/Retry caption$/).waitFor();
   assert.equal(sends.at(-1).requestId, failedSend.requestId);
   assert.deepEqual(sends.at(-1).attachmentIds, [id]);
 
@@ -219,7 +223,7 @@ try {
       sends,
       errors,
       url: page.url(),
-      inputDisabled: await page.getByRole("textbox", { name: "Message Mars" }).isDisabled(),
+      inputDisabled: await composerEditable(page.getByRole("textbox", { name: "Message Mars" })).then((editable) => !editable, () => "no composer"),
       body: (await page.locator("body").innerText()).slice(-5000),
     }),
   );

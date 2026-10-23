@@ -43,6 +43,11 @@ export function createLanes({
   previews = true, checkTimeoutMs = 300000,
   // The tailnet CLI; this machine wraps a user-space tailscaled in ~/.local/bin.
   tailscale = env.MARS_TAILSCALE || (existsSync(join(env.HOME || '', '.local/bin/tailscale')) ? join(env.HOME, '.local/bin/tailscale') : 'tailscale'),
+  // After a merge that changes dependencies the checkout installs them, so the live interface
+  // (which runs from the checkout) finds them. Injected by the check.
+  installDependencies = (cwd) => (process.platform === 'linux' && previews
+    ? run('systemd-run', ['--user', '--scope', '--quiet', '--collect', '-p', 'MemoryMax=2500M', 'npm', 'install', '--no-audit', '--no-fund'], { cwd, timeout: 900000 })
+    : run('npm', ['install', '--no-audit', '--no-fund'], { cwd, timeout: 900000 })),
 }) {
   const file = join(root, 'data/lanes.json');
   let lock = Promise.resolve(), recovered = false, queueRun = Promise.resolve();
@@ -170,7 +175,7 @@ export function createLanes({
     return { ...shown, next: nextFor(shown, paused) };
   }
   function nextFor(l, paused) {
-    if (l.state === 'merged') return 'Merged into ' + main + ' as ' + String(l.mergedCommit).slice(0, 8) + '. Interface changes are live now. Publish with github_push; host changes also need host_deploy or the updater.';
+    if (l.state === 'merged') return 'Merged into ' + main + ' as ' + String(l.mergedCommit).slice(0, 8) + '.' + (l.note ? ' ' + l.note : '') + ' Interface changes are live now. Publish with github_push; host changes also need host_deploy or the updater.';
     if (l.state === 'blocked') return l.note + ' Fix it in ' + l.worktree + ', then lane_submit again.';
     if (l.state === 'queued') return 'Waiting at position ' + l.queuePosition + ' in the merge queue.' + (paused ? ' Merging is paused; the owner resumes it in Settings, Lanes.' : '');
     return '';
@@ -195,7 +200,7 @@ export function createLanes({
           if (!l) return;
           if (result.changed) l.changed = result.changed;
           if (result.blocked) touch(l, { state: 'blocked', note: result.blocked });
-          else touch(l, { state: 'merged', mergedCommit: result.commit, note: '' });
+          else touch(l, { state: 'merged', mergedCommit: result.commit, note: result.note || '' });
         });
         if (!result.blocked) await cleanup(next);
       }
@@ -227,7 +232,12 @@ export function createLanes({
     if (branch !== main) return { changed, blocked: 'The checkout is on ' + (branch || 'a detached HEAD') + ', not ' + main + '; the owner must switch it back first.' };
     const merged = await git(repo, ['merge', '-q', '--ff-only', l.branch]);
     if (merged.code !== 0) return { changed, blocked: 'git could not fast-forward ' + main + ': ' + tail(merged.stderr.trim(), 500) + ' An uncommitted edit in the checkout may touch the same file.' };
-    return { changed, commit: (await git(repo, ['rev-parse', 'HEAD'])).stdout.trim() };
+    let note = '';
+    if (changed.some((path) => /(^|\/)package(-lock)?\.json$/.test(path))) {
+      const installed = await installDependencies(repo);
+      note = installed.code === 0 ? 'Dependencies installed in the checkout.' : 'Merged, but npm install in the checkout failed: ' + tail(installed.stdout + installed.stderr, 600) + ' Run npm install there.';
+    }
+    return { changed, note, commit: (await git(repo, ['rev-parse', 'HEAD'])).stdout.trim() };
   }
 
   /** The cheap gate: syntax, interface types and lint, and the host checks the change reaches. */

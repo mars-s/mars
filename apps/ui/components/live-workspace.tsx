@@ -24,6 +24,7 @@ import {
   type QueuedMessage,
 } from "@/lib/pi/live-state";
 import { createImageAdapter } from "@/lib/pi/image-attachments";
+import { resolveImageChips } from "@/lib/pi/image-chips";
 import "./shared.css";
 import { WorkspaceContext, type ConversationChange, type Workspace } from "./workspace-context";
 import { Sidebar } from "./shell/sidebar";
@@ -392,24 +393,30 @@ export function LiveWorkspace() {
   };
   const onNew = async (message: AppendMessage, mode?: "queue" | "steer") => {
     const conversationId = selected.current;
-    const text = message.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n")
-      .trim();
-    const attachmentIds = [
-      ...new Set(
-        (message.attachments ?? []).flatMap((attachment) =>
-          attachment.content.flatMap((part) =>
-            part.type === "image" &&
-            typeof part.image === "string" &&
-            /^\/api\/attachments\/[a-f0-9]{64}$/.test(part.image)
-              ? [part.image.slice("/api/attachments/".length)]
-              : [],
-          ),
-        ),
-      ),
-    ];
+    const hostIdOf = (attachment: NonNullable<AppendMessage["attachments"]>[number]) =>
+      attachment.content.flatMap((part) =>
+        part.type === "image" &&
+        typeof part.image === "string" &&
+        /^\/api\/attachments\/[a-f0-9]{64}$/.test(part.image)
+          ? [part.image.slice("/api/attachments/".length)]
+          : [],
+      )[0];
+    // Image chips in the text name the draft attachment; the host knows the uploaded one.
+    const hostIds = new Map(
+      (message.attachments ?? []).flatMap((attachment) => {
+        const id = hostIdOf(attachment);
+        return id ? [[attachment.id, id] as const] : [];
+      }),
+    );
+    const text = resolveImageChips(
+      message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+        .trim(),
+      hostIds,
+    );
+    const attachmentIds = [...new Set(hostIds.values())];
     if ((!text && !attachmentIds.length) || !snapshot || snapshot.conversationId !== conversationId)
       return;
     const deliveryKey = JSON.stringify([text, attachmentIds]);

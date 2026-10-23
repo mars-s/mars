@@ -1,5 +1,6 @@
 "use client";
 import { AttachmentPrimitive, useAuiState } from "@assistant-ui/react";
+import { removeImageChip } from "@/components/composer/image-chips";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
@@ -26,6 +27,8 @@ export function LiveImageAttachment() {
         <AttachmentPrimitive.Remove
           aria-label={`Remove ${attachment.name}`}
           className="live-image-draft-remove"
+          // Its chip in the text goes with it (docs/IMAGE-CHIPS.md).
+          onClick={() => removeImageChip(attachment.id)}
         >
           <X size={12} strokeWidth={2.5} aria-hidden="true" />
         </AttachmentPrimitive.Remove>

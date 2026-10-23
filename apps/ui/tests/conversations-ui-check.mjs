@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
-import { browserLaunchOptions, uiBaseURL } from "./browser-options.mjs";
+import { browserLaunchOptions, uiBaseURL, composerText, waitForComposer } from "./browser-options.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const evidence = process.env.MARS_EVIDENCE_DIR || "test-results/conversations-ui";
@@ -109,13 +109,14 @@ try {
     timeout: 180000,
   });
   await page.getByText("History for conversation 1", { exact: true }).waitFor();
+  await waitForComposer(page);
   const input = page.getByRole("textbox", { name: "Message Mars" });
   await input.fill("Draft belonging to first conversation");
   pauseRoot = true;
   await Promise.race([held, new Promise((_, reject) => setTimeout(() => reject(Error("Root poll did not start")), 15000))]);
   await page.getByRole("button", { name: "Second conversation", exact: true }).click();
   await page.getByText("History for conversation 2", { exact: true }).waitFor();
-  assert.equal(await input.inputValue(), "");
+  assert.equal(await composerText(input), "");
   releaseRoot();
   await page.waitForTimeout(1200);
   assert.equal(await page.getByText("History for conversation 1", { exact: true }).count(), 0);
@@ -123,10 +124,10 @@ try {
   await input.fill("Draft belonging to second conversation");
   await page.getByRole("button", { name: /^First conversation\b/ }).click();
   await page.getByText("History for conversation 1", { exact: true }).waitFor();
-  assert.equal(await input.inputValue(), "Draft belonging to first conversation");
+  assert.equal(await composerText(input), "Draft belonging to first conversation");
   await page.getByRole("button", { name: "Second conversation", exact: true }).click();
   await page.getByText("History for conversation 2", { exact: true }).waitFor();
-  assert.equal(await input.inputValue(), "Draft belonging to second conversation");
+  assert.equal(await composerText(input), "Draft belonging to second conversation");
   await page.getByRole("button", { name: "Choose model" }).click();
   await page.getByRole("menuitemradio", { name: "Sol", exact: true }).click();
   await page.getByRole("menu").waitFor({ state: "hidden" });
@@ -150,7 +151,7 @@ try {
   await page.getByRole("button", { name: "New chat", exact: true }).click();
   await page.getByRole("button", { name: "New conversation", exact: true }).waitFor();
   await page.getByRole("heading", { name: "What shall we work on?" }).waitFor();
-  assert.equal(await input.inputValue(), "");
+  assert.equal(await composerText(input), "");
   assert.equal(await page.getByText("History for conversation 2", { exact: true }).count(), 0);
   assert.equal(requests.filter((request) => request.path === "/api/conversations").length, 1);
   await input.fill("Third conversation draft");

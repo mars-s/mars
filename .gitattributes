@@ -1,0 +1,2 @@
+# The changelog is append-only: parallel lanes each add a section, so a merge keeps both.
+.agents/CHANGELOG.md merge=union
