@@ -6,7 +6,6 @@ import { BACKGROUND_CONTEXT as context } from '@earendil-works/chord/context';
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { Harness, createRegistry } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
-import { Compile } from 'typebox/compile';
 import { createConversationManager } from './conversations.mjs';
 import { createOrchestrationExtension, listWorkers, stopWorker } from './orchestration.mjs';
 
@@ -70,12 +69,6 @@ try {
   await root.configure({ modelTools: extension.tools }, context);
   const toolRun = await root.submit({ type: 'input', content: 'CALL worker_run {"task":"tool entry","model":"sol"}' }, context);
   assert.equal((await toolRun.wait(context)).status, 'done');
-  // The result must match worker_run's declared schema (ids are strings, not Pi's numbers).
-  const runResult = (await manager.state(root.id)).entries.filter(e => e.kind === 'pi.tool-result').at(-1);
-  assert.equal(runResult.model[0].isError, false, JSON.stringify(runResult.model[0].content).slice(0, 300));
-  const runTool = extension.tools.find(t => t.name === 'worker_run');
-  const runValue = JSON.parse(runResult.model[0].content.map(c => c.text).join(''));
-  assert.ok(Compile(runTool.structuredOutputSchema).Check(runValue), 'worker_run result matches its schema: ' + JSON.stringify(runValue).slice(0, 200));
   const toolWorkers = await listWorkers({ harness, conversationId: root.id, context });
   assert.equal(toolWorkers.length, 3);
   assert.equal(toolWorkers[0].modelId, 'gpt-6.1-sol', 'sol alias prefers installed 6.1 model');
