@@ -77,7 +77,9 @@ For any task of three or more steps, first decide who does the steps:
 | Change Mars host code safely | `self_edit_start`, edit in its worktree, `self_edit_check`, `self_edit_finish` |
 | Throw away or find a self-edit | `self_edit_abandon`, `self_edit_list` |
 | Ship a host change | commit, then `host_deploy` (`dryRun: true` first) |
-| Run a memory-hungry job (Next build, many browsers) | `host_exec` with `systemd-run --user --scope -p MemoryMax=2200M <command>`: commands otherwise share the host's memory limit, and an out-of-memory kill takes the host down with them |
+| Run a memory-hungry job (Next build, browsers, a test run) | `host_exec` with `memoryMb` (e.g. 3000) and `background: true`. Every command runs in its own memory-limited scope, so running out stops only that command (`oomKilled: true`) |
+| See free memory, the Mars services' memory and running commands | `host_resources` |
+| Restart the UI dev server or cap its memory | `host_service` (the host restarts only through `host_deploy` or the updater) |
 | Is a newer Mars on GitHub, install it | `mars_update_status`, then `mars_update_apply` when the owner agrees |
 | The update conflicts and the owner asks you to merge | `mars_update_reconcile_start`, edit the listed files, `mars_update_reconcile_finish` |
 | Check which chat apps reach Mars, or who is waiting for approval | `gateway_status` |
