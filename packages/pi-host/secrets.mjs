@@ -25,7 +25,7 @@ export async function hostSecrets({ dataDir, env = process.env } = {}) {
   for (const [name, value] of Object.entries(env)) if (SECRET_NAME.test(name)) add(value);
   if (dataDir) {
     add(await quiet(join(dataDir, "web-token")));
-    for (const name of ["auth.json", "connections.json"]) {
+    for (const name of ["auth.json", "connections.json", "connector-secrets.json"]) {
       const text = await quiet(join(dataDir, name));
       if (!text) continue;
       let parsed;

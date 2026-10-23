@@ -29,6 +29,8 @@ export function createDiscovery() {
       { name: 'github', prefix: 'github_', description: "Push local git commits to GitHub through the owner's Composio GitHub connection." },
       { name: 'skills', prefix: 'skill_', description: "Find, read, write and install the owner's Markdown skills (saved instructions for kinds of work)." },
       { name: 'schedules', prefix: 'schedule_', description: 'Run a prompt at set times: every weekday at 8am, every 30 minutes, or once later.' },
+      { name: 'connectors', prefix: 'connector_', description: 'Connect outside services (MCP servers and HTTP APIs), list them, and call HTTP API connectors.' },
+      { name: 'connectorTools', prefix: 'conn_', description: 'Tools from the outside services the owner connected, named conn_<connector>_<tool>.' },
       { name: 'agents', prefix: 'agent_', description: "List, run and create the owner's named agents (helper models with their own instructions, Claude Code subagents)." },
     ],
   });

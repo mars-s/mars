@@ -74,6 +74,7 @@ For any task of three or more steps, first decide who does the steps:
 | Start work the owner can open and follow | `side_chat_open` |
 | Give the owner a file to download | `workspace_file_link`, then put the url in a Markdown link |
 | Look something up online | `web_search`, then `web_fetch` for a full page |
+| Use an outside service the owner connected (an MCP server or an API), or connect a new one | `connector_list`; MCP tools are `conn_<connector>_<tool>`; add with `connector_add`, then `connector_connect` |
 | Change the Mars interface | `ui_source_read`, `ui_patch_stage`, `ui_patch_validate`, `ui_patch_promote` |
 | Change Mars host code safely | `self_edit_start`, edit in its worktree, `self_edit_check`, `self_edit_finish` |
 | Throw away or find a self-edit | `self_edit_abandon`, `self_edit_list` |

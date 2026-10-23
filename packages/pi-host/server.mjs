@@ -56,6 +56,10 @@ import { ExtensionStore } from "./extension-store.mjs";
 import { UiPatchStore } from "./ui-patches.mjs";
 import { createGithubExtension } from "./github-sync.mjs";
 import { createSchedules } from "./schedules.mjs";
+// Connectors: outside services the agent can use (docs/CONNECTORS.md).
+import { builtInConnectors, createConnectors } from "./connectors.mjs";
+import { findComposio } from "./github-sync.mjs";
+import { PUBLIC_ORIGIN } from "./security.mjs";
 await mkdir(ROOT + "/data", { recursive: true, mode: 0o700 });
 await mkdir(ROOT + "/evidence", { recursive: true, mode: 0o700 });
 const STAGING = process.env.MARS_PI_STAGING === "1";
@@ -199,9 +203,20 @@ registry.install(createSelfEdit().extension);
 // Updates from GitHub main (docs/UPDATES.md). conversations is created later; busy() runs after boot.
 const updates = createUpdates({ repo: REPO, root: ROOT, busy: async () => (await late.conversations.list()).some((row) => row.running) });
 registry.install(updates.extension);
+// Connectors (docs/CONNECTORS.md). Their conn_ tools install at boot below, after the host names are fixed.
+const connectors = createConnectors({
+  dataDir: ROOT + "/data",
+  registry,
+  work: WORK,
+  ownPorts: [PORT, UI_PORT],
+  redirectOrigin: (host) => PUBLIC_ORIGIN || (host && policy.hostAllowed(host) ? policy.protocol(host) + "://" + host : "http://127.0.0.1:" + PORT),
+  builtIn: () => builtInConnectors({ connections, composio: findComposio() }),
+});
+registry.install(connectors.extension);
 // Host names are captured before installed extensions load, so none can replace them.
 const hostNames = { extensions: plugins.definitions().map((row) => row.extension).filter((name, i, all) => all.indexOf(name) === i), tools: plugins.definitions().map((row) => row.tool.name) };
 const extensions = new ExtensionStore(registry, undefined, () => hostNames);
+await connectors.boot();
 const uiPatches = new UiPatchStore();
 await uiPatches.boot();
 // Host tools below: each has a typed result so codemode scripts get an object, not a
@@ -559,6 +574,8 @@ const server = http.createServer(async (req, res) => {
     // per-port browse key instead of the owner cookie. It reaches that one proxied
     // service and nothing else; anything else falls through to owner auth below.
     if (await workbench.handleKeyed(req, res, url)) return;
+    // The OAuth redirect back from a connector's sign-in carries no owner cookie; its single-use state is the check (docs/CONNECTORS.md).
+    if (await connectors.callback(req, res, url)) return;
     const cookie = (req.headers.cookie || "")
       .split(";")
       .map((s) => s.trim())
@@ -757,6 +774,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (await gatewayRoute({ req, url, res, send, jsonBody, ...gatewayHost })) return;
     if (await updates.route({ req, url, res, send, jsonBody })) return;
+    if (await connectors.route({ req, url, res, send, jsonBody })) return;
     if (url.pathname === "/api/connections" && req.method === "GET") {
       send(res, 200, connectionStatus());
       return;
@@ -941,6 +959,7 @@ for (const signal of ["SIGTERM", "SIGINT"])
     if (closing) return;
     closing = true;
     oauth.close();
+    await connectors.close();
     server.close();
     updates.stop();
     await gatewayHost.gateway.close();
