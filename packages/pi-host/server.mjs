@@ -56,6 +56,7 @@ import { ExtensionStore } from "./extension-store.mjs";
 import { UiPatchStore } from "./ui-patches.mjs";
 import { createGithubExtension } from "./github-sync.mjs";
 import { createSchedules } from "./schedules.mjs";
+import { createLanes, createLanesExtension, lanesEnabled } from "./lanes.mjs";
 // Connectors: outside services the agent can use (docs/CONNECTORS.md).
 import { builtInConnectors, createConnectors } from "./connectors.mjs";
 import { findComposio } from "./github-sync.mjs";
@@ -192,6 +193,12 @@ const schedules = createSchedules({ harness: () => late.harness, rootId: () => l
   defaults: () => modelSettings.get(), checkConversation: async (id) => { await late.conversations.resolve(id); },
   defaultAgent: () => ({ ...(late.defaultModel ? { model: late.defaultModel } : {}), cwd: WORK, modelTools: discovery.modelTools }) });
 registry.install(schedules.extension);
+// Lanes: parallel chats changing Mars, each in its own worktree, merged in order (docs/LANES.md).
+const lanes = lanesEnabled() ? createLanes({ repo: REPO, root: ROOT }) : null;
+if (lanes) {
+  registry.install(createLanesExtension(lanes));
+  lanes.load().then(() => lanes.processQueue(), () => {});
+}
 // GitHub pushes through the owner's Composio connection (docs/GITHUB.md).
 registry.install(createGithubExtension({ cwd: WORK }));
 // Named agents and session start hooks (docs/AGENTS-AND-HOOKS.md).
@@ -622,6 +629,10 @@ const server = http.createServer(async (req, res) => {
     if (await workbench.handle(req, res, url)) return;
     if (url.pathname === "/api/schedules" || url.pathname.startsWith("/api/schedules/")) {
       const value = await schedules.route(req.method, url.pathname, req.method === "POST" ? await jsonBody(req) : undefined);
+      if (value) { send(res, 200, value); return; }
+    }
+    if (lanes && (url.pathname === "/api/lanes" || url.pathname.startsWith("/api/lanes/"))) {
+      const value = await lanes.route(req.method, url.pathname, req.method === "POST" ? await jsonBody(req) : undefined);
       if (value) { send(res, 200, value); return; }
     }
     if (url.pathname === "/api/settings/models" && req.method === "GET") {

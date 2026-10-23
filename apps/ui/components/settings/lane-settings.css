@@ -1,0 +1,47 @@
+/* Settings, Lanes (components/settings/lane-settings.tsx). Rows reuse the gateway list. */
+.lane-settings .gateway-row {
+  align-items: flex-start;
+}
+.lane-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.lane-pause {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.lane-position {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  border-radius: 9px;
+  background: var(--surface-raised, rgba(127, 127, 127, 0.18));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.lane-state[data-state="merged"] {
+  color: var(--green);
+}
+.lane-state[data-state="blocked"] {
+  color: var(--red);
+}
+.gateway-row-text span.lane-note,
+.gateway-row-text span.lane-links {
+  overflow: visible;
+  white-space: normal;
+}
+.lane-links {
+  display: flex;
+  gap: 12px;
+}
+.lane-links .gateway-link {
+  color: var(--text);
+  font-size: 12px;
+}

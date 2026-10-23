@@ -534,3 +534,9 @@ Built by three helper agents in their own worktrees (day/connectors, day/schedul
 - The "last host update ended as staging failed" notice was wrong: a host_deploy that fails in staging changes nothing live, and the updater had since installed a newer build. Both the UI and host-version.mjs now ignore staging failures and refusals, and any problem older than the installed build. New check-host-version-problems.mjs (fails on the old host-version.mjs); host-version-ui-check covers the staging case.
 
 - Workflow steps take an optional phase (e.g. Research, Build, Review) chosen by the workflow_start caller; the Background tasks panel groups steps by phase.
+
+## 2026-10-23 Lanes: parallel chats changing Mars, merged in order
+
+- New packages/pi-host/lanes.mjs (spec docs/LANES.md): lane_start gives a chat its own worktree and branch (lane/<id>) beside the checkout, with node_modules linked; lane_preview runs that lane's own host (fresh data root, owner token only) and webpack dev interface as memory-limited transient user services, published in the tailnet with tailscale serve on 8601 and up; lane_submit commits and queues it. The queue merges one lane at a time in order: rebase onto main, protected-files guard, syntax, interface types and lint for changed UI files, and the host checks the change reaches, then a fast-forward of main and cleanup. A conflict or failed check blocks only that lane. Restart recovery is idempotent.
+- Settings, Lanes lists lanes with state, preview link and chat, the queue with up and down, "Merge automatically" and "Merge now". Routes /api/lanes*.
+- check-lanes.mjs covers parallel order, conflicts, the guard, reached checks, pause and reorder, a dirty checkout and restart recovery. HOST-GUIDE.md points agents to lanes.
