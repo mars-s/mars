@@ -46,7 +46,8 @@ try {
   // Audio is forwarded as binary; bad chunks are refused.
   const pcm = Buffer.alloc(3200, 1);
   assert.equal((await call(`/api/voice/${id}/audio`, { audio: pcm.toString('base64') })).status, 200);
-  assert.ok(Buffer.isBuffer(socket.sent.at(-1)) && socket.sent.at(-1).equals(pcm));
+  // A keep-alive (every 20 ms here) can land after the audio on a busy machine, so look for the chunk itself.
+  assert.ok(socket.sent.some((data) => Buffer.isBuffer(data) && data.equals(pcm)));
   assert.equal((await call(`/api/voice/${id}/audio`, { audio: Buffer.alloc(3).toString('base64') })).status, 400, 'odd byte count');
   assert.equal((await call(`/api/voice/${id}/audio`, { audio: 'not base64!' })).status, 400);
   assert.equal((await call(`/api/voice/${id}/audio`, { audio: Buffer.alloc(CHUNK_MAX + 2).toString('base64') })).status, 413, 'too big');

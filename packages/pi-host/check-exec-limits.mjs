@@ -141,7 +141,8 @@ try {
       assert.deepEqual(result.services.map((service) => service.role), ["host", "ui"]);
       assert.ok(result.processes.length > 0 && result.processes.length <= 8);
       assert.ok(result.processes.every((p) => Number.isInteger(p.pid) && p.command.length <= 120));
-      const mine = result.commands.find((command) => command.description.includes("sleep 3"));
+      // Match the whole command: other scopes on a shared machine (e.g. "sleep 30") also contain "sleep 3".
+      const mine = result.commands.find((command) => /(^|: )sleep 3$/.test(command.description));
       assert.ok(mine, "running command listed");
       assert.equal(mine.maxMb, 300);
       assert.equal(mine.cpuWeight, 20);
