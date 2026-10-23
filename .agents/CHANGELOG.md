@@ -524,3 +524,5 @@ Built by three helper agents in their own worktrees (day/connectors, day/schedul
 - Gate: host 54/54, UI unit 93/93, script tests 45/45, static checks, 16 routed browser checks including connectors, schedules and voice, plan, side-chats and workbench-ui against the fixture preview, production build.
 
 - host_deploy refused the batch because it changed an existing check (check-orchestration.mjs, the worker_run schema assertion); the trust boundary allows adding checks, not changing them. That edit is reverted and the assertion lives in a new check-worker-results.mjs (fails on the old orchestration.mjs, passes on the fix).
+
+- Added the Night City (Cyberpunk 2077 style) colour theme in Settings.

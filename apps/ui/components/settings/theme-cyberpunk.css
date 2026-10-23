@@ -1,0 +1,97 @@
+/* Night City: a Cyberpunk 2077 style palette. Void black, signal yellow, netrunner cyan, alarm red. */
+:root[data-theme="cyberpunk"],
+[data-theme="cyberpunk"] {
+  --background: #0a0a12;
+  --foreground: #e6f7ff;
+  --text: #e6f7ff;
+  --sidebar: #06060c;
+  --sidebar-foreground: #9fe9f2;
+  --sidebar-primary: #fcee0a;
+  --sidebar-primary-foreground: #06060c;
+  --sidebar-accent: #15152a;
+  --sidebar-accent-foreground: #fcee0a;
+  --sidebar-border: #1e2a3a;
+  --sidebar-ring: #00f0ff;
+  --card: #10101c;
+  --card-foreground: #e6f7ff;
+  --surface: #0f0f1a;
+  --surface-raised: #141424;
+  --composer: #0f0f1c;
+  --user-bubble: #2a2400;
+  --popover: #0f0f1c;
+  --popover-foreground: #e6f7ff;
+  --primary: #fcee0a;
+  --primary-foreground: #0a0a12;
+  --secondary: #17172b;
+  --secondary-foreground: #e6f7ff;
+  --muted: #12121f;
+  --muted-foreground: #7fa8b8;
+  --accent: #1a1a33;
+  --accent-foreground: #00f0ff;
+  --destructive: #ff003c;
+  --border: #23324a;
+  --input: #2e4466;
+  --ring: #00f0ff;
+  --radius: 0.25rem;
+  --text-muted: #7fa8b8;
+  --text-faint: #5f8494;
+  --clay: #fcee0a;
+  --clay-strong: #e6d600;
+  --orange: #ff9f1c;
+  --blue: #00f0ff;
+  --green: #39ff88;
+  --red: #ff003c;
+  --amber: #fcee0a;
+  --shadow-float: 0 0 0 1px rgb(0 240 255 / 0.25), 0 6px 28px rgb(0 240 255 / 0.12);
+  --shadow-composer: 0 0 0 1px rgb(252 238 10 / 0.18), 0 4px 20px rgb(252 238 10 / 0.08);
+}
+html[data-theme="cyberpunk"] {
+  color-scheme: dark;
+}
+html[data-theme="cyberpunk"] body {
+  background:
+    linear-gradient(rgb(0 240 255 / 0.035) 1px, transparent 1px) 0 0 / 100% 32px,
+    linear-gradient(90deg, rgb(0 240 255 / 0.035) 1px, transparent 1px) 0 0 / 32px 100%,
+    radial-gradient(ellipse at 85% -10%, rgb(255 0 60 / 0.10), transparent 55%),
+    radial-gradient(ellipse at 0% 110%, rgb(0 240 255 / 0.08), transparent 50%),
+    var(--background);
+}
+/* CRT scanlines over everything; pointer-events off so nothing is blocked. */
+html[data-theme="cyberpunk"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgb(255 255 255 / 0.022) 0 1px, transparent 1px 3px);
+}
+html[data-theme="cyberpunk"] h1,
+html[data-theme="cyberpunk"] h2,
+html[data-theme="cyberpunk"] h3 {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+  text-shadow: 2px 0 rgb(255 0 60 / 0.55), -1px 0 rgb(0 240 255 / 0.45);
+}
+html[data-theme="cyberpunk"] a { color: var(--blue); }
+html[data-theme="cyberpunk"] :is(button, a, input, textarea, select):focus-visible {
+  outline-color: var(--blue);
+  box-shadow: 0 0 12px rgb(0 240 255 / 0.55);
+}
+html[data-theme="cyberpunk"] ::selection {
+  background: var(--primary);
+  color: #0a0a12;
+}
+html[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb { background: #fcee0a55; }
+html[data-theme="cyberpunk"] pre {
+  border-left: 2px solid var(--blue) !important;
+}
+@keyframes mars-cp-flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.6; }
+  94% { opacity: 1; }
+  96% { opacity: 0.8; }
+}
+html[data-theme="cyberpunk"] h1 { animation: mars-cp-flicker 6s steps(1) infinite; }

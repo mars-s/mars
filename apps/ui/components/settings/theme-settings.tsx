@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import "./theme-settings.css";
+import "./theme-cyberpunk.css";
 
 const themes = [
   { id: "dark", name: "Dark", detail: "Warm charcoal with ivory text." },
   { id: "light", name: "Light", detail: "Warm paper with dark ink." },
   { id: "oled", name: "OLED", detail: "True black with ivory text." },
+  { id: "cyberpunk", name: "Night City", detail: "Neon yellow and cyan on void black." },
 ] as const;
 
 export function ThemeSettings() {

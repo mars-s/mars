@@ -272,7 +272,7 @@ export function LiveWorkspace() {
     } catch {
       /* Browser storage is optional. */
     }
-    if (saved === "dark" || saved === "light" || saved === "oled")
+    if (saved === "dark" || saved === "light" || saved === "oled" || saved === "cyberpunk")
       document.documentElement.dataset.theme = saved;
   }, []);
   const action = useCallback(
