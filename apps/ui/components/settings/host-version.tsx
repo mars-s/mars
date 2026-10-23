@@ -21,13 +21,18 @@ export function parseHostVersion(value: unknown): HostVersion | null {
   const data = record(value);
   if (!text(data.commit) && !text(data.repoHead)) return null;
   const latest = record(data.latestDeploy);
+  const deployedAt = text(data.deployedAt);
+  // Only problems that may have touched the live app matter: a deploy that failed in staging, or
+  // was refused, changed nothing, and anything older than the installed build is history.
+  const harmless = ["staging_failed", "refused", "dry_run"].includes(text(latest.status));
+  const older = !!deployedAt && !!text(latest.at) && Date.parse(text(latest.at)) < Date.parse(deployedAt);
   return {
     commit: text(data.commit),
     subject: text(data.subject),
     deployedAt: text(data.deployedAt),
     repoHead: text(data.repoHead),
     behind: Number.isInteger(data.behind) ? Number(data.behind) : null,
-    problem: text(latest.status) ? { status: text(latest.status), detail: text(latest.detail), at: text(latest.at) } : null,
+    problem: text(latest.status) && !harmless && !older ? { status: text(latest.status), detail: text(latest.detail), at: text(latest.at) } : null,
   };
 }
 

@@ -25,10 +25,9 @@ function parseView(value: unknown): VoiceView {
   };
 }
 
-// The capture node: an AudioWorklet that forwards raw mono frames to the main thread.
-const WORKLET = `registerProcessor("mars-voice", class extends AudioWorkletProcessor {
-  process(inputs) { const input = inputs[0]; if (input && input[0]) this.port.postMessage(input[0].slice(0)); return true; }
-});`;
+// The capture node is a same-origin file (public/voice-worklet.js): the host's Content Security
+// Policy allows scripts from 'self' only, so a blob: worklet is refused in production.
+const WORKLET_URL = "/voice-worklet.js";
 
 export type VoiceCallbacks = { onText: (text: string) => void; onError: (message: string) => void };
 
@@ -36,7 +35,7 @@ export type VoiceCallbacks = { onText: (text: string) => void; onError: (message
 export class VoiceRecorder {
   private stream?: MediaStream;
   private context?: AudioContext;
-  private node?: AudioWorkletNode;
+  private node?: AudioWorkletNode | ScriptProcessorNode;
   private id = "";
   private seq = -1;
   private pending: Int16Array[] = [];
@@ -62,19 +61,26 @@ export class VoiceRecorder {
       throw failure;
     }
     this.context = new AudioContext();
-    const url = URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }));
-    try {
-      await this.context.audioWorklet.addModule(url);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
     const source = this.context.createMediaStreamSource(this.stream);
-    this.node = new AudioWorkletNode(this.context, "mars-voice");
     const rate = this.context.sampleRate;
-    this.node.port.onmessage = (event: MessageEvent<Float32Array>) => {
-      if (!this.stopped) this.pending.push(toPcm16(event.data, rate));
+    const take = (samples: Float32Array) => {
+      if (!this.stopped) this.pending.push(toPcm16(samples, rate));
     };
-    source.connect(this.node);
+    try {
+      await this.context.audioWorklet.addModule(WORKLET_URL);
+      const worklet = new AudioWorkletNode(this.context, "mars-voice");
+      worklet.port.onmessage = (event: MessageEvent<Float32Array>) => take(event.data);
+      source.connect(worklet);
+      this.node = worklet;
+    } catch {
+      // A worklet that cannot load (an old browser, a stricter policy): the older processor, which
+      // works everywhere. It runs only while connected to the output, and writes silence there.
+      const processor = this.context.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (event) => take(event.inputBuffer.getChannelData(0).slice(0));
+      source.connect(processor);
+      processor.connect(this.context.destination);
+      this.node = processor;
+    }
     this.timer = setInterval(() => this.flush(), SEND_EVERY_MS);
     void this.poll();
   }

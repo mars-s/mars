@@ -527,3 +527,8 @@ Built by three helper agents in their own worktrees (day/connectors, day/schedul
 
 - Added the Night City (Cyberpunk 2077 style) colour theme in Settings.
 - Added Pin for top-level chats (native organise doc, Pinned section) and R/P/A hotkeys in the chat row menu.
+
+## 2026-10-23 Voice under the production CSP; no update notice for staging failures
+
+- Voice failed for the owner with "Failed to load worklet module script: blob:...": the host's Content Security Policy allows scripts from 'self' only. The capture worklet is now a same-origin file (apps/ui/public/voice-worklet.js), with the older ScriptProcessor as a fallback. Verified through the host (with its CSP) with Chromium's fake microphone playing a real recording: the box ended with the spoken sentence and no errors.
+- The "last host update ended as staging failed" notice was wrong: a host_deploy that fails in staging changes nothing live, and the updater had since installed a newer build. Both the UI and host-version.mjs now ignore staging failures and refusals, and any problem older than the installed build. New check-host-version-problems.mjs (fails on the old host-version.mjs); host-version-ui-check covers the staging case.

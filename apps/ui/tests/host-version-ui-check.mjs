@@ -12,7 +12,7 @@ page.on("pageerror", (error) => errors.push(error.message));
 let version = {
   commit: "3b404f254e59aa", subject: "Terminal kill never hangs up", deployedAt: "2026-10-21T11:13:38Z", source: "deployed.json",
   repoHead: "ca754d07ffff", behind: 3, interrupted: true,
-  latestDeploy: { id: "x", status: "interrupted", detail: "It stopped while staging; the live app was not changed.", at: "2026-10-21T10:09:00Z", commit: "e709326e" },
+  latestDeploy: { id: "x", status: "interrupted", detail: "It stopped while staging; the live app was not changed.", at: "2026-10-21T12:00:00Z", commit: "e709326e" },
 };
 await page.route("**/api/**", (route) => {
   const url = new URL(route.request().url());
@@ -30,6 +30,12 @@ try {
   await dialog.getByText("3b404f25").waitFor();
   await dialog.getByText("3 commits on main not deployed yet").waitFor();
   await dialog.getByText("It stopped while staging; the live app was not changed.", { exact: false }).waitFor();
+  // A host_deploy that failed in staging changed nothing live: no notice.
+  version = { ...version, latestDeploy: { id: "y", status: "staging_failed", detail: "Checks failed.", at: "2026-10-23T10:22:00Z", commit: "a746e440" } };
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForHydration(page);
+  await page.waitForTimeout(1500);
+  assert.equal(await page.getByText("The last host update", { exact: false }).count(), 0, "no notice for a staging failure");
   version = { ...version, behind: 0, interrupted: false, latestDeploy: null };
   await page.reload({ waitUntil: "domcontentloaded" });
   await waitForHydration(page);

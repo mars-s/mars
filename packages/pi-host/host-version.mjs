@@ -8,7 +8,8 @@ import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 const readJson = (path) => readFile(path, 'utf8').then(JSON.parse, () => null);
-const PROBLEMS = new Set(['interrupted', 'rolled_back', 'rollback_failed', 'apply_failed', 'schedule_failed', 'staging_failed']);
+// Only outcomes that may have touched the live app. staging_failed and refused changed nothing.
+const PROBLEMS = new Set(['interrupted', 'rolled_back', 'rollback_failed', 'apply_failed', 'schedule_failed']);
 const IN_FLIGHT = new Set(['staging', 'scheduled', 'applying', 'restarting']);
 
 async function git(repo, args) {
@@ -76,7 +77,8 @@ export function createHostVersion({ root, appDir, repo, cacheMs = 30000 }) {
       commit: facts.commit, subject: facts.subject, deployedAt: live.deployedAt, source: live.source,
       repoHead: facts.repoHead, behind: facts.behind,
       interrupted: latest?.status === 'interrupted',
-      latestDeploy: latest && PROBLEMS.has(latest.status) ? latest : null,
+      // A problem older than the build now installed (for example by the updater) is history.
+      latestDeploy: latest && PROBLEMS.has(latest.status) && !(live.deployedAt && latest.at && Date.parse(latest.at) < Date.parse(live.deployedAt)) ? latest : null,
     };
   };
 }
