@@ -249,7 +249,7 @@ Example: await tools.agent_list({ query: "review" })`,
       defineTool({
         name: 'agent_run',
         description: `Run a task with one of the owner's named agents and wait for its answer.
-Use it when a skill or the owner says to spawn or use a named subagent, e.g. "spawn the comment-sicko subagent". The agent is a helper model whose instructions are its Markdown file; it sees only task, not this chat, so write task as a complete brief (files, diff, what to return). It returns the agent's final answer in result and the worker id for worker_followup. For a helper with no named agent, use worker_run.
+Use it when a skill or the owner says to spawn or use a named subagent, e.g. "spawn the comment-sicko subagent". The agent is a helper model whose instructions are its Markdown file; it sees only task, not this chat, so write task as a complete brief (files, diff, what to return). It returns the agent's final answer in result and the worker id for worker_followup; when truncated is true, worker_read with that id gets the whole answer. For a helper with no named agent, use worker_run.
 Example: const { result } = await tools.agent_run({ agent: "comment-sicko", task: "Review the comments in the diff of packages/pi-host against main and list what to delete." })`,
         parameters: Type.Object({
           agent: Type.String({ minLength: 1, maxLength: 120, description: 'Agent name from the Agents list or agent_list, e.g. "comment-sicko". "pstack:comment-sicko" also works.' }),
@@ -261,7 +261,9 @@ Example: const { result } = await tools.agent_run({ agent: "comment-sicko", task
           agent: Type.String({ description: 'The agent that ran.' }),
           id: Type.String({ description: 'Worker id. Pass it to worker_followup to ask more.' }),
           status: Type.String({ description: '"completed", "aborted" or "unanswered".' }),
-          result: Type.String({ description: "The agent's final answer, up to 4000 characters." }),
+          result: Type.String({ description: "The agent's final answer, up to 12000 characters." }),
+          truncated: Type.Optional(Type.Boolean({ description: 'True when result was cut. Read the rest with worker_read and this id.' })),
+          length: Type.Optional(Type.Integer({ description: 'Length of the whole answer when it was cut.' })),
           provider: Type.String({ description: 'Provider used.' }),
           modelId: Type.String({ description: 'Model used.' }),
         }),
@@ -274,7 +276,7 @@ Example: const { result } = await tools.agent_run({ agent: "comment-sicko", task
           const selection = resolveAgentModel(models, args.model || agent.model, inherited);
           const outcome = await runWorkers([{ task: args.task, title: (args.title?.trim() || `${agent.name}: ${args.task.trim()}`).slice(0, 160), ...selection, instructions: agentInstructions(agent, body) }], api, ctx);
           const row = outcome?.result?.[0] || {};
-          return result({ agent: agent.name, id: String(row.id ?? ''), status: row.status || outcome?.status || 'aborted', result: row.result || '', provider: row.provider || '', modelId: row.modelId || '' });
+          return result({ agent: agent.name, id: String(row.id ?? ''), status: row.status || outcome?.status || 'aborted', result: row.result || '', ...(row.truncated ? { truncated: true, length: row.length } : {}), provider: row.provider || '', modelId: row.modelId || '' });
         },
       }),
       defineTool({

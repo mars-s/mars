@@ -5,7 +5,30 @@ import { isArchived } from './organise-doc.mjs';
 export const nativeTitleDoc = defineDoc({ kind: 'mars.conversation-title', version: 1, scope: 'conversation', history: 'latest', fork: 'current', initial: () => ({ title: '' }) });
 const nativeId = value => typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
 const aliases = { sol: ['openai', 'gpt-6-sol'], luna: ['openai', 'gpt-6-luna'], astra: ['openai', 'gpt-6-astra'], opus: ['anthropic', 'claude-opus-4-8'] };
-const compact = messages => messages.filter(m => m.role === 'assistant').at(-1)?.content.filter(c => c.type === 'text').map(c => c.text).join('\n').slice(0, 4000) || '';
+const answerText = messages => messages.filter(m => m.role === 'assistant').at(-1)?.content.filter(c => c.type === 'text').map(c => c.text).join('\n') || '';
+/** Most characters of one worker answer returned inline. Longer answers say so and worker_read pages the rest. */
+export const WORKER_INLINE_MAX = 12000;
+/** A fanout shares this many inline characters between its workers, at least 4000 each. */
+export const FANOUT_INLINE_BUDGET = 48000;
+export const inlineLimit = count => Math.max(4000, Math.min(WORKER_INLINE_MAX, Math.floor(FANOUT_INLINE_BUDGET / Math.max(1, count))));
+/** The answer for a tool result: the text up to limit, plus truncated and length when it was cut. */
+export function inlineAnswer(text, limit = WORKER_INLINE_MAX) {
+  return text.length > limit ? { result: text.slice(0, limit), truncated: true, length: text.length } : { result: text };
+}
+/** The newest assistant text of a conversation, read from its entries. */
+export async function latestAnswer(tx, conversationId) {
+  let cursor;
+  for (let pages = 0; pages < 20; pages++) {
+    const page = await tx.scanEntries({ conversationId, order: 'descending' }, 50, cursor);
+    for (const entry of page.items) {
+      const text = answerText(entry.model || []);
+      if (text) return text;
+    }
+    if (!page.next) break;
+    cursor = page.next;
+  }
+  return '';
+}
 const receiptOf = (task, id) => task?.state.outcome?.result?.find?.(row => row.id === id) || (task?.state.outcome?.result?.steps || task?.state.checkpoint?.steps)?.find(row => row.conversationId === String(id));
 const output = value => ({ output: [{ type: 'text', text: JSON.stringify(value) }], structuredOutput: value });
 
@@ -60,7 +83,7 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
           const images = job.attachmentIds?.length ? await loadWorkerImages(job) : undefined;
           const settled = await (await child.submit({ type: 'input', content: images?.content || job.task, ...(images ? { entry: { kind: 'mars.user', data: { attachments: images.attachments } } } : {}), requestId: `worker:${runtime.taskId}:${index}` }, ctx)).wait(ctx);
           const view = await runtime.context(id, ctx);
-          return { id, conversationId: id, ...task.input.jobs[index].selection, status: settled.status === 'done' ? 'completed' : (settled.reason === 'aborted' ? 'aborted' : 'unanswered'), result: compact(view.messages), usage: await runtime.snapshot(UsageDoc, id, ctx) || { models: {}, tools: {} } };
+          return { id, conversationId: id, ...task.input.jobs[index].selection, status: settled.status === 'done' ? 'completed' : (settled.reason === 'aborted' ? 'aborted' : 'unanswered'), ...inlineAnswer(answerText(view.messages), inlineLimit(task.input.jobs.length)), usage: await runtime.snapshot(UsageDoc, id, ctx) || { models: {}, tools: {} } };
         }));
         await runtime.commit(() => ({ status: 'terminal', outcome: { status: 'completed', result: results } }), ctx);
       },
@@ -85,7 +108,9 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
     provider: Type.String({ description: 'Provider used.' }),
     modelId: Type.String({ description: 'Model used.' }),
     status: Type.String({ description: '"completed", "aborted" or "unanswered".' }),
-    result: Type.String({ description: "The worker's final answer, up to 4000 characters." }),
+    result: Type.String({ description: `The worker's final answer, up to ${WORKER_INLINE_MAX} characters (a fanout shares ${FANOUT_INLINE_BUDGET} between its workers, at least 4000 each).` }),
+    truncated: Type.Optional(Type.Boolean({ description: 'True when result was cut. Read the rest with worker_read.' })),
+    length: Type.Optional(Type.Integer({ description: 'Length of the whole answer when it was cut.' })),
     usage: Type.Any({ description: 'Token use, by model.' }),
   });
   const RunOutcome = Type.Object({
@@ -120,10 +145,10 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
       : outcome;
   }
   tool('worker_run', `Hand one job to a helper model and wait for its answer.
-Use it for ONE self-contained job, with a different model, or to keep a long investigation out of this conversation. For several steps in order, use workflow_start. The worker sees only task (and any images you pass), not this chat, so write task as a complete brief. It waits until the worker finishes and returns its final answer in result[0].result. It shows nested under this chat, and survives a restart. For several independent jobs at once, use worker_fanout; for work the owner should follow, use side_chat_open.
+Use it for ONE self-contained job, with a different model, or to keep a long investigation out of this conversation. For several steps in order, use workflow_start. The worker sees only task (and any images you pass), not this chat, so write task as a complete brief. It waits until the worker finishes and returns its final answer in result[0].result; when result[0].truncated is true, read the rest with worker_read. It shows nested under this chat, and survives a restart. For several independent jobs at once, use worker_fanout; for work the owner should follow, use side_chat_open.
 Example: const { result } = await tools.worker_run({ task: "List the TODO comments in src/ with file and line.", model: "luna", title: "Find TODOs" })`, job, RunOutcome, (args, api, ctx) => run([args], api, ctx));
   tool('worker_fanout', `Run two or more jobs at the same time, each by its own helper model, and wait for all their answers.
-Use it whenever there are several independent jobs, e.g. reviewing three files or researching three options: put one entry per job in jobs. For a single job, use worker_run. Each job is a worker as in worker_run, with its own complete brief. Returns one result per job, in the same order. Up to ${maxConcurrent} jobs per call. For steps that must run in order, use workflow_start.
+Use it whenever there are several independent jobs, e.g. reviewing three files or researching three options: put one entry per job in jobs. For a single job, use worker_run. Each job is a worker as in worker_run, with its own complete brief. Returns one result per job, in the same order; a long answer is cut and marked truncated, and worker_read gets the whole of it. Up to ${maxConcurrent} jobs per call. For steps that must run in order, use workflow_start.
 Example: const { result } = await tools.worker_fanout({ jobs: [{ task: "Review a.ts for bugs." }, { task: "Review b.ts for bugs." }] })`, Type.Object({ jobs: Type.Array(job, { minItems: 1, maxItems: maxConcurrent, description: `The jobs, 1 to ${maxConcurrent}. Each needs its own complete task.` }) }), RunOutcome, (args, api, ctx) => run(args.jobs, api, ctx), (args) => ({ ...args, jobs: forgivingList(args?.jobs, 'task') }));
   async function workerRecords(api, ctx) {
     return api.commit(async tx => {
@@ -167,12 +192,34 @@ Example: const { result } = await tools.worker_followup({ workerId: "57", task: 
   }), Type.Object({
     id: Type.Any({ description: 'The worker id.' }),
     status: Type.String({ description: '"done" when it answered.' }),
-    result: Type.String({ description: 'Its answer, up to 4000 characters.' }),
+    result: Type.String({ description: `Its answer, up to ${WORKER_INLINE_MAX} characters.` }),
+    truncated: Type.Optional(Type.Boolean({ description: 'True when result was cut. Read the rest with worker_read.' })),
+    length: Type.Optional(Type.Integer({ description: 'Length of the whole answer when it was cut.' })),
   }), async (args, api, ctx) => {
     const child = await ownedWorker(args.workerId, api, ctx);
     const settled = await (await child.submit({ type: 'input', content: args.task, whenBusy: 'followUp', requestId: `worker-followup:${api.taskId}` }, ctx)).wait(ctx);
     const answer = settled.answer ? await api.commit(tx => tx.entry(settled.answer), ctx) : undefined;
-    return { id: String(child.id), status: settled.status, result: compact(answer?.model || []) };
+    return { id: String(child.id), status: settled.status, ...inlineAnswer(answerText(answer?.model || [])) };
+  });
+  tool('worker_read', `Read the whole final answer of one of this conversation's workers, in parts.
+Use it when worker_run, worker_fanout, worker_followup or agent_run returned truncated: true, or to reread a worker's answer later. It returns up to limit characters from offset; when truncated is true, call again with offset set to nextOffset. Only workers started from this conversation can be read; get ids from worker_list.
+Example: const { text, nextOffset } = await tools.worker_read({ workerId: "57" })`, Type.Object({
+    workerId: Type.String({ description: 'Worker id from worker_run, worker_fanout or worker_list, e.g. "57".' }),
+    offset: Type.Optional(Type.Integer({ minimum: 0, default: 0, description: 'Character position to read from. Use nextOffset from the previous call for the next part.' })),
+    limit: Type.Optional(Type.Integer({ minimum: 1000, maximum: 60000, default: 20000, description: 'Most characters to return, 1000 to 60000.' })),
+  }), Type.Object({
+    workerId: Type.String({ description: 'The worker id.' }),
+    text: Type.String({ description: 'This part of the answer, or "" when the worker has not answered.' }),
+    offset: Type.Integer({ description: 'Where this part starts.' }),
+    length: Type.Integer({ description: 'Length of the whole answer.' }),
+    truncated: Type.Boolean({ description: 'True when more follows; call again with offset: nextOffset.' }),
+    nextOffset: Type.Optional(Type.Integer({ description: 'Pass as offset to read the next part.' })),
+  }), async (args, api, ctx) => {
+    const child = await ownedWorker(args.workerId, api, ctx);
+    const text = await api.commit(tx => latestAnswer(tx, child.id), ctx);
+    const offset = Math.min(args.offset ?? 0, text.length);
+    const end = Math.min(text.length, offset + (args.limit ?? 20000));
+    return { workerId: String(child.id), text: text.slice(offset, end), offset, length: text.length, truncated: end < text.length, ...(end < text.length ? { nextOffset: end } : {}) };
   });
   // runWorkers lets agent_run (agents.mjs) start workers through the same task and replay path.
   return Object.assign(defineExtension({ name: 'mars-orchestration', tools, tasks: [workflow] }), { runWorkers: run });
