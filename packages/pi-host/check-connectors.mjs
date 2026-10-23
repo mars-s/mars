@@ -105,6 +105,8 @@ try {
   prove("tools are deferred with the server's description and input schema, in one mcp plugin per connector");
   const reply = (await echo.execute({ text: "hello" }, {}, {})).structuredOutput;
   assert.deepEqual(reply, { text: "echo: hello", truncated: false });
+  // The ping answer is posted alongside the reply, so give it a moment to land.
+  for (let n = 0; n < 100 && !keyed.state.pingAnswered; n++) await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(keyed.state.pingAnswered, true, "the server's ping inside an SSE stream is answered");
   const sum = (await agentTool("conn_fake_http_add_numbers").execute({ a: 2, b: 3 }, {}, {})).structuredOutput;
   assert.deepEqual(sum, { text: "5", truncated: false, structured: { sum: 5 } });
