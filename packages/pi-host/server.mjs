@@ -19,6 +19,7 @@ import { createUpdates } from "./updates.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { abortKeepingQueue, removeQueued, steerQueued, whenBusy } from "./queue.mjs";
 import { createSideChatExtension } from "./side-chats.mjs";
+import { createDuet, createDuetExtension } from "./duet.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
 import { createSkills, createSkillsExtension, skillRoots } from "./skills.mjs";
@@ -176,7 +177,8 @@ registry.install(createPluginControlExtension({ plugins }));
 registry.install(createPlanExtension());
 const skills = createSkills({ roots: skillRoots({ work: WORK }) });
 registry.install(createSkillsExtension({ skills }));
-registry.install(createProjectExtension({ projects: createProjects({ harness: () => late.harness, work: WORK, context }) }));
+const projects = createProjects({ harness: () => late.harness, work: WORK, context });
+registry.install(createProjectExtension({ projects }));
 registry.install(createMemoryExtension({ memory: createMemory({ work: WORK }) }));
 const resolveModel = (id) => {
   try {
@@ -193,6 +195,10 @@ const schedules = createSchedules({ harness: () => late.harness, rootId: () => l
   defaults: () => modelSettings.get(), checkConversation: async (id) => { await late.conversations.resolve(id); },
   defaultAgent: () => ({ ...(late.defaultModel ? { model: late.defaultModel } : {}), cwd: WORK, modelTools: discovery.modelTools }) });
 registry.install(schedules.extension);
+// Duet: the owner's assistant thread over parallel background tasks (docs/DUET.md).
+const duet = createDuet({ harness: () => late.harness, models, context, openProject: (id, path) => projects.open(id, path),
+  defaultAgent: () => ({ ...(late.defaultModel ? { model: late.defaultModel } : {}), cwd: WORK, modelTools: discovery.modelTools }) });
+registry.install(createDuetExtension({ duet }));
 // Lanes: parallel chats changing Mars, each in its own worktree, merged in order (docs/LANES.md).
 const lanes = lanesEnabled() ? createLanes({ repo: REPO, root: ROOT }) : null;
 if (lanes) {
@@ -630,6 +636,9 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/schedules" || url.pathname.startsWith("/api/schedules/")) {
       const value = await schedules.route(req.method, url.pathname, req.method === "POST" ? await jsonBody(req) : undefined);
       if (value) { send(res, 200, value); return; }
+    }
+    if (url.pathname === "/api/duet" || url.pathname.startsWith("/api/duet/")) {
+      send(res, 200, await duet.route(req.method, url.pathname, req.method === "POST" ? await jsonBody(req) : undefined)); return;
     }
     if (lanes && (url.pathname === "/api/lanes" || url.pathname.startsWith("/api/lanes/"))) {
       const value = await lanes.route(req.method, url.pathname, req.method === "POST" ? await jsonBody(req) : undefined);

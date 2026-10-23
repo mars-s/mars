@@ -100,10 +100,11 @@ async function checkParentInTx(tx, parentId) {
  * Create a side chat of `parentId` in one commit: the conversation, its agent settings,
  * its title, its link to the parent and the parent's index entry. The parent is checked
  * inside the same commit, so it cannot become a side chat in between.
- * With `requestKey`, a second call with the same key returns the first side chat's id.
+ * With `requestKey`, a second call with the same key returns the first side chat's id. `max`
+ * raises the per-parent cap for parents that own many children by design (Duet tasks).
  * Returns `{ id }`.
  */
-export async function createSideChat({ harness, parentId, agent, title, context, requestKey }) {
+export async function createSideChat({ harness, parentId, agent, title, context, requestKey, max = SIDE_CHAT_MAX }) {
   const parentConversation = await harness.conversation(nativeId(parentId), context);
   if (!parentConversation) throw fail('Parent conversation not found', 404);
   return parentConversation.commit(async (tx) => {
@@ -111,7 +112,7 @@ export async function createSideChat({ harness, parentId, agent, title, context,
     const index = await tx.doc(SideChatIndexDoc, parent.id);
     if (!index.requests) index.requests = {};
     if (requestKey && index.requests[requestKey]) return { id: index.requests[requestKey] };
-    if (index.children.length >= SIDE_CHAT_MAX) throw fail(`This conversation already has ${SIDE_CHAT_MAX} side chats.`, 409);
+    if (index.children.length >= max) throw fail(`This conversation already has ${max} side chats.`, 409);
     const child = await tx.createConversation({ ownership: { kind: 'ownerless' } });
     await configure(tx, child.id, agent);
     (await tx.doc(nativeTitleDoc, child.id)).title = (title?.trim() || 'Side chat').slice(0, 160);
