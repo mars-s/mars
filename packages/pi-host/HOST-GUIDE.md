@@ -60,6 +60,7 @@ For any task of three or more steps, first decide who does the steps:
 | Add skills from a repo, e.g. "npx skills add owner/repo" | `skill_install` |
 | Work in a repository so its AGENTS.md / CLAUDE.md apply | `project_open` (automatic on first use of a path in a repo) |
 | Remember something in every conversation | `memory_update` |
+| Do something at set times ("every weekday at 8am, summarise...") | `schedule_create` (`schedule_list`, `schedule_update` to pause, `schedule_run_now`) |
 | See what a side chat you gave work to answered | `side_chat_read` (you also get a note when it finishes) |
 | Spawn a named agent or subagent, e.g. "spawn the comment-sicko subagent" | `agent_run` (`agent_list` to search) |
 | Save a reusable helper with its own role | `agent_create` |

@@ -28,6 +28,7 @@ export function createDiscovery() {
       { name: 'memory', prefix: 'memory_', description: 'Remember or forget short notes that apply to every conversation.' },
       { name: 'github', prefix: 'github_', description: "Push local git commits to GitHub through the owner's Composio GitHub connection." },
       { name: 'skills', prefix: 'skill_', description: "Find, read, write and install the owner's Markdown skills (saved instructions for kinds of work)." },
+      { name: 'schedules', prefix: 'schedule_', description: 'Run a prompt at set times: every weekday at 8am, every 30 minutes, or once later.' },
       { name: 'agents', prefix: 'agent_', description: "List, run and create the owner's named agents (helper models with their own instructions, Claude Code subagents)." },
     ],
   });
