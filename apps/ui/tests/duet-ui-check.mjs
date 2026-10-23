@@ -11,6 +11,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 const posts = [];
+let hostHasDuet = true;
 const task = (id, label, state, extra = {}) => ({ id, conversationId: String(100 + Number(id.slice(1))), label, state, running: state === "running", model: "gpt-6-sol", progress: null, origin: "", createdAt: "", updatedAt: "", ...extra });
 let data = {
   threadId: "50",
@@ -29,6 +30,7 @@ let data = {
 await page.route("**/api/**", async (route) => {
   const request = route.request();
   const url = new URL(request.url());
+  if (url.pathname.startsWith("/api/duet") && !hostHasDuet) return route.fulfill({ status: 404, json: { error: "Not found" } });
   if (url.pathname.startsWith("/api/duet")) {
     if (request.method() === "POST") {
       const body = request.postDataJSON();
@@ -119,6 +121,16 @@ try {
   data = { ...data, running: true };
   await duet.getByLabel("Duet is typing").waitFor();
   checks.push("typing indicator while the front desk answers");
+
+  // A host from before Duet: a clear note and no sending, instead of an error.
+  hostHasDuet = false;
+  await page.getByRole("button", { name: "Chats", exact: true }).first().click();
+  await page.getByRole("button", { name: "Duet", exact: true }).first().click();
+  await duet.getByText("the Mars host has not been updated yet").waitFor();
+  assert.equal(await duet.locator(".duet-error").count(), 0, "no error banner");
+  hostHasDuet = true;
+  await duet.getByText("QF25").waitFor();
+  checks.push("old host: a clear note, then the thread once the host has Duet");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await duet.getByText("QF25").waitFor();

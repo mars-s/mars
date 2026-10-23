@@ -469,3 +469,7 @@ Surveyed every surface at 1440x900 and 390x844 in dark and light against the pre
 - Tasks talk through duet_mail (to a task or the front desk, marked as mail, loop-limited) and a shared board with compare-and-set and claims.
 - chat_create, chat_list, chat_read and chat_send let any conversation make, find, read and message chats, including code sessions in a lane worktree.
 - check-duet.mjs runs all of it on a real Pi harness with a gated scripted model; tests/duet-ui-check.mjs covers the page against routed fixtures. Not built yet: approval cards, budget reservation, proactive briefs, chat-app binding (listed in docs/DUET.md).
+
+## 2026-10-24 Duet: a clear note on a host from before Duet
+
+- The interface reloads on merge but the host needs a deploy, so Duet could open against a host without its routes. The page now says the host has not been updated yet and disables Send, instead of showing a 404 error, and picks the thread up once the host answers. duet-ui-check.mjs covers both.

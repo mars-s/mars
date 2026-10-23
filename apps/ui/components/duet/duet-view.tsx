@@ -10,6 +10,8 @@ import { useWorkspace } from "@/components/workspace-context";
 import "./duet.css";
 
 const POLL_MS = 1200;
+/** A host from before Duet answers its routes with 404. */
+const missing = (failure: unknown) => failure instanceof Error && /\(404\)|not found/i.test(failure.message);
 /** Consecutive bubbles from the same sender and task share one tail. */
 const sameGroup = (a: DuetMessage | undefined, b: DuetMessage | undefined) =>
   !!a && !!b && a.from === b.from && a.from !== "system" && a.taskId === b.taskId;
@@ -27,6 +29,7 @@ export function DuetView() {
   const [stopping, setStopping] = useState<Set<string>>(new Set());
   const [atBottom, setAtBottom] = useState(true);
   const [announcement, setAnnouncement] = useState("");
+  const [unavailable, setUnavailable] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const seenResults = useRef<Set<string> | null>(null);
@@ -36,6 +39,7 @@ export function DuetView() {
       const next = parseDuet(await piRequest("/api/duet"));
       setData(next);
       setError("");
+      setUnavailable(false);
       // Delivered messages replace their optimistic copies.
       setPending((rows) => rows.filter((row) => !next.messages.some((m) => m.from === "owner" && m.text === row.text && m.taskId === row.taskId)));
       const results = next.messages.filter((m) => m.from === "duet" && m.taskId && (m.kind === "result" || m.kind === "question" || m.kind === "failed"));
@@ -45,7 +49,8 @@ export function DuetView() {
       }
       seenResults.current = new Set(results.map((m) => m.id));
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Cannot reach Duet.");
+      if (missing(failure)) setUnavailable(true);
+      else setError(failure instanceof Error ? failure.message : "Cannot reach Duet.");
     }
   }, []);
 
@@ -57,7 +62,8 @@ export function DuetView() {
       if (active) timer = setTimeout(() => void poll(), POLL_MS);
     };
     void piRequest("/api/duet/open", {}).then(() => poll(), (failure: unknown) => {
-      setError(failure instanceof Error ? failure.message : "Cannot open Duet.");
+      if (missing(failure)) setUnavailable(true);
+      else setError(failure instanceof Error ? failure.message : "Cannot open Duet.");
       void poll();
     });
     return () => {
@@ -153,7 +159,11 @@ export function DuetView() {
           {!messages.length && !pending.length && (
             <li className="duet-empty">
               <span className="duet-avatar" aria-hidden="true">D</span>
-              <p>Ask Duet for anything. Send another message while it works and it starts on that too.</p>
+              {unavailable ? (
+                <p role="status">Duet is here in the interface, but the Mars host has not been updated yet. It starts working after the next host deploy.</p>
+              ) : (
+                <p>Ask Duet for anything. Send another message while it works and it starts on that too.</p>
+              )}
             </li>
           )}
           {shown.map((message, index) =>
@@ -269,7 +279,7 @@ export function DuetView() {
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKey}
           />
-          <button type="submit" className="duet-send" aria-label="Send" disabled={!draft.trim()}>
+          <button type="submit" className="duet-send" aria-label="Send" disabled={!draft.trim() || unavailable}>
             <ArrowUp size={16} strokeWidth={2.5} />
           </button>
         </form>
