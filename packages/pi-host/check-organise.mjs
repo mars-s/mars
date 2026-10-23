@@ -48,24 +48,15 @@ try {
   assert.deepEqual([row.title, row.group, row.archived], ['Watchdog', 'Mars work', true]);
   assert.deepEqual(await manager.selectedThread(plain.id), { conversationTitle: 'Watchdog' }, 'an archived chat still opens');
 
-  // Pinning is a top-level flag that keeps the group and archive state.
-  row = await manager.organise({ conversationId: String(plain.id), pinned: true });
-  assert.deepEqual([row.pinned, row.group, row.archived], [true, 'Mars work', true], 'pinning changes only pinned');
-  row = await manager.organise({ conversationId: String(plain.id), pinned: false });
-  assert.equal(row.pinned, false);
-  assert.equal((await rowOf(root.id)).pinned, false, 'chats start unpinned');
-
   // Refusals.
   await assert.rejects(manager.organise({ conversationId: String(plain.id) }), /Nothing to change/);
   await assert.rejects(manager.organise({ conversationId: String(plain.id), title: '   ' }), /title must be/);
   await assert.rejects(manager.organise({ conversationId: String(plain.id), group: 'x'.repeat(GROUP_MAX + 1) }), /at most/);
   await assert.rejects(manager.organise({ conversationId: String(plain.id), archived: 'yes' }), /true or false/);
-  await assert.rejects(manager.organise({ conversationId: String(plain.id), pinned: 'yes' }), /pinned must be true or false/);
   await assert.rejects(manager.organise({ conversationId: 'x', archived: true }), /conversation id/);
   await assert.rejects(manager.organise({ conversationId: '99999', archived: true }), /not found/);
   const side = await manager.create({ parentId: String(plain.id), title: 'Side' });
   await assert.rejects(manager.organise({ conversationId: String(side.id), group: 'Mars work' }), /stays under its parent/);
-  await assert.rejects(manager.organise({ conversationId: String(side.id), pinned: true }), /only top-level chats can be pinned/);
   const sideRow = await manager.organise({ conversationId: String(side.id), archived: true });
   assert.equal(sideRow.archived, true, 'a side chat can be archived');
   const nestedRows = (await manager.list()).find((row) => row.id === String(plain.id)).sideChats;
@@ -73,7 +64,7 @@ try {
   await manager.organise({ conversationId: String(side.id), archived: false });
   assert.deepEqual((await manager.list()).find((row) => row.id === String(plain.id)).sideChats, [{ id: String(side.id), title: 'Side', running: false }]);
 
-  assert.deepEqual(await harness.snapshot(OrganiseDoc, plain.id, context), { group: 'Mars work', archived: true, pinned: false }, 'filing is one native document');
+  assert.deepEqual(await harness.snapshot(OrganiseDoc, plain.id, context), { group: 'Mars work', archived: true }, 'filing is one native document');
 
   // Survives closing and reopening the store.
   await harness.close?.(context);
@@ -82,7 +73,7 @@ try {
   assert.deepEqual([row.title, row.group, row.archived], ['Watchdog', 'Mars work', true], 'filing survives a restart');
   row = await manager.organise({ conversationId: String(plain.id), group: '', archived: false });
   assert.deepEqual([row.group, row.archived], ['', false], 'an empty group and archived false restore the default');
-  console.log('PASS organise: rename, group, pin, archive, partial updates, auto-title once, root keeps its name, refusals, side chats archive but never join groups, one native document, survives reopen');
+  console.log('PASS organise: rename, group, archive, partial updates, auto-title once, root keeps its name, refusals, side chats archive but never join groups, one native document, survives reopen');
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
