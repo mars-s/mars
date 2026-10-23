@@ -76,3 +76,5 @@ Routes: `GET /api/lanes`, `POST /api/lanes/order {ids}`, `POST /api/lanes/pause 
 ## Tools
 
 `lane_start`, `lane_preview`, `lane_submit`, `lane_list`, `lane_close`.
+
+Lanes were first used live on 23 October 2026.
