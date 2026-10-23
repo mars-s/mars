@@ -552,3 +552,9 @@ Built by three helper agents in their own worktrees (day/connectors, day/schedul
 - tailscale is found in ~/.local/bin (this machine's user-space wrapper) or MARS_TAILSCALE; the preview wait has one 150 second deadline instead of one per attempt.
 - scripts/lane-cli.mjs drives lanes from a shell while the running host predates them.
 - tests/lanes-ui-check.mjs covers Settings, Lanes: rows with state, preview link and blocked note, reordering, "Merge automatically" and starting a preview.
+
+## 2026-10-23 Lanes: fixes after the first live use (built in a lane)
+
+- lane_start failed its own result schema: Pi passes the conversation id as a number. Ids are now kept as strings; new check-lanes-shared.mjs validates the tool results against their schemas (existing checks stay unchanged; the lane guard refused that edit, as it should).
+- The lanes file is now the only state: each change re-reads it, edits it and writes it back in one short step, one at a time. A long merge or preview no longer writes a stale copy, and the host and scripts/lane-cli.mjs see each other's lanes (check-lanes-shared.mjs).
+- A merged lane's preview record is cleared after cleanup, and dismissing a merged lane hides it. Preview slots are claimed before starting, so two previews started together never share ports.

@@ -45,53 +45,72 @@ export function createLanes({
   tailscale = env.MARS_TAILSCALE || (existsSync(join(env.HOME || '', '.local/bin/tailscale')) ? join(env.HOME, '.local/bin/tailscale') : 'tailscale'),
 }) {
   const file = join(root, 'data/lanes.json');
-  let state, loading, queueRun = Promise.resolve();
+  let lock = Promise.resolve(), recovered = false, queueRun = Promise.resolve();
   const git = (cwd, args, timeout) => run('git', args, { cwd, timeout });
 
-  async function load() {
-    if (state) return state;
-    loading ||= (async () => {
-      try { state = JSON.parse(await readFile(file, 'utf8')); } catch { state = {}; }
-      state.lanes ||= {}; state.queue ||= []; state.paused = state.paused === true;
-      // A merge cut short by a restart: merged if main has it, otherwise first in the queue again.
-      for (const lane of Object.values(state.lanes)) if (lane.state === 'merging') {
-        const done = (await git(repo, ['merge-base', '--is-ancestor', lane.branch, main])).code === 0;
-        if (done) Object.assign(lane, { state: 'merged', note: 'Merged (found after a restart).' });
-        else { lane.state = 'queued'; if (!state.queue.includes(lane.id)) state.queue.unshift(lane.id); }
-      }
-      return state;
-    })();
-    return loading;
+  // The file is the only state: every change re-reads it, edits it and writes it back in one
+  // short step, one at a time, so long merges and previews never write a stale copy and a
+  // second process (scripts/lane-cli.mjs) sees the same lanes.
+  async function read() {
+    let state;
+    try { state = JSON.parse(await readFile(file, 'utf8')); } catch { state = {}; }
+    state.lanes ||= {}; state.queue ||= []; state.paused = state.paused === true;
+    return state;
   }
-  async function save() {
+  async function write(state) {
     await mkdir(dirname(file), { recursive: true, mode: 0o700 });
-    await writeFile(file + '.tmp', JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
-    await rename(file + '.tmp', file);
+    const temp = file + '.' + process.pid + '.tmp';
+    await writeFile(temp, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
+    await rename(temp, file);
   }
-  async function lane(id) {
-    await load();
+  function mutate(change) {
+    const next = lock.then(async () => {
+      const state = await read();
+      if (!recovered) { recovered = true; await recover(state); }
+      const result = await change(state);
+      await write(state);
+      return result;
+    });
+    lock = next.catch(() => {});
+    return next;
+  }
+  /** A merge cut short by a restart: merged if main has it, otherwise first in the queue again. */
+  async function recover(state) {
+    for (const lane of Object.values(state.lanes)) if (lane.state === 'merging') {
+      const done = (await git(repo, ['merge-base', '--is-ancestor', lane.branch, main])).code === 0;
+      if (done) Object.assign(lane, { state: 'merged', note: 'Merged (found after a restart).' });
+      else { lane.state = 'queued'; if (!state.queue.includes(lane.id)) state.queue.unshift(lane.id); }
+    }
+  }
+  const load = () => mutate(() => {});
+  const find = (state, id) => {
     const found = state.lanes[String(id ?? '')];
     if (!found) throw fail('No lane ' + JSON.stringify(id) + '. lane_list shows them.', 404);
     return found;
-  }
-  const position = (id) => { const at = state.queue.indexOf(id); return at < 0 ? null : at + 1; };
-  const view = (l) => ({
-    id: l.id, title: l.title, state: l.state, branch: l.branch, worktree: l.worktree,
-    conversationId: l.conversationId || null, queuePosition: position(l.id),
-    preview: l.preview ? { url: l.preview.url, state: l.preview.state || 'running' } : null,
-    note: l.note || '', changed: l.changed || [], mergedCommit: l.mergedCommit || null, updatedAt: l.updatedAt || '',
-  });
+  };
   const touch = (l, fields) => Object.assign(l, fields, { updatedAt: new Date().toISOString() });
-
-  async function list() {
-    await load();
+  const patch = (id, fields) => mutate((state) => { const l = state.lanes[id]; if (l) touch(l, fields); return l ? view(state, l) : null; });
+  const view = (state, l) => {
+    const at = state.queue.indexOf(l.id);
+    return {
+      id: l.id, title: l.title, state: l.state, branch: l.branch, worktree: l.worktree,
+      // Pi conversation ids can be numbers; tools promise strings.
+      conversationId: l.conversationId == null || l.conversationId === '' ? null : String(l.conversationId),
+      queuePosition: at < 0 ? null : at + 1,
+      preview: l.preview ? { url: l.preview.url, state: l.preview.state || 'running' } : null,
+      note: l.note || '', changed: l.changed || [], mergedCommit: l.mergedCommit || null, updatedAt: l.updatedAt || '',
+    };
+  };
+  const listOf = (state) => {
+    const at = (id) => { const i = state.queue.indexOf(id); return i < 0 ? 1e9 : i; };
     const lanes = Object.values(state.lanes).filter((l) => l.state !== 'closed')
-      .sort((a, b) => (position(a.id) ?? 1e9) - (position(b.id) ?? 1e9) || String(a.createdAt).localeCompare(String(b.createdAt)));
-    return { lanes: lanes.map(view), queue: [...state.queue], paused: state.paused, main, previewsMax };
-  }
+      .sort((a, b) => at(a.id) - at(b.id) || String(a.createdAt).localeCompare(String(b.createdAt)));
+    return { lanes: lanes.map((l) => view(state, l)), queue: [...state.queue], paused: state.paused, main, previewsMax };
+  };
+  const list = () => mutate(listOf);
+  const snapshot = (id) => mutate((state) => ({ ...find(state, id) }));
 
   async function start({ title }, conversationId) {
-    await load();
     const name = String(title || '').trim();
     if (!name) throw fail('Give the lane a short title, e.g. "Resizable sidebar".');
     if ((await git(repo, ['rev-parse', '--verify', '--quiet', main])).code !== 0) throw fail('The checkout has no ' + main + ' branch.');
@@ -111,9 +130,10 @@ export function createLanes({
     }
     const base = (await git(worktree, ['rev-parse', 'HEAD'])).stdout.trim();
     const now = new Date().toISOString();
-    state.lanes[id] = { id, title: name, branch, worktree, base, state: 'open', conversationId: conversationId || null, createdAt: now, updatedAt: now };
-    await save();
-    return { ...view(state.lanes[id]), next: 'Edit files only inside ' + worktree + ' (absolute paths, or host_exec with cwd set to it). lane_preview { id: "' + id + '" } runs this lane\'s own Mars for the owner to try; lane_submit { id: "' + id + '", message } queues it to merge into ' + main + '.' };
+    const record = { id, title: name, branch, worktree, base, state: 'open',
+      conversationId: conversationId == null || conversationId === '' ? null : String(conversationId), createdAt: now, updatedAt: now };
+    const shown = await mutate((state) => { state.lanes[id] = record; return view(state, record); });
+    return { ...shown, next: 'Edit files only inside ' + worktree + ' (absolute paths, or host_exec with cwd set to it). lane_preview { id: "' + id + '" } runs this lane\'s own Mars for the owner to try; lane_submit { id: "' + id + '", message } queues it to merge into ' + main + '.' };
   }
 
   async function changes(worktree, against) {
@@ -122,7 +142,7 @@ export function createLanes({
   }
 
   async function submit({ id, message }) {
-    const l = await lane(id);
+    const l = await snapshot(id);
     if (!['open', 'blocked'].includes(l.state)) throw fail('Lane ' + id + ' is ' + l.state + '; only an open or blocked lane can be submitted.');
     const wt = l.worktree;
     const gitDir = (await git(wt, ['rev-parse', '--absolute-git-dir'])).stdout.trim();
@@ -140,46 +160,50 @@ export function createLanes({
       if (committed.code !== 0) throw fail('git commit failed: ' + tail(committed.stderr, 400), 500);
     }
     if ((await git(wt, ['rev-list', '--count', main + '..HEAD'])).stdout.trim() === '0') throw fail('Lane ' + id + ' has no changes to merge yet.');
-    touch(l, { state: 'queued', note: '', changed: staged.map((row) => row.path) });
-    state.queue = state.queue.filter((q) => q !== id).concat(id);
-    await save();
-    if (state.paused) return { ...view(l), next: 'Queued at position ' + position(id) + '. Merging is paused; the owner resumes it in Settings, Lanes.' };
-    await processQueue();
-    return { ...view(l), next: nextFor(l) };
+    const paused = await mutate((state) => {
+      touch(find(state, id), { state: 'queued', note: '', changed: staged.map((row) => row.path) });
+      state.queue = state.queue.filter((q) => q !== id).concat(id);
+      return state.paused;
+    });
+    if (!paused) await processQueue();
+    const shown = await mutate((state) => view(state, find(state, id)));
+    return { ...shown, next: nextFor(shown, paused) };
   }
-  function nextFor(l) {
-    if (l.state === 'merged') return 'Merged into ' + main + ' as ' + l.mergedCommit.slice(0, 8) + '. Interface changes are live now. Publish with github_push; host changes also need host_deploy or the updater.';
+  function nextFor(l, paused) {
+    if (l.state === 'merged') return 'Merged into ' + main + ' as ' + String(l.mergedCommit).slice(0, 8) + '. Interface changes are live now. Publish with github_push; host changes also need host_deploy or the updater.';
     if (l.state === 'blocked') return l.note + ' Fix it in ' + l.worktree + ', then lane_submit again.';
-    if (l.state === 'queued') return 'Waiting at position ' + position(l.id) + ' in the merge queue.';
+    if (l.state === 'queued') return 'Waiting at position ' + l.queuePosition + ' in the merge queue.' + (paused ? ' Merging is paused; the owner resumes it in Settings, Lanes.' : '');
     return '';
   }
 
   /** Merge queued lanes in order, one at a time. Calls queue behind each other. */
-  function processQueue() {
+  function processQueue({ force = false } = {}) {
     queueRun = queueRun.then(async () => {
-      await load();
-      while (!state.paused && state.queue.length) {
-        const l = state.lanes[state.queue[0]];
-        if (!l) { state.queue.shift(); continue; }
-        touch(l, { state: 'merging', note: '' });
-        await save();
-        const result = await mergeOne(l).catch((error) => ({ blocked: 'The merge failed unexpectedly: ' + error.message }));
-        state.queue = state.queue.filter((q) => q !== l.id);
-        if (result.blocked) touch(l, { state: 'blocked', note: result.blocked });
-        else touch(l, { state: 'merged', mergedCommit: result.commit, note: '' });
-        await save();
-        if (!result.blocked) await cleanup(l);
+      for (;;) {
+        const next = await mutate((state) => {
+          while (state.queue.length && !state.lanes[state.queue[0]]) state.queue.shift();
+          if ((state.paused && !force) || !state.queue.length) return null;
+          const l = state.lanes[state.queue[0]];
+          touch(l, { state: 'merging', note: '' });
+          return { ...l };
+        });
+        if (!next) return;
+        const result = await mergeOne(next).catch((error) => ({ blocked: 'The merge failed unexpectedly: ' + error.message }));
+        await mutate((state) => {
+          state.queue = state.queue.filter((q) => q !== next.id);
+          const l = state.lanes[next.id];
+          if (!l) return;
+          if (result.changed) l.changed = result.changed;
+          if (result.blocked) touch(l, { state: 'blocked', note: result.blocked });
+          else touch(l, { state: 'merged', mergedCommit: result.commit, note: '' });
+        });
+        if (!result.blocked) await cleanup(next);
       }
     }).catch(() => {});
     return queueRun;
   }
   async function mergeNow() {
-    await load();
-    const paused = state.paused;
-    state.paused = false;
-    await processQueue();
-    state.paused = paused;
-    await save();
+    await processQueue({ force: true });
     return list();
   }
 
@@ -194,17 +218,16 @@ export function createLanes({
       return { blocked: 'It conflicts with ' + main + (conflicts.length ? ' in ' + conflicts.join(', ') : '') + '. In the worktree run git rebase ' + main + ' and resolve them.' };
     }
     const rows = await changes(wt, main);
-    l.changed = rows.map((row) => row.path);
+    const changed = rows.map((row) => row.path);
     const refused = guardChanges(rows);
-    if (refused.length) return { blocked: 'Refused: ' + refused.map((r) => r.reason).join(' ') };
+    if (refused.length) return { changed, blocked: 'Refused: ' + refused.map((r) => r.reason).join(' ') };
     const checked = await runChecks(wt, rows);
-    l.checks = checked.ran;
-    if (checked.failed) return { blocked: 'Check failed: ' + checked.failed };
+    if (checked.failed) return { changed, blocked: 'Check failed: ' + checked.failed };
     const branch = (await git(repo, ['symbolic-ref', '--short', 'HEAD'])).stdout.trim();
-    if (branch !== main) return { blocked: 'The checkout is on ' + (branch || 'a detached HEAD') + ', not ' + main + '; the owner must switch it back first.' };
+    if (branch !== main) return { changed, blocked: 'The checkout is on ' + (branch || 'a detached HEAD') + ', not ' + main + '; the owner must switch it back first.' };
     const merged = await git(repo, ['merge', '-q', '--ff-only', l.branch]);
-    if (merged.code !== 0) return { blocked: 'git could not fast-forward ' + main + ': ' + tail(merged.stderr.trim(), 500) + ' An uncommitted edit in the checkout may touch the same file.' };
-    return { commit: (await git(repo, ['rev-parse', 'HEAD'])).stdout.trim() };
+    if (merged.code !== 0) return { changed, blocked: 'git could not fast-forward ' + main + ': ' + tail(merged.stderr.trim(), 500) + ' An uncommitted edit in the checkout may touch the same file.' };
+    return { changed, commit: (await git(repo, ['rev-parse', 'HEAD'])).stdout.trim() };
   }
 
   /** The cheap gate: syntax, interface types and lint, and the host checks the change reaches. */
@@ -286,17 +309,17 @@ export function createLanes({
   }
 
   async function close({ id }) {
-    const l = await lane(id);
+    const l = await snapshot(id);
     if (l.state === 'merging') throw fail('Lane ' + id + ' is merging now; close it after.');
-    state.queue = state.queue.filter((q) => q !== l.id);
+    await mutate((state) => { state.queue = state.queue.filter((q) => q !== l.id); });
     await stopPreview(l).catch(() => {});
     if (existsSync(l.worktree)) await git(repo, ['worktree', 'remove', '--force', l.worktree]);
     await rm(join(root, 'lanes', l.id), { recursive: true, force: true });
     // An unmerged branch is kept, so closing never loses committed work.
-    const deleted = (await git(repo, ['branch', '-q', '-d', l.branch])).code === 0;
-    touch(l, { state: l.state === 'merged' ? 'merged' : 'closed', note: deleted ? '' : 'Branch ' + l.branch + ' kept: it has commits not on ' + main + '.' });
-    await save();
-    return { ...view(l), next: deleted ? 'Closed.' : l.note };
+    const deleted = (await git(repo, ['rev-parse', '--verify', '--quiet', l.branch])).code !== 0 || (await git(repo, ['branch', '-q', '-d', l.branch])).code === 0;
+    const note = deleted ? '' : 'Branch ' + l.branch + ' kept: it has commits not on ' + main + '.';
+    const shown = await patch(l.id, { state: 'closed', note });
+    return { ...shown, next: deleted ? 'Closed.' : note };
   }
 
   // Previews: the lane's own host (fresh data root) and interface, as transient user services.
@@ -307,76 +330,92 @@ export function createLanes({
     const { host, ui } = units(l);
     await systemctl(['stop', host, ui]);
     if (l.preview.httpsPort && l.preview.published) await run(tailscale, ['serve', '--https=' + l.preview.httpsPort, 'off'], { timeout: 20000 });
+    await mutate((state) => { if (state.lanes[l.id]) delete state.lanes[l.id].preview; });
     delete l.preview;
   }
   async function preview({ id, stop = false }) {
-    const l = await lane(id);
-    if (stop) { await stopPreview(l); touch(l, {}); await save(); return { ...view(l), next: 'Preview stopped.' }; }
+    const l = await snapshot(id);
+    if (stop) { await stopPreview(l); return { ...(await patch(id, {})), next: 'Preview stopped.' }; }
     if (!['open', 'blocked', 'queued'].includes(l.state)) throw fail('Lane ' + id + ' is ' + l.state + '; there is nothing to preview.');
     if (!previews) throw fail('Previews are off on this host.');
     if (l.preview) {
       const active = (await systemctl(['is-active', units(l).host])).stdout.trim() === 'active';
-      if (active) return { ...view(l), next: 'Already running. Open ' + l.preview.url + '. Interface edits in the worktree reload by themselves; host edits need lane_preview with stop: true, then again.' };
+      if (active) return { ...(await patch(id, {})), next: 'Already running. Open ' + l.preview.url + '. Interface edits in the worktree reload by themselves; host edits need lane_preview with stop: true, then again.' };
       await stopPreview(l);
     }
-    const running = Object.values(state.lanes).filter((other) => other.preview);
-    if (running.length >= previewsMax) throw fail('Already ' + running.length + ' previews running (' + running.map((r) => r.id).join(', ') + '), the most at once. Stop one with lane_preview { id, stop: true }.');
-    const used = new Set(running.map((r) => r.preview.index));
-    let index = 1; while (used.has(index)) index++;
-    const hostPort = 3400 + index * 10, uiPort = hostPort + 1, httpsPort = 8600 + index;
+    // Claim a slot first, so two previews started together never share ports.
     let origin = '';
-    try { if (publicOrigin) origin = 'https://' + new URL(publicOrigin).hostname + ':' + httpsPort; } catch { /* no public name */ }
-    const data = join(root, 'lanes', l.id);
-    await mkdir(join(data, 'data'), { recursive: true, mode: 0o700 });
-    // The owner token, so the owner's browser cookie signs in; nothing else is copied.
-    const token = join(data, 'data/web-token');
-    await copyFile(join(root, 'data/web-token'), token).catch(() => {});
-    await chmod(token, 0o600).catch(() => {});
-    const { host, ui } = units(l);
-    const common = ['--user', '--quiet', '--collect', '-p', 'Restart=no', '--working-directory=' + l.worktree];
-    const setenv = (pairs) => Object.entries(pairs).map(([k, v]) => '--setenv=' + k + '=' + v);
-    const vars = { MARS_PI_ROOT: data, MARS_REPO_ROOT: l.worktree, MARS_UI_DIR: join(l.worktree, UI), MARS_PI_PORT: hostPort, MARS_UI_PORT: uiPort,
-      MARS_PUBLIC_ORIGIN: origin, MARS_ALLOWED_ORIGINS: '', MARS_LANES_DISABLED: '1', MARS_HOST_SERVICE: host, MARS_UI_SERVICE: ui, PATH: env.PATH || '/usr/bin:/bin', HOME: env.HOME || '' };
-    const h = await run('systemd-run', [...common, '--unit=' + host, '-p', 'MemoryMax=900M', ...setenv(vars), node, join(l.worktree, HOST + 'server.mjs')]);
-    if (h.code !== 0) throw fail('Could not start the preview host: ' + tail(h.stderr, 400), 500);
-    // The same development server as the live interface (scripts/next.mjs, Turbopack).
-    const u = await run('systemd-run', [...common, '--unit=' + ui, '-p', 'MemoryMax=2000M', '--working-directory=' + join(l.worktree, UI),
-      ...setenv({ ...vars, MARS_PI_ORIGIN: 'http://127.0.0.1:' + hostPort }),
-      node, join(l.worktree, UI + 'scripts/next.mjs'), 'dev']);
-    if (u.code !== 0) { await systemctl(['stop', host]); throw fail('Could not start the preview interface: ' + tail(u.stderr, 400), 500); }
-    let published = false;
-    if (origin) published = (await run(tailscale, ['serve', '--bg', '--https=' + httpsPort, 'http://127.0.0.1:' + hostPort], { timeout: 20000 })).code === 0;
-    const url = published ? origin + '/' : 'http://127.0.0.1:' + hostPort + '/';
-    l.preview = { index, hostPort, uiPort, httpsPort, url, published, state: 'starting' };
-    touch(l, {}); await save();
-    // Wait for the host, then for the first interface page (webpack compiles it on first visit).
+    const slot = await mutate((state) => {
+      const running = Object.values(state.lanes).filter((other) => other.preview);
+      if (running.length >= previewsMax) throw fail('Already ' + running.length + ' previews running (' + running.map((r) => r.id).join(', ') + '), the most at once. Stop one with lane_preview { id, stop: true }.');
+      const used = new Set(running.map((r) => r.preview.index));
+      let index = 1; while (used.has(index)) index++;
+      const hostPort = 3400 + index * 10, uiPort = hostPort + 1, httpsPort = 8600 + index;
+      try { if (publicOrigin) origin = 'https://' + new URL(publicOrigin).hostname + ':' + httpsPort; } catch { /* no public name */ }
+      const claimed = { index, hostPort, uiPort, httpsPort, url: 'http://127.0.0.1:' + hostPort + '/', published: false, state: 'starting' };
+      touch(find(state, id), { preview: claimed });
+      return claimed;
+    });
+    const { hostPort, uiPort, httpsPort } = slot;
+    l.preview = slot;
+    try {
+      const data = join(root, 'lanes', l.id);
+      await mkdir(join(data, 'data'), { recursive: true, mode: 0o700 });
+      // The owner token, so the owner's browser cookie signs in; nothing else is copied.
+      const token = join(data, 'data/web-token');
+      await copyFile(join(root, 'data/web-token'), token).catch(() => {});
+      await chmod(token, 0o600).catch(() => {});
+      const { host, ui } = units(l);
+      const common = ['--user', '--quiet', '--collect', '-p', 'Restart=no', '--working-directory=' + l.worktree];
+      const setenv = (pairs) => Object.entries(pairs).map(([k, v]) => '--setenv=' + k + '=' + v);
+      const vars = { MARS_PI_ROOT: data, MARS_REPO_ROOT: l.worktree, MARS_UI_DIR: join(l.worktree, UI), MARS_PI_PORT: hostPort, MARS_UI_PORT: uiPort,
+        MARS_PUBLIC_ORIGIN: origin, MARS_ALLOWED_ORIGINS: '', MARS_LANES_DISABLED: '1', MARS_HOST_SERVICE: host, MARS_UI_SERVICE: ui, PATH: env.PATH || '/usr/bin:/bin', HOME: env.HOME || '' };
+      const h = await run('systemd-run', [...common, '--unit=' + host, '-p', 'MemoryMax=900M', ...setenv(vars), node, join(l.worktree, HOST + 'server.mjs')]);
+      if (h.code !== 0) throw fail('Could not start the preview host: ' + tail(h.stderr, 400), 500);
+      // The same development server as the live interface (scripts/next.mjs, Turbopack).
+      const u = await run('systemd-run', [...common, '--unit=' + ui, '-p', 'MemoryMax=2000M', '--working-directory=' + join(l.worktree, UI),
+        ...setenv({ ...vars, MARS_PI_ORIGIN: 'http://127.0.0.1:' + hostPort }),
+        node, join(l.worktree, UI + 'scripts/next.mjs'), 'dev']);
+      if (u.code !== 0) throw fail('Could not start the preview interface: ' + tail(u.stderr, 400), 500);
+      let published = false;
+      if (origin) published = (await run(tailscale, ['serve', '--bg', '--https=' + httpsPort, 'http://127.0.0.1:' + hostPort], { timeout: 20000 })).code === 0;
+      const url = published ? origin + '/' : 'http://127.0.0.1:' + hostPort + '/';
+      Object.assign(l.preview, { url, published });
+      await patch(id, { preview: { ...l.preview } });
+    } catch (error) {
+      await stopPreview(l).catch(() => {});
+      throw error;
+    }
+    // Wait for the first interface page (it compiles on the first visit).
     let ready = false;
     const deadline = Date.now() + 150000;
     while (!ready && Date.now() < deadline) {
       try { ready = (await fetch('http://127.0.0.1:' + uiPort + '/', { signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())) })).status < 500; } catch { /* starting */ }
       if (!ready) await sleep(1000);
     }
-    l.preview.state = ready ? 'running' : 'starting';
-    touch(l, {}); await save();
-    return { ...view(l), next: (ready ? 'Ready: ' : 'Still starting (the first page compiles for a minute or two): ') + url +
-      ' runs this lane with an empty data root (no chats or sign-ins). Interface edits in the worktree reload by themselves; after host edits run lane_preview { id, stop: true } then lane_preview again.' + (published ? '' : ' It is reachable on this machine only.') };
+    const shown = await mutate((state) => {
+      const live = state.lanes[id];
+      if (live?.preview) live.preview.state = ready ? 'running' : 'starting';
+      return live ? view(state, live) : null;
+    });
+    const url = l.preview.url;
+    return { ...shown, next: (ready ? 'Ready: ' : 'Still starting (the first page compiles for a minute or two): ') + url +
+      ' runs this lane with an empty data root (no chats or sign-ins). Interface edits in the worktree reload by themselves; after host edits run lane_preview { id, stop: true } then lane_preview again.' + (l.preview.published ? '' : ' It is reachable on this machine only.') };
   }
 
-  async function order({ ids }) {
-    await load();
+  function order({ ids }) {
     if (!Array.isArray(ids)) throw fail('ids must be the queued lane ids in the new order.');
-    const wanted = ids.map(String).filter((id) => state.queue.includes(id) && state.lanes[id]?.state === 'queued');
-    const merging = state.queue.filter((id) => state.lanes[id]?.state === 'merging');
-    state.queue = [...merging, ...wanted, ...state.queue.filter((id) => !merging.includes(id) && !wanted.includes(id))];
-    await save();
-    return list();
+    return mutate((state) => {
+      const wanted = ids.map(String).filter((id) => state.queue.includes(id) && state.lanes[id]?.state === 'queued');
+      const merging = state.queue.filter((id) => state.lanes[id]?.state === 'merging');
+      state.queue = [...merging, ...wanted, ...state.queue.filter((id) => !merging.includes(id) && !wanted.includes(id))];
+      return listOf(state);
+    });
   }
   async function pause({ paused }) {
-    await load();
-    state.paused = paused === true;
-    await save();
-    if (!state.paused) void processQueue();
-    return list();
+    const shown = await mutate((state) => { state.paused = paused === true; return listOf(state); });
+    if (!shown.paused) void processQueue();
+    return shown;
   }
 
   async function route(method, pathname, body = {}) {
