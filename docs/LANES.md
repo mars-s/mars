@@ -11,7 +11,8 @@ Interface: Settings, Lanes.
 
 1. `lane_start { title }` creates `lane/<id>` from the checkout's current `main` and a
    worktree beside the checkout (`<repo>-lanes/<id>`, or `MARS_LANES_DIR`). The root
-   `node_modules` is linked in, so nothing is installed. The chat that started it is
+   `node_modules` is hard linked in (`cp -al`, about a second and no extra disk), so nothing
+   is installed. The chat that started it is
    recorded so the owner can find it.
 2. The chat edits files only inside its worktree (absolute paths, or `host_exec` with
    `cwd` set to the worktree). The live checkout and other lanes are untouched.
@@ -19,8 +20,8 @@ Interface: Settings, Lanes.
    - a host from the worktree's `packages/pi-host/server.mjs` with a fresh data root
      (`$MARS_PI_ROOT/lanes/<id>`), so it has no chats, sign-ins, chat apps or schedules
      and can never act for the owner;
-   - the worktree's interface as a Next development server (webpack, because Turbopack
-     does not follow the linked `node_modules`);
+   - the worktree's interface as the same Next development server as the live one
+     (`apps/ui/scripts/next.mjs dev`);
    - both as transient user services (`mars-lane-<id>-host`, `mars-lane-<id>-ui`) with
      memory limits, so they survive a host restart and stop cleanly;
    - published inside the tailnet with `tailscale serve` on its own HTTPS port

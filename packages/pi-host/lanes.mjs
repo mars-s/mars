@@ -41,6 +41,8 @@ export function createLanes({
   publicOrigin = env.MARS_PUBLIC_ORIGIN || '',
   // Injected by the check: previews need systemd and tailscale; checks run real programs.
   previews = true, checkTimeoutMs = 300000,
+  // The tailnet CLI; this machine wraps a user-space tailscaled in ~/.local/bin.
+  tailscale = env.MARS_TAILSCALE || (existsSync(join(env.HOME || '', '.local/bin/tailscale')) ? join(env.HOME, '.local/bin/tailscale') : 'tailscale'),
 }) {
   const file = join(root, 'data/lanes.json');
   let state, loading, queueRun = Promise.resolve();
@@ -98,9 +100,15 @@ export function createLanes({
     await mkdir(dir, { recursive: true });
     const added = await git(repo, ['worktree', 'add', '-q', '-b', branch, worktree, main]);
     if (added.code !== 0) throw fail('git worktree add failed: ' + tail(added.stderr, 400), 500);
-    // Dependencies come from the checkout, so nothing is installed.
-    if (existsSync(join(repo, 'node_modules')) && !existsSync(join(worktree, 'node_modules')))
-      await symlink(join(repo, 'node_modules'), join(worktree, 'node_modules'));
+    // Dependencies come from the checkout, so nothing is installed: hard links (a second and no
+    // extra disk), because Turbopack refuses a node_modules symlink that leaves the project.
+    if (existsSync(join(repo, 'node_modules')) && !existsSync(join(worktree, 'node_modules'))) {
+      const linked = await run('cp', ['-al', join(repo, 'node_modules'), join(worktree, 'node_modules')], { timeout: 120000 });
+      if (linked.code !== 0) {
+        await rm(join(worktree, 'node_modules'), { recursive: true, force: true });
+        await symlink(join(repo, 'node_modules'), join(worktree, 'node_modules'));
+      }
+    }
     const base = (await git(worktree, ['rev-parse', 'HEAD'])).stdout.trim();
     const now = new Date().toISOString();
     state.lanes[id] = { id, title: name, branch, worktree, base, state: 'open', conversationId: conversationId || null, createdAt: now, updatedAt: now };
@@ -298,7 +306,7 @@ export function createLanes({
     if (!l.preview) return;
     const { host, ui } = units(l);
     await systemctl(['stop', host, ui]);
-    if (l.preview.httpsPort && l.preview.published) await run('tailscale', ['serve', '--https=' + l.preview.httpsPort, 'off'], { timeout: 20000 });
+    if (l.preview.httpsPort && l.preview.published) await run(tailscale, ['serve', '--https=' + l.preview.httpsPort, 'off'], { timeout: 20000 });
     delete l.preview;
   }
   async function preview({ id, stop = false }) {
@@ -331,19 +339,21 @@ export function createLanes({
       MARS_PUBLIC_ORIGIN: origin, MARS_ALLOWED_ORIGINS: '', MARS_LANES_DISABLED: '1', MARS_HOST_SERVICE: host, MARS_UI_SERVICE: ui, PATH: env.PATH || '/usr/bin:/bin', HOME: env.HOME || '' };
     const h = await run('systemd-run', [...common, '--unit=' + host, '-p', 'MemoryMax=900M', ...setenv(vars), node, join(l.worktree, HOST + 'server.mjs')]);
     if (h.code !== 0) throw fail('Could not start the preview host: ' + tail(h.stderr, 400), 500);
-    const u = await run('systemd-run', [...common, '--unit=' + ui, '-p', 'MemoryMax=1800M', '--working-directory=' + join(l.worktree, UI),
-      ...setenv({ ...vars, MARS_PI_ORIGIN: 'http://127.0.0.1:' + hostPort, NODE_ENV: 'development' }),
-      node, join(l.worktree, 'node_modules/next/dist/bin/next'), 'dev', '--webpack', '--hostname', '127.0.0.1', '--port', String(uiPort)]);
+    // The same development server as the live interface (scripts/next.mjs, Turbopack).
+    const u = await run('systemd-run', [...common, '--unit=' + ui, '-p', 'MemoryMax=2000M', '--working-directory=' + join(l.worktree, UI),
+      ...setenv({ ...vars, MARS_PI_ORIGIN: 'http://127.0.0.1:' + hostPort }),
+      node, join(l.worktree, UI + 'scripts/next.mjs'), 'dev']);
     if (u.code !== 0) { await systemctl(['stop', host]); throw fail('Could not start the preview interface: ' + tail(u.stderr, 400), 500); }
     let published = false;
-    if (origin) published = (await run('tailscale', ['serve', '--bg', '--https=' + httpsPort, 'http://127.0.0.1:' + hostPort], { timeout: 20000 })).code === 0;
+    if (origin) published = (await run(tailscale, ['serve', '--bg', '--https=' + httpsPort, 'http://127.0.0.1:' + hostPort], { timeout: 20000 })).code === 0;
     const url = published ? origin + '/' : 'http://127.0.0.1:' + hostPort + '/';
     l.preview = { index, hostPort, uiPort, httpsPort, url, published, state: 'starting' };
     touch(l, {}); await save();
     // Wait for the host, then for the first interface page (webpack compiles it on first visit).
     let ready = false;
-    for (let n = 0; n < 150 && !ready; n++) {
-      try { ready = (await fetch('http://127.0.0.1:' + uiPort + '/', { signal: AbortSignal.timeout(60000) })).status < 500; } catch { /* starting */ }
+    const deadline = Date.now() + 150000;
+    while (!ready && Date.now() < deadline) {
+      try { ready = (await fetch('http://127.0.0.1:' + uiPort + '/', { signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())) })).status < 500; } catch { /* starting */ }
       if (!ready) await sleep(1000);
     }
     l.preview.state = ready ? 'running' : 'starting';

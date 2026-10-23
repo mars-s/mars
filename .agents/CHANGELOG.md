@@ -545,3 +545,9 @@ Built by three helper agents in their own worktrees (day/connectors, day/schedul
 
 - Drag the sidebar's right edge to resize it (220 to 480 px), or focus the handle and use the arrow keys (Shift for bigger steps), Home, End or Enter; double-click resets to 288 px. The width is kept per browser (localStorage mars-sidebar-width) and collapse still goes to 56 px without a handle. tests/sidebar-resize-ui-check.mjs covers drag, clamping, keeping, keyboard, reset and collapse, and fails on the old sidebar.
 - Built and tried in lane resizable-sidebar-9e03 with its own preview, then merged through the lane queue (docs/LANES.md).
+
+## 2026-10-23 Lanes: fixes from the first real lane
+
+- Previews: the worktree's node_modules is now a hard-linked copy (cp -al, under two seconds, no extra disk), so the preview runs the same Turbopack dev server as the live interface. Webpack over a symlinked node_modules took 22 minutes and ran out of memory. Ready in about 40 seconds now.
+- tailscale is found in ~/.local/bin (this machine's user-space wrapper) or MARS_TAILSCALE; the preview wait has one 150 second deadline instead of one per attempt.
+- scripts/lane-cli.mjs drives lanes from a shell while the running host predates them.
