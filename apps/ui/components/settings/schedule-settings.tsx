@@ -63,7 +63,7 @@ function ScheduleRow({ schedule, busy, onAct, onOpen }: {
           {schedule.enabled ? (schedule.nextRun ? `. Next ${schedule.nextRun}` : "") : ". Paused"}
         </span>
         {run ? (
-          <span className={run.reason ? "gateway-row-detail" : undefined}>
+          <span className={run.reason ? "gateway-row-detail schedule-last" : "schedule-last"}>
             Last run{" "}
             <span className="schedule-status" data-status={run.status}>{RUN_LABELS[run.status]}</span>, {when(run.at)}
             {run.manual ? " (run now)" : ""}

@@ -14,7 +14,9 @@ function fakeOpen(url, headers) {
 }
 const say = (socket, message) => socket.onmessage?.({ data: JSON.stringify(message) });
 let token = 'fixture-token';
-const voice = createVoice({ getToken: async () => token, open: fakeOpen, maxSessions: 2, keepAliveMs: 20, finishMs: 200, idleMs: 300, sweepMs: 50 });
+// A generous idle limit here so a busy machine cannot end a session mid-test; the idle sweep
+// has its own instance below.
+const voice = createVoice({ getToken: async () => token, open: fakeOpen, maxSessions: 2, keepAliveMs: 20, finishMs: 200, idleMs: 10000, sweepMs: 50 });
 const send = (res, status, value) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)); };
 const jsonBody = async (req) => { let s = ''; for await (const c of req) s += c; return JSON.parse(s || '{}'); };
 const server = http.createServer(async (req, res) => {
@@ -103,9 +105,13 @@ try {
   const b = (await call('/api/voice', {})).json.id;
   assert.equal((await call('/api/voice', {})).status, 409, 'at most two recordings at once');
   assert.deepEqual((await call(`/api/voice/${a}/cancel`, {})).json, { cancelled: true });
+  assert.deepEqual((await call(`/api/voice/${b}/cancel`, {})).json, { cancelled: true });
   // An idle recording is stopped by the sweeper.
-  await new Promise((r) => setTimeout(r, 450));
-  assert.match((await call(`/api/voice/${b}?since=-1&wait=10`)).json.error, /idle/);
+  const sleepy = createVoice({ getToken: async () => 't', open: fakeOpen, idleMs: 100, sweepMs: 20 });
+  const nap = await sleepy.start({});
+  await new Promise((r) => setTimeout(r, 400));
+  assert.match((await sleepy.poll(nap.id, -1, 10)).error, /idle/);
+  sleepy.close();
   assert.equal((await call('/api/voice/00000000-0000-0000-0000-000000000000?since=0&wait=10')).status, 404);
   console.log('PASS voice: upstream URL and headers, token stays on the host, binary audio forwarded, chunk checks, long poll wakes and waits, interim and final segments, keep-alives, stop sends CloseStream and returns the last words, safety finish, upstream errors, refused connection, no Claude sign-in, language check, two-session limit, cancel, idle sweep, unknown session');
 } catch (error) {

@@ -252,6 +252,8 @@ export function ConnectorSettings() {
                             void act("remove" + row.id, async () => {
                               await removeConnector(row.id);
                               setConfirming("");
+                              // Gone at once; the reload that follows confirms it.
+                              setState((current) => (current ? { ...current, connectors: current.connectors.filter((item) => item.id !== row.id) } : current));
                               return `${row.name} removed, with its tools and saved credentials.`;
                             })
                           }

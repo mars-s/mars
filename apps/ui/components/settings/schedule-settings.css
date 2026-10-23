@@ -19,6 +19,11 @@
   font-size: inherit;
   white-space: nowrap;
 }
+/* The last-run line wraps so its Open button is never cut off by the ellipsis. */
+.gateway-row-text span.schedule-last {
+  overflow: visible;
+  white-space: normal;
+}
 .schedule-open {
   color: var(--text);
   font-size: 12px;
