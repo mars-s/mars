@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { Blocks, MessageSquare, PanelLeft, Plus, X } from "lucide-react";
+import { Blocks, MessageSquare, MessagesSquare, PanelLeft, Plus, X } from "lucide-react";
 import { MarsMark } from "@/components/mars-mark";
 import { useWorkspace } from "@/components/workspace-context";
 import { ConversationList } from "./conversation-list";
@@ -15,6 +15,8 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
     canChat,
     extensionsOpen,
     setExtensionsOpen,
+    duetOpen,
+    setDuetOpen,
     setSidebarOpen,
     safely,
     newConversation,
@@ -22,8 +24,9 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
   } = useWorkspace();
   const accountId = useId();
   const hint = (label: string) => (collapsed ? label : undefined);
-  const show = (extensions: boolean) => {
-    setExtensionsOpen(extensions);
+  const show = (view: "chats" | "duet" | "extensions") => {
+    setExtensionsOpen(view === "extensions");
+    setDuetOpen(view === "duet");
     setSidebarOpen(false);
   };
   const extensionCount = snapshot?.extensions.length ?? 0;
@@ -79,16 +82,26 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
           </span>
           <span className="live-nav-label">New chat</span>
         </button>
-        <button type="button" className="live-nav" title={hint("Chats")} onClick={() => show(false)}>
+        <button type="button" className="live-nav" title={hint("Chats")} onClick={() => show("chats")}>
           <MessageSquare size={16} />
           <span className="live-nav-label">Chats</span>
+        </button>
+        <button
+          type="button"
+          className={`live-nav live-nav-duet ${duetOpen ? "live-nav-selected" : ""}`}
+          aria-current={duetOpen ? "page" : undefined}
+          title={hint("Duet")}
+          onClick={() => show("duet")}
+        >
+          <MessagesSquare size={16} />
+          <span className="live-nav-label">Duet</span>
         </button>
         <button
           type="button"
           className={`live-nav ${extensionsOpen ? "live-nav-selected" : ""}`}
           aria-current={extensionsOpen ? "page" : undefined}
           title={hint("Extensions")}
-          onClick={() => show(true)}
+          onClick={() => show("extensions")}
         >
           <Blocks size={16} />
           <span className="live-nav-label">Extensions</span>

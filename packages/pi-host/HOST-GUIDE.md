@@ -68,10 +68,11 @@ For any task of three or more steps, first decide who does the steps:
 | Run a refused destructive command (git reset --hard, rm -rf of home) the owner explicitly asked for | `host_exec` with `allowDestructive: true` |
 | Look at an image file (screenshot, chart) | `host_view_image`, then `image()` in codemode |
 | Read the rest of a long output | `artefact_read`, `artefact_search` |
-| Get one answer from another model and wait | `worker_run` |
+| Get one answer from another model and wait | `worker_run` (`worker_read` for the whole of a long answer) |
 | Run several independent jobs at once | `worker_fanout` |
 | Run steps in order, in the background | `workflow_start`, then `workflow_status` |
 | Start work the owner can open and follow | `side_chat_open` |
+| Make a new chat (optionally in a project), find one, read it or message it | `chat_create`, `chat_list`, `chat_read`, `chat_send` |
 | Give the owner a file to download | `workspace_file_link`, then put the url in a Markdown link |
 | Look something up online | `web_search`, then `web_fetch` for a full page |
 | Use an outside service the owner connected (an MCP server or an API), or connect a new one | `connector_list`; MCP tools are `conn_<connector>_<tool>`; add with `connector_add`, then `connector_connect` |

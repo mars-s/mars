@@ -13,6 +13,7 @@ export function WorkspaceHeader() {
     actionError,
     setActionError,
     extensionsOpen,
+    duetOpen,
     setSidebarOpen,
     refresh,
     selectConversation,
@@ -32,16 +33,16 @@ export function WorkspaceHeader() {
         >
           <Menu size={20} />
         </button>
-        {parentId && (
+        {parentId && !duetOpen && (
           <button type="button" className="live-back" onClick={() => selectConversation(parentId)}>
             <ChevronLeft size={16} />
             Back to parent
           </button>
         )}
         <span className="live-header-title">
-          {extensionsOpen ? "Extensions" : snapshot?.conversationTitle || "Pi workspace"}
+          {duetOpen ? "Duet" : extensionsOpen ? "Extensions" : snapshot?.conversationTitle || "Pi workspace"}
         </span>
-        {!extensionsOpen && (
+        {!extensionsOpen && !duetOpen && (
           <button
             type="button"
             className="live-icon live-workbench-toggle"

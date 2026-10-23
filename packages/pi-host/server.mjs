@@ -197,6 +197,7 @@ const schedules = createSchedules({ harness: () => late.harness, rootId: () => l
 registry.install(schedules.extension);
 // Duet: the owner's assistant thread over parallel background tasks (docs/DUET.md).
 const duet = createDuet({ harness: () => late.harness, models, context, openProject: (id, path) => projects.open(id, path),
+  ready: async (id) => providerReady(await late.conversations.state(id)),
   defaultAgent: () => ({ ...(late.defaultModel ? { model: late.defaultModel } : {}), cwd: WORK, modelTools: discovery.modelTools }) });
 registry.install(createDuetExtension({ duet }));
 // Lanes: parallel chats changing Mars, each in its own worktree, merged in order (docs/LANES.md).

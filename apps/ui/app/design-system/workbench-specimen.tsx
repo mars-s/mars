@@ -41,6 +41,8 @@ const sampleWorkspace: Workspace = {
   rootId: undefined,
   extensionsOpen: false,
   setExtensionsOpen: noop,
+  duetOpen: false,
+  setDuetOpen: noop,
   sidebarOpen: false,
   setSidebarOpen: noop,
   settingsOpen: false,

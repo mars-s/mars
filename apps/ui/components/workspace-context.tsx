@@ -24,6 +24,9 @@ export type Workspace = {
   rootId: string | undefined;
   extensionsOpen: boolean;
   setExtensionsOpen: (open: boolean) => void;
+  /** The Duet thread is showing instead of a chat (docs/DUET.md). */
+  duetOpen: boolean;
+  setDuetOpen: (open: boolean) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   settingsOpen: boolean;

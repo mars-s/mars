@@ -1,0 +1,468 @@
+/* Duet (docs/DUET.md): an iMessage-style thread. Duet's bubbles are orange, the owner's a lighter
+   grey. Both pairs pass WCAG AA for body text: #faf9f5 on #b5552f is 4.63:1, on #44433f 9.40:1. */
+.duet {
+  --duet-bubble: #b5552f;
+  --duet-bubble-text: #faf9f5;
+  --duet-owner-bubble: #44433f;
+  --duet-owner-text: #faf9f5;
+  --duet-radius: 18px;
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--background);
+}
+.duet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 16px 12px;
+}
+.duet-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+.duet-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 18vh auto 0;
+  max-width: 340px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.duet-avatar {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--duet-bubble);
+  color: var(--duet-bubble-text);
+  font-size: 24px;
+  font-weight: 600;
+}
+.duet-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.duet-row[data-from="owner"] {
+  align-items: flex-end;
+}
+.duet-row[data-first] {
+  margin-top: 10px;
+}
+.duet-label {
+  margin: 0 12px 3px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.duet-line {
+  display: flex;
+  max-width: min(78%, 560px);
+  align-items: center;
+  gap: 6px;
+}
+.duet-row[data-from="owner"] .duet-line {
+  flex-direction: row-reverse;
+}
+.duet-bubble {
+  min-width: 0;
+  padding: 8px 13px;
+  border-radius: var(--duet-radius);
+  background: var(--duet-bubble);
+  color: var(--duet-bubble-text);
+  font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.duet-row[data-from="duet"] .duet-bubble[data-tail] {
+  border-bottom-left-radius: 5px;
+}
+.duet-row[data-from="owner"] .duet-bubble {
+  background: var(--duet-owner-bubble);
+  color: var(--duet-owner-text);
+}
+.duet-row[data-from="owner"] .duet-bubble[data-tail] {
+  border-bottom-right-radius: 5px;
+}
+.duet-row[data-pending] .duet-bubble {
+  opacity: 0.7;
+}
+.duet-bubble[data-kind="failed"] {
+  outline: 1px dashed color-mix(in srgb, var(--duet-bubble-text) 55%, transparent);
+  outline-offset: -4px;
+}
+.duet-plain {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.duet-quote {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+.duet-markdown > :first-child {
+  margin-top: 0;
+}
+.duet-markdown > :last-child {
+  margin-bottom: 0;
+}
+.duet-markdown p,
+.duet-markdown ul,
+.duet-markdown ol {
+  margin: 0 0 6px;
+}
+.duet-markdown ul,
+.duet-markdown ol {
+  padding-left: 18px;
+}
+.duet-markdown ul {
+  list-style: disc;
+}
+.duet-markdown ol {
+  list-style: decimal;
+}
+.duet-markdown a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.duet-markdown code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.22);
+  font-size: 13px;
+}
+.duet-markdown pre {
+  margin: 6px 0;
+  padding: 8px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.28);
+}
+.duet-markdown pre code {
+  padding: 0;
+  background: none;
+}
+.duet-markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.duet-markdown th,
+.duet-markdown td {
+  padding: 3px 8px;
+  border: 1px solid rgb(255 255 255 / 0.25);
+}
+.duet-markdown h1,
+.duet-markdown h2,
+.duet-markdown h3 {
+  margin: 4px 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.duet-system {
+  margin: 10px auto 4px;
+  max-width: 80%;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+}
+.duet-typing {
+  display: flex;
+  gap: 4px;
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+.duet-typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--duet-bubble-text);
+  opacity: 0.5;
+  animation: duet-dot 1.2s ease-in-out infinite;
+}
+.duet-typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.duet-typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes duet-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 0.9;
+    transform: translateY(-2px);
+  }
+}
+.duet-icon {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.duet-icon:hover,
+.duet-icon:focus-visible {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.duet-icon:focus-visible,
+.duet-send:focus-visible,
+.duet-strip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.duet-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.duet-reply {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.duet-row:hover .duet-reply,
+.duet-reply:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .duet-reply {
+    opacity: 0.8;
+  }
+}
+.duet-jump {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 12.5px;
+  box-shadow: var(--shadow-float);
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+.duet-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 760px;
+  margin: 0 auto 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--destructive) 18%, var(--card));
+  color: var(--foreground);
+  font-size: 13px;
+}
+.duet-error button {
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.duet-footer {
+  display: flex;
+  width: 100%;
+  max-width: 792px;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 auto;
+  padding: 0 16px max(14px, env(safe-area-inset-bottom));
+}
+.duet-tasks {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+}
+.duet-strip {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.duet-strip span:not(.duet-pulse) {
+  flex: 1;
+  text-align: left;
+}
+.duet-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--orange);
+  animation: duet-pulse 1.6s ease-in-out infinite;
+}
+@keyframes duet-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.duet-task-list {
+  max-height: 40vh;
+  margin: 0;
+  padding: 0 6px 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+.duet-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-top: 1px solid var(--border);
+}
+.duet-task-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.duet-task-name {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.duet-task-name small {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.duet-task-state {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.duet-task[data-state="running"] .duet-task-state::before {
+  content: "● ";
+  color: var(--orange);
+}
+.duet-task-actions {
+  display: flex;
+  gap: 2px;
+}
+.duet-stop:hover {
+  color: var(--destructive);
+}
+.duet-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--duet-bubble) 25%, var(--card));
+  color: var(--foreground);
+  font-size: 12.5px;
+}
+.duet-target button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.duet-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid var(--input);
+  border-radius: 22px;
+  background: var(--composer);
+}
+.duet-composer:focus-within {
+  border-color: var(--ring);
+}
+.duet-composer textarea {
+  flex: 1;
+  max-height: 180px;
+  min-height: 24px;
+  padding: 5px 0;
+  border: 0;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+  resize: none;
+  field-sizing: content;
+  outline: none;
+}
+.duet-send {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--duet-bubble);
+  color: var(--duet-bubble-text);
+  cursor: pointer;
+}
+.duet-send:disabled {
+  background: var(--secondary);
+  color: var(--text-faint);
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .duet-typing span,
+  .duet-pulse {
+    animation: none;
+  }
+}
+@media (max-width: 640px) {
+  .duet-scroll {
+    padding: 16px 10px 8px;
+  }
+  .duet-line {
+    max-width: 86%;
+  }
+  .duet-footer {
+    padding: 0 10px max(10px, env(safe-area-inset-bottom));
+  }
+}

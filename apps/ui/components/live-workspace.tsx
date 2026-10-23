@@ -32,6 +32,7 @@ import { WorkspaceHeader } from "./shell/header";
 import { ConversationView } from "./thread/conversation-view";
 import { convertMessage } from "./thread/messages";
 import { ExtensionsPage } from "./settings/extensions-page";
+import { DuetView } from "./duet/duet-view";
 import { SettingsDialog } from "./settings/settings-dialog";
 import { useWorkbenchSheet, WorkbenchProvider } from "./workbench/workbench-context";
 import { WorkbenchPane } from "./workbench/workbench";
@@ -162,6 +163,19 @@ export function LiveWorkspace() {
   const [settingsTab, setSettingsTab] = useState("account");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [extensionsOpen, setExtensionsOpen] = useState(false);
+  const [duetOpen, setDuetOpenState] = useState(false);
+  /** Duet has its own address, ?view=duet, so it can be bookmarked on a phone. */
+  const setDuetOpen = useCallback((open: boolean) => {
+    setDuetOpenState(open);
+    const url = new URL(location.href);
+    if (open === (url.searchParams.get("view") === "duet")) return;
+    if (open) url.searchParams.set("view", "duet");
+    else url.searchParams.delete("view");
+    history.replaceState({}, "", url);
+  }, []);
+  useEffect(() => {
+    if (new URL(location.href).searchParams.get("view") === "duet") setDuetOpenState(true);
+  }, []);
   const requestKeys = useRef(new Map<string, { text: string; id: string }>());
   const refresh = useCallback(async () => {
     const conversationId = selected.current;
@@ -232,6 +246,7 @@ export function LiveWorkspace() {
       void refresh();
     }
     setExtensionsOpen(false);
+    setDuetOpen(false);
     setSidebarOpen(false);
   };
   useEffect(() => {
@@ -434,6 +449,8 @@ export function LiveWorkspace() {
     rootId,
     extensionsOpen,
     setExtensionsOpen,
+    duetOpen,
+    setDuetOpen,
     sidebarOpen,
     setSidebarOpen,
     settingsOpen,
@@ -470,10 +487,10 @@ export function LiveWorkspace() {
               >
                 <StageMain>
                   <WorkspaceHeader />
-                  {extensionsOpen ? <ExtensionsPage /> : <ConversationView />}
+                  {duetOpen ? <DuetView /> : extensionsOpen ? <ExtensionsPage /> : <ConversationView />}
                 </StageMain>
               </ConversationRuntime>
-              {!extensionsOpen && <WorkbenchPane />}
+              {!extensionsOpen && !duetOpen && <WorkbenchPane />}
             </div>
           </WorkbenchProvider>
         </div>

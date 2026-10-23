@@ -55,7 +55,7 @@ export const taskKey = (value) => {
  * The Duet core: the thread, tasks, posts, mail, the board and the HTTP view. Host objects
  * come through getters because the harness opens after the registry is built.
  */
-export function createDuet({ harness: getHarness, models, defaultAgent, context = BACKGROUND_CONTEXT, openProject }) {
+export function createDuet({ harness: getHarness, models, defaultAgent, context = BACKGROUND_CONTEXT, openProject, ready = async () => true }) {
   const harness = () => getHarness();
 
   async function threadId() {
@@ -248,6 +248,7 @@ export function createDuet({ harness: getHarness, models, defaultAgent, context 
       await post(thread, 'duet-owner:' + request, { kind: DUET_OWNER, data: { text: words, taskId: key, label: task.label }, model: note('[The owner told task ' + key + ' "' + task.label + '" directly:] ' + excerpt(words)) });
       return { threadId: thread, ...(await steer({ thread, task: key, text: words, from: 'owner', requestId: 'duet-owner-steer:' + request })) };
     }
+    if (!(await ready(thread))) throw fail('Connect the selected model provider in Settings first', 409);
     const conversation = await harness().conversation(nativeId(thread), context);
     const submission = await conversation.submit({ type: 'input', content: words, entry: { kind: 'mars.user', data: { attachments: [] } }, whenBusy: 'followUp', requestId: request }, context);
     return { threadId: thread, taskId: '', delivered: 'front desk', submissionId: String(submission.id) };
