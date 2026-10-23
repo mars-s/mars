@@ -55,6 +55,7 @@ import { ROOT, WORK, APP, REPO, PORT, UI_PORT, DEPENDENCIES, requestPolicy, Cred
 import { ExtensionStore } from "./extension-store.mjs";
 import { UiPatchStore } from "./ui-patches.mjs";
 import { createGithubExtension } from "./github-sync.mjs";
+import { createSchedules } from "./schedules.mjs";
 await mkdir(ROOT + "/data", { recursive: true, mode: 0o700 });
 await mkdir(ROOT + "/evidence", { recursive: true, mode: 0o700 });
 const STAGING = process.env.MARS_PI_STAGING === "1";
@@ -182,6 +183,11 @@ const resolveModel = (id) => {
 };
 const modelSettings = createModelSettings({ file: ROOT + "/data/model-settings.json", resolve: resolveModel });
 registry.install(createBackgroundExtension({ background: createBackground({ harness: () => late.harness, models, settings: modelSettings, resolve: resolveModel }) }));
+// Scheduled jobs on Pi tasks (docs/SCHEDULES.md); the harness and root come later through `late`.
+const schedules = createSchedules({ harness: () => late.harness, rootId: () => late.rootId, context, models,
+  defaults: () => modelSettings.get(), checkConversation: async (id) => { await late.conversations.resolve(id); },
+  defaultAgent: () => ({ ...(late.defaultModel ? { model: late.defaultModel } : {}), cwd: WORK, modelTools: discovery.modelTools }) });
+registry.install(schedules.extension);
 // GitHub pushes through the owner's Composio connection (docs/GITHUB.md).
 registry.install(createGithubExtension({ cwd: WORK }));
 // Named agents and session start hooks (docs/AGENTS-AND-HOOKS.md).
@@ -415,6 +421,8 @@ const conversations = createConversationManager({ harness, root, context, defaul
   model: defaultModel, cwd: WORK, modelTools: discovery.modelTools,
 } });
 Object.assign(late, { harness, conversations });
+Object.assign(late, { rootId: root.id, defaultModel });
+await schedules.boot();
 // Only migrate the historical single-chat tool filter once. Model and transcript stay native.
 const migrationPath = ROOT + "/data/progressive-discovery-v1.json";
 try { await readFile(migrationPath); }
@@ -595,6 +603,10 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (await workbench.handle(req, res, url)) return;
+    if (url.pathname === "/api/schedules" || url.pathname.startsWith("/api/schedules/")) {
+      const value = await schedules.route(req.method, url.pathname, req.method === "POST" ? await jsonBody(req) : undefined);
+      if (value) { send(res, 200, value); return; }
+    }
     if (url.pathname === "/api/settings/models" && req.method === "GET") {
       send(res, 200, await modelSettings.get()); return;
     }

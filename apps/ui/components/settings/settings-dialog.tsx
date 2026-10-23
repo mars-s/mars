@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownToLine, Check, Cpu, LayoutGrid, MessagesSquare, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, CalendarClock, Check, Cpu, LayoutGrid, MessagesSquare, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { ModelSettingsPanel } from "@/components/settings/model-settings";
 import { HostVersionDetails, useHostVersion } from "@/components/settings/host-version";
 import { GatewaySettings } from "@/components/settings/gateway-settings";
 import { ThemeSettings } from "@/components/settings/theme-settings";
+import { ScheduleSettings } from "@/components/settings/schedule-settings";
 import { UpdateSettings } from "@/components/settings/update-settings";
 import { useWorkspace } from "@/components/workspace-context";
 import type { LoginState } from "@/lib/pi/live-state";
@@ -23,6 +24,7 @@ const sections: { id: string; label: string; icon: LucideIcon; summary: string }
   { id: "connection", label: "Connection", icon: Server, summary: "The Pi host this workspace talks to." },
   { id: "apps", label: "Apps", icon: LayoutGrid, summary: "Private connections Pi can use." },
   { id: "gateway", label: "Gateway", icon: MessagesSquare, summary: "Chat with Mars from Telegram, Discord and scripts." },
+  { id: "schedules", label: "Schedules", icon: CalendarClock, summary: "Prompts Mars runs at set times." },
   { id: "updates", label: "Updates", icon: ArrowDownToLine, summary: "New versions of Mars from GitHub main." },
 ];
 
@@ -238,6 +240,14 @@ export function SettingsDialog() {
             </Section>
             <Section id="gateway">
               <GatewaySettings
+                onOpenConversation={(id) => {
+                  setSettingsOpen(false);
+                  selectConversation(id);
+                }}
+              />
+            </Section>
+            <Section id="schedules">
+              <ScheduleSettings
                 onOpenConversation={(id) => {
                   setSettingsOpen(false);
                   selectConversation(id);

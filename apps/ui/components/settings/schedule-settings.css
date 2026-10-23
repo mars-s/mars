@@ -1,0 +1,100 @@
+/* Settings, Schedules (components/settings/schedule-settings.tsx). Rows reuse the gateway list. */
+.schedule-settings .gateway-row {
+  align-items: flex-start;
+}
+.schedule-settings .gateway-row-actions {
+  padding-top: 2px;
+}
+.schedule-row[data-enabled="false"] strong {
+  color: var(--text-muted);
+}
+.schedule-status[data-status="completed"] {
+  color: var(--green);
+}
+.schedule-status[data-status="failed"] {
+  color: var(--red);
+}
+.gateway-row-text span .schedule-status {
+  overflow: visible;
+  font-size: inherit;
+  white-space: nowrap;
+}
+.schedule-open {
+  color: var(--text);
+  font-size: 12px;
+}
+.schedule-form textarea {
+  resize: vertical;
+}
+.schedule-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.schedule-every {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.schedule-select {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--text);
+  font-size: 14px;
+}
+.schedule-select:hover:not(:disabled) {
+  border-color: var(--input);
+}
+.schedule-select:focus-visible,
+.schedule-days button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.schedule-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+}
+.schedule-days legend {
+  width: 100%;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.schedule-days button {
+  min-width: 44px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.schedule-days button[aria-pressed="true"] {
+  border-color: var(--text-muted);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+@media (max-width: 640px) {
+  .schedule-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+@media (pointer: coarse) {
+  .schedule-select,
+  .schedule-days button {
+    height: 44px;
+  }
+}
