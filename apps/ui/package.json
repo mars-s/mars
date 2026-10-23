@@ -12,7 +12,7 @@
     "test:browser": "node scripts/browser-checks.mjs",
     "lint": "eslint app components lib",
     "check": " npm run typecheck && npm run lint && MARS_BUILD_CHECK=1 npm run build",
-    "test": "node --test tests/tool-adapter.test.mjs tests/run-steps.test.mjs tests/workbench-state.test.mjs tests/workbench-parse.test.mjs tests/live-state.test.mjs tests/connections.test.mjs tests/gateway.test.mjs tests/updates.test.mjs tests/pi-proxy.test.mjs tests/browser-options.test.mjs tests/dev-origin.test.mjs tests/workbench-files.test.mjs tests/workbench-changes.test.mjs tests/workbench-pages.test.mjs tests/workbench-terminal.test.mjs tests/voice.test.mjs"
+    "test": "node --test tests/tool-adapter.test.mjs tests/run-steps.test.mjs tests/workbench-state.test.mjs tests/workbench-parse.test.mjs tests/live-state.test.mjs tests/connections.test.mjs tests/gateway.test.mjs tests/updates.test.mjs tests/pi-proxy.test.mjs tests/browser-options.test.mjs tests/dev-origin.test.mjs tests/workbench-files.test.mjs tests/workbench-changes.test.mjs tests/workbench-pages.test.mjs tests/workbench-terminal.test.mjs tests/voice.test.mjs tests/connectors.test.mjs"
   },
   "engines": {
     "node": "24.14.0"
