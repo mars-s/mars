@@ -9,6 +9,8 @@ import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { createArtefacts } from "./artefacts.mjs";
 import { hostSecrets, redactFile, redactText } from "./secrets.mjs";
 import { destructiveReason } from "./shell-guard.mjs";
+import { BACKGROUND_NICE, SCOPE_WRAPPER, createExecLimits, oomAdvice, parseScopeReport } from "./exec-limits.mjs";
+import { createResourceTools } from "./resources.mjs";
 import { REPO, ROOT } from "./security.mjs";
 
 // The host's own pinned Node goes first, after login profiles have set PATH.
@@ -37,30 +39,47 @@ const Slice = Type.Object({
   text: Type.String({ description: 'The UTF-8 text read.' }),
   truncated: Type.Boolean({ description: 'True when there is more after nextOffset.' }),
 });
-export function createVmControl({ root, cwd, protectedPaths = [REPO, ROOT, root, cwd], secrets = () => hostSecrets({ dataDir: root }) }) {
+export function createVmControl({ root, cwd, protectedPaths = [REPO, ROOT, root, cwd], secrets = () => hostSecrets({ dataDir: root }), limits = createExecLimits(), services }) {
   const artefacts = createArtefacts({ root });
   const absolute = (path) => resolve(cwd, path);
-  async function exec({ command, cwd: directory = cwd, timeoutMs = 120000, allowDestructive = false }, signal) {
+  async function exec({ command, cwd: directory = cwd, timeoutMs = 120000, allowDestructive = false, memoryMb, background = false }, signal) {
     signal?.throwIfAborted();
     if (!allowDestructive) {
       const reason = destructiveReason(command, { cwd: absolute(directory), protectedPaths, home: homedir() });
       if (reason) throw Error(`Refused: ${reason}. Nothing was run. Use a safer command, or, only when the owner explicitly asked for exactly this, call host_exec again with allowDestructive: true.`);
     }
+    const known = await secrets();
+    // The scope's description shows in systemctl and host_resources, so it never carries a secret.
+    const plan = await limits.plan({ memoryMb, background, description: "host_exec: " + redactText(command, known).replace(/\s+/g, " ").slice(0, 100) });
+    signal?.throwIfAborted();
     const stdout = await artefacts.allocate();
     const stderr = await artefacts.allocate();
     let child;
     let cancelled = false;
     let timedOut = false;
     let escalation;
+    let scopeKill;
     const kill = () => {
       // The shell and its children share a group. Killing only the shell leaks tools on abort.
       try { process.kill(-child.pid, "SIGTERM"); } catch (error) { if (error.code !== "ESRCH") throw error; }
-      escalation ??= setTimeout(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} }, 500);
+      // The scope also holds anything that left the group (setsid, a daemonising tool).
+      if (plan.mode === "scope") scopeKill ??= limits.killScope(plan.unit, "SIGTERM");
+      escalation ??= setTimeout(() => {
+        try { process.kill(-child.pid, "SIGKILL"); } catch {}
+        if (plan.mode === "scope") scopeKill = Promise.all([scopeKill, limits.killScope(plan.unit, "SIGKILL")]);
+      }, 500);
     };
     const abort = () => { cancelled = true; kill(); };
     let timer;
+    let report = "";
     try {
-      child = spawn("/bin/bash", ["-lc", `export PATH=${quote(NODE_BIN)}:"$PATH"\n${command}`], { cwd: absolute(directory), detached: true, stdio: ["ignore", stdout.file.fd, stderr.file.fd] });
+      const script = `export PATH=${quote(NODE_BIN)}:"$PATH"\n${command}`;
+      const [file, args, stdio] = plan.mode === "scope"
+        ? [limits.systemdRun, [...plan.args, "--", "/bin/bash", "-c", SCOPE_WRAPPER, "host_exec", script], ["ignore", stdout.file.fd, stderr.file.fd, "pipe"]]
+        : background ? ["nice", ["-n", String(BACKGROUND_NICE), "/bin/bash", "-lc", script], ["ignore", stdout.file.fd, stderr.file.fd]]
+          : ["/bin/bash", ["-lc", script], ["ignore", stdout.file.fd, stderr.file.fd]];
+      child = spawn(file, args, { cwd: absolute(directory), detached: true, stdio });
+      child.stdio[3]?.setEncoding("utf8").on("data", (chunk) => { if (report.length < 4096) report += chunk; });
       const finished = new Promise((resolve, reject) => {
         child.once("error", reject);
         child.once("close", (exitCode, exitSignal) => resolve({ exitCode, signal: exitSignal }));
@@ -71,10 +90,23 @@ export function createVmControl({ root, cwd, protectedPaths = [REPO, ROOT, root,
       const result = await finished;
       // Finish escalation even if the shell exits first and a descendant ignores TERM.
       if (escalation) await new Promise((resolve) => setTimeout(resolve, 550));
+      await scopeKill;
       // Redact the whole saved file, so a secret split across writes is still caught.
-      const known = await secrets();
       await Promise.all([redactFile(artefacts.path(stdout.id), known), redactFile(artefacts.path(stderr.id), known)]);
-      return { ...result, cancelled, timedOut, stdout: await artefacts.read(stdout.id), stderr: await artefacts.read(stderr.id) };
+      const scope = parseScopeReport(report);
+      const oomKilled = plan.mode === "scope" && !cancelled && !timedOut && (scope?.oomKills ?? 0) > 0;
+      const notes = [plan.note];
+      if (oomKilled) notes.push(oomAdvice({ memoryMb: plan.memoryMb, maxMb: limits.policy.maxMb, background }));
+      else if (plan.mode === "scope" && !scope && !cancelled && !timedOut && (result.exitCode === 137 || result.signal === "SIGKILL")) {
+        notes.push(`Killed by SIGKILL. If it ran out of memory (limit ${plan.memoryMb} MB), retry with a larger memoryMb or background: true; host_resources shows free memory.`);
+      }
+      const note = notes.filter(Boolean).join(" ");
+      return {
+        ...result, cancelled, timedOut, oomKilled,
+        limits: { mode: plan.mode, memoryMb: plan.memoryMb, peakMb: scope?.peakMb ?? null, background },
+        ...(note ? { note } : {}),
+        stdout: await artefacts.read(stdout.id), stderr: await artefacts.read(stderr.id),
+      };
     } finally {
       clearTimeout(timer);
       clearTimeout(escalation);
@@ -92,20 +124,31 @@ export function createVmControl({ root, cwd, protectedPaths = [REPO, ROOT, root,
   });
   const tools = [
     tool("host_exec", `Run a bash command on the owner's machine and get its output.
-Use it for anything the shell does: installing packages, running scripts and tests, git, system services. It runs as the owner with sudo and network access, in the workspace folder unless cwd says otherwise, with the host's pinned Node first on PATH. Output is saved in full: stdout and stderr come back as the first part of each, and artefact_read reads the rest by id. Host secrets in the output show as [redacted]. Commands that destroy work are refused (git push --force to main, git reset --hard, git clean -fd, git branch -D, git checkout -- . on a dirty tree, rm -rf of home, the repo or the data root); set allowDestructive only when the owner explicitly asked for that command. A command interrupted by a restart is not run again; check its effects before retrying.
-Example: const { exitCode, stdout } = await tools.host_exec({ command: "npm test", cwd: "projects/site", timeoutMs: 300000 })`, {
+Use it for anything the shell does: installing packages, running scripts and tests, git, system services. It runs as the owner with sudo and network access, in the workspace folder unless cwd says otherwise, with the host's pinned Node first on PATH. Each command has its own memory limit (default about 40% of RAM), so a heavy job is killed alone instead of taking Mars down: oomKilled: true means it ran out, so retry with a larger memoryMb. Use background: true for long builds and test runs so Mars stays quick. Output is saved in full: stdout and stderr come back as the first part of each, and artefact_read reads the rest by id. Host secrets show as [redacted]. Commands that destroy work are refused (git push --force to main, git reset --hard, git clean -fd, git branch -D, git checkout -- . on a dirty tree, rm -rf of home, the repo or the data root); set allowDestructive only when the owner explicitly asked for that command. A command interrupted by a restart is not run again; check its effects before retrying.
+Example: const { exitCode, stdout } = await tools.host_exec({ command: "npm run build", cwd: "projects/site", timeoutMs: 600000, memoryMb: 2500, background: true })`, {
       command: Type.String({ description: 'Bash command line, e.g. "ls -la" or "cd app && npm test".' }),
       cwd: Type.Optional(Type.String({ description: 'Folder to run in, relative to the workspace or absolute. Default: the workspace folder.' })),
       timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 3600000, default: 120000, description: 'Stop the command after this many milliseconds. Default 120000 (2 minutes), up to 1 hour.' })),
+      memoryMb: Type.Optional(Type.Integer({ minimum: 1, maximum: 1048576, description: 'Memory limit for this command and everything it starts, in MB, e.g. 3000 for a Next build. Default about 40% of RAM; values are kept between 64 and about 80% of RAM (host_resources shows the numbers).' })),
+      background: Type.Optional(Type.Boolean({ default: false, description: 'true runs it at low CPU and disk priority (nice 10, CPU weight 20), for long builds or tests that should not slow Mars down.' })),
       allowDestructive: Type.Optional(Type.Boolean({ default: false, description: 'true runs a command that would otherwise be refused as destructive, such as git reset --hard. Only when the owner explicitly asked for this.' })),
     }, Type.Object({
       exitCode: Type.Union([Type.Integer(), Type.Null()], { description: 'The exit status; 0 means success. null when it was stopped by a signal.' }),
       signal: Type.Union([Type.String(), Type.Null()], { description: 'The signal that stopped it, e.g. "SIGTERM", or null.' }),
       cancelled: Type.Boolean({ description: 'True when the call was cancelled.' }),
       timedOut: Type.Boolean({ description: 'True when timeoutMs ran out.' }),
+      oomKilled: Type.Boolean({ description: 'True when the command used more than its memory limit and was killed. Retry with a larger memoryMb; note says how.' }),
+      limits: Type.Object({
+        mode: Type.Union([Type.Literal("scope"), Type.Literal("none")], { description: '"scope" when it ran in its own memory-limited systemd scope, "none" when this machine has no systemd user services and it ran without a limit.' }),
+        memoryMb: Type.Union([Type.Integer(), Type.Null()], { description: 'The memory limit applied, in MB, or null without one.' }),
+        peakMb: Type.Union([Type.Integer(), Type.Null()], { description: 'The most memory the command used, in MB, when known. Use it to pick memoryMb next time.' }),
+        background: Type.Boolean({ description: 'True when it ran at low priority.' }),
+      }, { description: 'How the command was limited.' }),
+      note: Type.Optional(Type.String({ description: 'Plain advice when something needs attention: out of memory, a clamped memoryMb, or no limit available.' })),
       stdout: Slice,
       stderr: Slice,
     }), exec),
+    ...createResourceTools({ limits, secrets, services }),
     tool("host_read", `Read part of a file on disk, by its file path.
 Use it for files outside the workspace, or for large files you want to page through. It takes a file path, never a web URL (use web_fetch) or a saved-output id (use artefact_read). It saves a copy of the file, so later reads by id see the same content even if the file changes. Returns up to 16384 bytes per call; pass nextOffset as offset to read on, or artefact_search to find text in it. For files in the workspace, read is usually simpler.
 Example: await tools.host_read({ path: "/var/log/syslog", offset: 0, limit: 8000 })`, {
