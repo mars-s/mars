@@ -112,7 +112,12 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
     }, ctx);
     await api.memo('workflow', taskId, ctx);
     await api.details({ workerTaskId: taskId }, ctx);
-    return (await api.waitForTask(taskId, ctx)).state.outcome;
+    const outcome = (await api.waitForTask(taskId, ctx)).state.outcome;
+    // Pi's conversation ids are numbers; the tool result promises strings (the stored receipt keeps
+    // numbers, which receiptOf compares against).
+    return Array.isArray(outcome?.result)
+      ? { ...outcome, result: outcome.result.map((row) => ({ ...row, id: String(row.id), conversationId: String(row.conversationId) })) }
+      : outcome;
   }
   tool('worker_run', `Hand one job to a helper model and wait for its answer.
 Use it for ONE self-contained job, with a different model, or to keep a long investigation out of this conversation. For several steps in order, use workflow_start. The worker sees only task (and any images you pass), not this chat, so write task as a complete brief. It waits until the worker finishes and returns its final answer in result[0].result. It shows nested under this chat, and survives a restart. For several independent jobs at once, use worker_fanout; for work the owner should follow, use side_chat_open.
@@ -167,7 +172,7 @@ Example: const { result } = await tools.worker_followup({ workerId: "57", task: 
     const child = await ownedWorker(args.workerId, api, ctx);
     const settled = await (await child.submit({ type: 'input', content: args.task, whenBusy: 'followUp', requestId: `worker-followup:${api.taskId}` }, ctx)).wait(ctx);
     const answer = settled.answer ? await api.commit(tx => tx.entry(settled.answer), ctx) : undefined;
-    return { id: child.id, status: settled.status, result: compact(answer?.model || []) };
+    return { id: String(child.id), status: settled.status, result: compact(answer?.model || []) };
   });
   // runWorkers lets agent_run (agents.mjs) start workers through the same task and replay path.
   return Object.assign(defineExtension({ name: 'mars-orchestration', tools, tasks: [workflow] }), { runWorkers: run });
