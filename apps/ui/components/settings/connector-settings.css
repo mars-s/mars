@@ -1,0 +1,134 @@
+/* Settings, Connectors (components/settings/connector-settings.tsx). Shares the section
+   frame and form labels with connection-settings.css. */
+.connector-settings h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.connector-list {
+  display: grid;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.connector-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+}
+.connector-row + .connector-row {
+  border-top: 1px solid var(--border);
+}
+.connector-row-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.connector-row-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.connector-row-text strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connector-row-text span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connector-row-text .connector-row-detail {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.connector-row-address {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.connector-state {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.connector-state[data-status="connected"] {
+  color: var(--green);
+}
+.connector-state[data-status="error"],
+.connector-state[data-status="needs_auth"] {
+  color: var(--red);
+}
+.connector-settings .connector-row-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.connector-settings .connector-row-link {
+  margin: 0;
+  font-size: 13px;
+}
+.connector-row-link a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.connector-settings .connector-row-key label {
+  margin-top: 0;
+}
+.connector-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.connector-form {
+  display: grid;
+}
+.connector-select {
+  height: 36px;
+  width: 100%;
+  max-width: 360px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--text);
+  font-size: 14px;
+}
+.connector-select:hover:not(:disabled) {
+  border-color: var(--input);
+}
+.connector-select:disabled {
+  opacity: 0.6;
+}
+.connector-settings label.connector-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+.connector-settings code {
+  overflow-wrap: anywhere;
+}
+@media (pointer: coarse) {
+  .connector-select {
+    height: 44px;
+  }
+}
+@media (max-width: 640px) {
+  .connector-row-actions {
+    justify-content: flex-end;
+  }
+}

@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowDownToLine, CalendarClock, Check, Cpu, LayoutGrid, MessagesSquare, Palette, Server, UserRound, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, CalendarClock, Check, Cpu, LayoutGrid, MessagesSquare, Palette, Plug, Server, UserRound, type LucideIcon } from "lucide-react";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectionSettings } from "@/components/settings/connection-settings";
+import { ConnectorSettings } from "@/components/settings/connector-settings";
 import { ModelSettingsPanel } from "@/components/settings/model-settings";
 import { HostVersionDetails, useHostVersion } from "@/components/settings/host-version";
 import { GatewaySettings } from "@/components/settings/gateway-settings";
@@ -23,6 +24,7 @@ const sections: { id: string; label: string; icon: LucideIcon; summary: string }
   { id: "appearance", label: "Appearance", icon: Palette, summary: "How Mars looks on this device." },
   { id: "connection", label: "Connection", icon: Server, summary: "The Pi host this workspace talks to." },
   { id: "apps", label: "Apps", icon: LayoutGrid, summary: "Private connections Pi can use." },
+  { id: "connectors", label: "Connectors", icon: Plug, summary: "Outside services the agent can use: MCP servers and HTTP APIs." },
   { id: "gateway", label: "Gateway", icon: MessagesSquare, summary: "Chat with Mars from Telegram, Discord and scripts." },
   { id: "schedules", label: "Schedules", icon: CalendarClock, summary: "Prompts Mars runs at set times." },
   { id: "updates", label: "Updates", icon: ArrowDownToLine, summary: "New versions of Mars from GitHub main." },
@@ -237,6 +239,9 @@ export function SettingsDialog() {
             </Section>
             <Section id="apps">
               <ConnectionSettings />
+            </Section>
+            <Section id="connectors">
+              <ConnectorSettings />
             </Section>
             <Section id="gateway">
               <GatewaySettings
