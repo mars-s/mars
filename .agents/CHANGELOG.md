@@ -551,3 +551,4 @@ Built by three helper agents in their own worktrees (day/connectors, day/schedul
 - Previews: the worktree's node_modules is now a hard-linked copy (cp -al, under two seconds, no extra disk), so the preview runs the same Turbopack dev server as the live interface. Webpack over a symlinked node_modules took 22 minutes and ran out of memory. Ready in about 40 seconds now.
 - tailscale is found in ~/.local/bin (this machine's user-space wrapper) or MARS_TAILSCALE; the preview wait has one 150 second deadline instead of one per attempt.
 - scripts/lane-cli.mjs drives lanes from a shell while the running host predates them.
+- tests/lanes-ui-check.mjs covers Settings, Lanes: rows with state, preview link and blocked note, reordering, "Merge automatically" and starting a preview.
