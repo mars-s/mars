@@ -37,7 +37,7 @@ parts and nothing else:
 | `target` | `{ kind: "new" }`: a new conversation per run, filed in the group named after the schedule. `{ kind: "conversation", conversationId }`: append every run to that one conversation. |
 | `model`, `effort` | Model id as in the model menu (`gpt-6-luna`, `anthropic/claude-opus-5-5`) and effort level. `""` means the default model and effort from Settings, Models at run time. Only used for new conversations; an appended conversation keeps its own model. |
 | `enabled` | False while paused. |
-| `nextRunAt`, `lastRun`, `runs` | Next run time (ms), the newest run, and the last 20 runs. |
+| `nextRunAt`, `lastRun`, `runs` | Next run time (ms), the newest run, and the last 20 runs plus any older run still going, so the overlap check always sees it. |
 
 `when` forms (times are wall-clock times in `timezone`):
 
@@ -91,8 +91,10 @@ still going, and works on a paused schedule too.
 
 **Changing** a schedule's timing, pausing, resuming and deleting are each one commit that
 writes the document and creates the replacement task (if any), then aborts the old task. A
-task whose id no longer matches the document ends itself when it wakes, so a crash between the
-two steps cannot make a schedule run twice. On start-up Mars recreates the task of any enabled
+task whose id no longer matches the document, or whose schedule is paused, ends itself without
+sending when it wakes or resumes, including at its "send" checkpoint (the run is recorded as
+`failed`, not sent), so a crash between the two steps cannot make a schedule run twice or run
+while paused. On start-up Mars recreates the task of any enabled
 schedule whose task is missing or finished.
 
 ## Agent tools (namespace `schedules`)

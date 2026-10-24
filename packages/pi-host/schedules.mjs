@@ -92,8 +92,11 @@ function view(schedule) {
   };
 }
 
+/** Newest first: the last KEEP_RUNS runs, plus any older run still going so the overlap check still sees it. */
 function record(s, run) {
-  s.runs = [run, ...(s.runs ?? []).filter((row) => row.key !== run.key).map(plain)].slice(0, KEEP_RUNS);
+  let kept = 0;
+  s.runs = [run, ...(s.runs ?? []).filter((row) => row.key !== run.key).map(plain)]
+    .filter((row) => LIVE.has(row.status) || ++kept <= KEEP_RUNS);
 }
 function patchRun(s, key, change) {
   s.runs = (s.runs ?? []).map((row) => row.key === key ? { ...plain(row), ...change } : plain(row));
@@ -231,8 +234,11 @@ export function createSchedules({
         const { due, key, conversationId } = current.state.checkpoint;
         const id = current.input.scheduleId;
         const s = (await runtime.snapshot(SchedulesDoc, ctx))?.schedules?.[id];
+        // Paused, changed or deleted after the "send" checkpoint (a crash before the old task was
+        // aborted): this task no longer owns the schedule, so it must not send.
+        const owner = Boolean(s?.enabled) && s.taskId === runtime.taskId;
         let submissionId, reason;
-        if (s) {
+        if (owner) {
           try {
             const conversation = await runtime.conversation(nativeId(conversationId), ctx);
             if (!conversation) throw Error('The conversation for this run is gone');
@@ -246,7 +252,12 @@ export function createSchedules({
         await runtime.commit(async (tx) => {
           const latest = (await tx.doc(SchedulesDoc)).schedules[id];
           if (!latest) return settled('deleted');
-          patchRun(latest, key, reason ? { status: 'failed', reason } : { status: 'running', submissionId });
+          if (owner) patchRun(latest, key, reason ? { status: 'failed', reason } : { status: 'running', submissionId });
+          else {
+            // Sent before a restart, the run stays tracked; otherwise it was never sent.
+            const found = await tx.submissionByRequest(nativeId(conversationId), key);
+            patchRun(latest, key, found ? { status: 'running', submissionId: found.id } : { status: 'failed', reason: 'Not sent: the schedule was paused or changed first' });
+          }
           if (!latest.enabled || latest.taskId !== runtime.taskId) return settled('replaced');
           return advance(latest, due, runtime.now());
         }, ctx);

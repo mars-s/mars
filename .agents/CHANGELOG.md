@@ -498,3 +498,7 @@ From a read-only review of lanes.mjs; check-lanes-night.mjs covers each.
 - Deleting an interface module now runs the type check, so a deletion that breaks an import cannot land.
 - A crash after main moved but before npm install now installs on recovery (pendingInstall).
 - Stopping a preview while it starts: the start notices at its next step and removes only what it made, so the stop holds and its ports are not reused under it.
+## 2026-10-24 Night fixes: schedules
+
+- Schedules: trimming run history to 20 no longer drops a run that is still starting or running, so a long run followed by 20 or more skipped occurrences can no longer let a second run through or make Run now available (`schedules.mjs` `record`; `check-schedules-night.mjs`).
+- Schedules: a task recovered at its "send" checkpoint after the schedule was paused or its timing changed (a crash before the old task was aborted) now ends without sending and records the run as failed (`schedules.mjs` send phase; `check-schedules-night.mjs`). Spec updated in docs/SCHEDULES.md.
