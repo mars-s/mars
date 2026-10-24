@@ -377,9 +377,12 @@ export function createLanes({
     if (host.length) {
       const checks = await reachingChecks(join(wt, HOST), new Set(host));
       for (const check of checks) {
+        // Each check gets its own TMPDIR inside its temporary root, removed after: checks that
+        // leave temporary folders behind no longer fill /tmp, which is memory on this machine.
         const temp = await mkdtemp(join(tmpdir(), 'mars-lane-check-'));
+        await mkdir(join(temp, 'tmp'), { recursive: true });
         const result = await run(node, [check], { cwd: join(wt, HOST), timeout: checkTimeoutMs,
-          env: { ...env, MARS_PI_ROOT: temp, MARS_REPO_ROOT: wt, MARS_UI_DIR: join(wt, UI), MARS_PUBLIC_ORIGIN: '', MARS_ALLOWED_ORIGINS: '', MARS_LANES_DISABLED: '1' } });
+          env: { ...env, TMPDIR: join(temp, 'tmp'), MARS_PI_ROOT: temp, MARS_REPO_ROOT: wt, MARS_UI_DIR: join(wt, UI), MARS_PUBLIC_ORIGIN: '', MARS_ALLOWED_ORIGINS: '', MARS_LANES_DISABLED: '1' } });
         await rm(temp, { recursive: true, force: true });
         if (result.code !== 0) return { ran, failed: check + ': ' + tail(result.stdout + result.stderr) };
         ran.push(check);

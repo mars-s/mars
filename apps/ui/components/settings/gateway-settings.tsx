@@ -189,7 +189,7 @@ function SendersSection({ senders, busy, act }: { senders: GatewaySender[]; busy
         <span>{senders.length || "None yet"}</span>
       </div>
       <p className="connection-settings-help">
-        Each of these can use Mars with the same power as you. After you remove a sender, their messages get a new
+        Each of these can do anything you can do in Mars. After you remove a sender, their messages get a new
         pairing code that only you can approve.
       </p>
       {senders.length > 0 && (

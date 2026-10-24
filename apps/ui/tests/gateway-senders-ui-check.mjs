@@ -52,7 +52,7 @@ try {
     assert.equal(await row("Telegram sender 6660001").getByRole("button").count(), 0, "and has no Remove");
     assert.ok(await row("Discord sender 400000000000000001").getByText("Approved, and set on the host (MARS_DISCORD_OWNER)").isVisible());
     assert.ok(await row("Telegram sender 6660002").getByText("Approved", { exact: true }).isVisible());
-    assert.ok(await section.getByText(/same power as you/).isVisible(), "the section says what an allowed sender can do");
+    assert.ok(await section.getByText(/anything you can do in Mars/).isVisible(), "the section says what an allowed sender can do");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth || [...document.querySelectorAll('section[aria-labelledby="gateway-senders-heading"] *')].some((el) => el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX === "visible" && el.clientWidth > 0 && !["SPAN", "STRONG", "BUTTON", "CODE"].includes(el.tagName)));
     assert.equal(overflow, false, `${name}: nothing overflows`);
     await page.screenshot({ path: `${evidence}/${name}-senders.png` });

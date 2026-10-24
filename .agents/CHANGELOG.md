@@ -591,3 +591,8 @@ From a read-only review; packages/pi-host/check-project-memory-night.mjs covers 
 - Settings, Updates polls GET /api/update every 2 seconds while an update runs. Before, the polling effect keyed on the freshly parsed running object, so every response restarted it and loaded again at once (173 requests in 5 seconds in the browser check, now 2) (`update-settings.tsx`). Test: apps/ui/tests/activity-updates-night-ui-check.mjs.
 - A host_deploy that stopped before writing any status is dated by its deploy folder's last change, so the header's "The last host update was interrupted" notice retires once a newer build is installed, instead of staying until the next deploy (`host-version.mjs` `latestDeploy`). Test: packages/pi-host/check-activity-updates-night.mjs. Spec: apps/ui/docs/FULL-CONTROL.md.
 - Not fixed here, protected files: the updates review's recover() lock release, rollback after a commit during stop, stuck "preparing" updates and the "already running" window live in scripts/update.mjs, packages/pi-host/updates.mjs and .gitignore.
+
+## 2026-10-24 Night fixes: follow-ups
+
+- Settings, Gateway: the allowed senders note now reads "can do anything you can do in Mars", so the pairing warning is again the only "same power as you" text and gateway-ui-check passes (it broke when the senders list landed tonight).
+- Lanes run each check with its own TMPDIR inside the check's temporary root, removed afterwards. /tmp is memory on this machine, and checks had left about 350 "mars workbench" folders (23 MB each) and many more behind; clearing them freed about 900 MB and stopped the browser checks being killed for memory.
