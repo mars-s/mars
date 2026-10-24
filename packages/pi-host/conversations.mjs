@@ -76,6 +76,23 @@ export function createConversationManager({ harness, root, context, defaultAgent
     const page = { items, next };
     return { items: await Promise.all(page.items.map(topRow)), next: page.next };
   }
+  /**
+   * Pinned top-level chats older than the page that ends at `cursor`. Reads one small document
+   * per older chat; owned workers are skipped by their record and side chats cannot be pinned.
+   */
+  async function pinnedAfter(cursor, present) {
+    const rows = [];
+    for (let next = cursor; next;) {
+      const batch = await harness.commit(tx => tx.scanConversations({ order: 'descending' }, 100, next), context);
+      for (const record of batch.items) {
+        if (record.owner || present.has(String(record.id))) continue;
+        if ((await harness.snapshot(OrganiseDoc, record.id, context))?.pinned !== true) continue;
+        if (!(await sideChatParent(harness, record.id, context))) rows.push(await topRow(record));
+      }
+      next = batch.next;
+    }
+    return rows;
+  }
   return {
     resolve,
     async selectedThread(id) {
@@ -95,13 +112,21 @@ export function createConversationManager({ harness, root, context, defaultAgent
     },
     async state(id) { return stateOf(await resolve(id)); },
     listPage,
+    /**
+     * The sidebar's rows: the newest page, the main conversation, and every pinned chat however
+     * many newer chats there are (docs/LIVE-INTEGRATION.md).
+     */
     async list(options) {
-      const { items } = await listPage(options);
+      const { items, next } = await listPage(options);
+      const pinned = [];
       if (!items.some(item => item.id === String(root.id))) {
-        if (items.length === 100) items.pop();
+        if (items.length === 100) {
+          const dropped = items.pop();
+          if (dropped.pinned) pinned.push(dropped);
+        }
         items.push(await topRow({ id: root.id }));
       }
-      return items;
+      return [...items, ...pinned, ...(await pinnedAfter(next, new Set(items.map(item => item.id))))];
     },
     async create(options = {}) {
       const agent = { ...defaultAgent };

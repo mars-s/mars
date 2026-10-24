@@ -39,10 +39,18 @@ import { useWorkbenchSheet, WorkbenchProvider } from "./workbench/workbench-cont
 import { WorkbenchPane } from "./workbench/workbench";
 
 const EMPTY_MESSAGES: LiveMessage[] = [];
+/** The host's 404 answers for a conversation id it cannot open (conversations.mjs resolve). */
+const MISSING_CONVERSATION = new Set([
+  "Conversation not found",
+  "Conversation parent not found",
+  "Invalid conversation owner",
+]);
 type ConversationDraft = {
   text: string;
   attachments: readonly Attachment[];
   adapter: AttachmentAdapter;
+  /** Puts a message back into this chat's composer while it is on screen; unset otherwise. */
+  restore?: (message: AppendMessage) => void;
 };
 function createDraft(onError: (message: string) => void): ConversationDraft {
   const draft: ConversationDraft = {
@@ -118,6 +126,9 @@ function ConversationRuntime({
       if (attachment.file) void composer.addAttachment(attachment.file).catch(() => undefined);
   };
   useEffect(() => {
+    // A send that fails after its chat was left and opened again comes back here (onNew).
+    const live = (message: AppendMessage) => restore.current(message);
+    draft.restore = live;
     runtime.thread.composer.setText(draft.text);
     const restored = draft.attachments;
     if (!runtime.thread.composer.getState().attachments.length) {
@@ -127,11 +138,15 @@ function ConversationRuntime({
           void runtime.thread.composer.addAttachment(attachment.file).catch(() => undefined);
       }
     }
-    return runtime.thread.composer.subscribe(() => {
+    const unsubscribe = runtime.thread.composer.subscribe(() => {
       const state = runtime.thread.composer.getState();
       draft.text = state.text;
       draft.attachments = state.attachments;
     });
+    return () => {
+      unsubscribe();
+      if (draft.restore === live) draft.restore = undefined;
+    };
   }, [runtime, draft]);
   return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
 }
@@ -232,8 +247,24 @@ export function LiveWorkspace() {
       setSnapshot(next);
       setConnectionError("");
     } catch (failure) {
-      if (epoch === selectionEpoch.current && request === latestRefresh.current)
-        setConnectionError(failure instanceof Error ? failure.message : "Cannot reach Pi.");
+      if (epoch !== selectionEpoch.current || request !== latestRefresh.current) return;
+      const message = failure instanceof Error ? failure.message : "Cannot reach Pi.";
+      // A bookmarked, mistyped or removed chat id would otherwise fail every poll and block the
+      // whole workspace. Pi says it does not exist, so open the main conversation instead.
+      if (conversationId && MISSING_CONVERSATION.has(message)) {
+        selected.current = "";
+        selectionEpoch.current++;
+        const url = new URL(location.href);
+        url.searchParams.delete("conversation");
+        history.replaceState({}, "", url);
+        setSelectedId("");
+        setSnapshot(null);
+        setConnectionError("");
+        setActionError(`Chat ${conversationId} was not found, so the main conversation is open instead.`);
+        void refresh();
+        return;
+      }
+      setConnectionError(message);
     }
   }, []);
   const selectConversation = (id: string) => {
@@ -361,7 +392,8 @@ export function LiveWorkspace() {
   };
   /** Rename, regroup, pin or archive a top-level chat. Rows update at once and the host confirms. */
   const organiseConversation = async (id: string, change: ConversationChange) => {
-    const before = conversations;
+    // A poll already on its way carries the rows from before this change: drop it.
+    latestRefresh.current++;
     setConversations((rows) =>
       rows.map((row) =>
         row.id === id
@@ -391,7 +423,8 @@ export function LiveWorkspace() {
     try {
       await action("/api/conversations/organise", { conversationId: id, ...change });
     } catch {
-      setConversations(before);
+      // Show what the host has now, which keeps any other change made in the meantime.
+      void refresh();
     }
   };
   const onNew = async (message: AppendMessage, mode?: "queue" | "steer") => {
@@ -427,10 +460,34 @@ export function LiveWorkspace() {
     const request =
       previous?.text === deliveryKey ? previous : { text: deliveryKey, id: crypto.randomUUID() };
     requestKeys.current.set(conversationId, request);
+    const draftOf = drafts.current.get(conversationId);
+    const sender = draftOf?.restore;
     try {
       await action("/api/chat", { text, attachmentIds, requestId: request.id, ...(mode ? { mode } : {}) });
       requestKeys.current.delete(conversationId);
-    } catch {
+    } catch (failure) {
+      // The composer that sent it is gone when the owner switched chats meanwhile, so whatever
+      // assistant-ui returns to it would be lost. Put it back in that chat's draft instead.
+      if (draftOf && draftOf.restore !== sender) {
+        const reason = (failure instanceof Error ? failure.message : "The host did not confirm it").replace(/\.$/, "");
+        if (draftOf.restore) draftOf.restore(message);
+        else {
+          const failed = message.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n");
+          draftOf.text = draftOf.text.trim() ? `${failed}\n${draftOf.text}` : failed;
+          draftOf.attachments = [...(message.attachments ?? []), ...draftOf.attachments];
+        }
+        const title = conversations
+          .flatMap((row) => [row, ...row.sideChats])
+          .find((row) => row.id === conversationId)?.title;
+        setActionError(
+          selected.current === conversationId
+            ? `Your message was not sent (${reason}). It is back in the message box.`
+            : `Your message to ${title ? `"${title}"` : `chat ${conversationId}`} was not sent (${reason}). It is back in that chat's message box.`,
+        );
+      }
       throw new MessageNotSentError(
         "Message delivery was not confirmed. Your text is kept for retry.",
       );
