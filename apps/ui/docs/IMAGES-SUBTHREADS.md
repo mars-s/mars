@@ -122,6 +122,9 @@ commands, file actions and tool calls, with live Thinking/Working status and rea
 agent start/finish states. Expand to inspect evidence. Counts and file-change
 statistics appear only when native results supply them. Preserve assistant
 status text between action groups. Ignore a Sources panel for this delivery.
+A codemode call is listed as the nested calls it made; when the script itself failed
+or was stopped, its own row follows them with its error, and it counts as failed. A
+failed or stopped edit or write shows its error, never the diff it tried.
 
 Extension management is catalogue-driven. Render installed extension cards with
 name, description/version, enabled switch, Open interface and Manage controls.

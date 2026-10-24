@@ -246,7 +246,10 @@ export function toolView(tool: ToolActivity): ToolView {
     case "edit": {
       const files = editFiles(category, args, path, tool.details?.patch);
       const detail = path || files.map((file) => file.path).join(", ") || str(args.cwd);
-      return { ...common, kind: "edit", detail, files, created: category === "write" };
+      // A failed or stopped edit's diff is only what it tried, so it lists no files and the
+      // timeline shows its error instead of a change that never happened.
+      const done = common.status !== "failed" && common.status !== "cancelled";
+      return { ...common, kind: "edit", detail, files: done ? files : [], created: category === "write" };
     }
     case "read":
       return { ...common, kind: "read", path };
@@ -259,11 +262,18 @@ export function toolView(tool: ToolActivity): ToolView {
   }
 }
 
-/** A codemode call stands for the nested calls it made, so those are what the group lists. */
+/**
+ * A codemode call stands for the nested calls it made, so those are what the group lists. A
+ * script that failed or was stopped also keeps its own row after them, with its error.
+ */
 export function toolViews(tools: readonly unknown[]): ToolView[] {
   return tools
     .flatMap((value) => parseToolActivity(value) ?? [])
-    .flatMap((tool) => (tool.children?.length ? tool.children : [tool]))
+    .flatMap((tool) => {
+      if (!tool.children?.length) return [tool];
+      const status = toolStatus(tool);
+      return status === "failed" || status === "cancelled" ? [...tool.children, tool] : tool.children;
+    })
     .map(toolView);
 }
 

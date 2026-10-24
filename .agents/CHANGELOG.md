@@ -582,3 +582,12 @@ From a read-only review; packages/pi-host/check-project-memory-night.mjs covers 
 - Memory: an update removes only the note lines asked for and keeps headings, numbered lists and paragraphs the owner wrote; notes are matched as shown (spaces collapsed); a MEMORY.md that exists but cannot be read is refused instead of overwritten. Tests: check (4a), (4b), (4c).
 - Memory: the Memory section stops at 8,000 characters and says how many notes were left out. Test: check (5).
 - Session start hooks: a plugin file named by several SessionStart hooks is added once. Test: check (6).
+
+
+## 2026-10-24 Night fixes: activity and updates UI
+
+- A codemode script that failed or was stopped after making nested calls now keeps its own Failed or Stopped row, with its error, after those calls, and counts in the group's "N failed". Before, only the nested calls were listed, so a script that threw after a good host_exec read as "Ran 1 command" with no failure (`tool-adapter.ts` `toolViews`). Tests: apps/ui/tests/activity-updates-night.test.mjs, apps/ui/tests/activity-updates-night-ui-check.mjs.
+- A failed or stopped edit or write no longer shows "Edited" or "Created" above a diff that never happened: its view lists no files, so the activity row shows the error instead, and still names the file (`tool-adapter.ts` `toolView`). Tests: the same two files. Spec: apps/ui/docs/IMAGES-SUBTHREADS.md, Activity.
+- Settings, Updates polls GET /api/update every 2 seconds while an update runs. Before, the polling effect keyed on the freshly parsed running object, so every response restarted it and loaded again at once (173 requests in 5 seconds in the browser check, now 2) (`update-settings.tsx`). Test: apps/ui/tests/activity-updates-night-ui-check.mjs.
+- A host_deploy that stopped before writing any status is dated by its deploy folder's last change, so the header's "The last host update was interrupted" notice retires once a newer build is installed, instead of staying until the next deploy (`host-version.mjs` `latestDeploy`). Test: packages/pi-host/check-activity-updates-night.mjs. Spec: apps/ui/docs/FULL-CONTROL.md.
+- Not fixed here, protected files: the updates review's recover() lock release, rollback after a commit during stop, stuck "preparing" updates and the "already running" window live in scripts/update.mjs, packages/pi-host/updates.mjs and .gitignore.

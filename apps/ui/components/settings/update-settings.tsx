@@ -82,6 +82,9 @@ export function UpdateSettings() {
   const [busy, setBusy] = useState<"" | "check" | "apply" | "auto">("");
   const [reload, setReload] = useState(0);
   const startedRef = useRef(false);
+  // Every poll parses a new running object, so the effect keys on this flag, not the object:
+  // keying on the object restarted the effect, and its immediate load, after every response.
+  const updating = !!status?.running;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -95,9 +98,9 @@ export function UpdateSettings() {
           setError(cause instanceof Error ? cause.message : "Could not load updates.");
         });
     void load();
-    const timer = setInterval(load, status?.running || startedRef.current ? 2000 : 15000);
+    const timer = setInterval(load, updating || startedRef.current ? 2000 : 15000);
     return () => { controller.abort(); clearInterval(timer); };
-  }, [reload, status?.running]);
+  }, [reload, updating]);
 
   // The update finished: its result replaces the "building" notice.
   const lastId = status?.last?.id;

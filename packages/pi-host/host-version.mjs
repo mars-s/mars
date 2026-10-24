@@ -28,8 +28,9 @@ export async function latestDeploy(deploysDir, now = Date.now()) {
   const state = await readJson(join(dir, 'status.json'));
   const started = (await stat(dir).catch(() => null))?.mtimeMs ?? now;
   if (!state) {
+    // The folder's last change dates it, so a newer install can retire the notice as history.
     return now - started > 10 * 60000
-      ? { id, status: 'interrupted', detail: 'It stopped before writing any status; the live app was not changed by it.', at: null }
+      ? { id, status: 'interrupted', detail: 'It stopped before writing any status; the live app was not changed by it.', at: new Date(started).toISOString() }
       : { id, status: 'staging', detail: null, at: null };
   }
   const at = Date.parse(state.at ?? '') || started;
