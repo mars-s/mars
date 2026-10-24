@@ -488,3 +488,13 @@ Surveyed every surface at 1440x900 and 390x844 in dark and light against the pre
 - The owner's first real Duet run showed one request as three bubbles: the front desk started a task and asked "what topic?", the task asked with duet_post, and its final answer repeated the question. Now the front desk asks for missing details before starting anything, a final answer that repeats a post the task made since its last input is not posted again, and a final answer ending in a question is posted once as a question. Such a task shows "Needs you" (state waiting) until the owner replies; the reply runs it on.
 - The task prompt says to end the turn with the question when it cannot go on, and to use duet_post questions only while it keeps working. The front desk is told not to use em dashes.
 - check-duet-questions.mjs covers the repeat, the waiting state, the reply running on to a result, and a different result after an update still being posted.
+
+## 2026-10-24 Night fixes: lanes
+
+From a read-only review of lanes.mjs; check-lanes-night.mjs covers each.
+- One lock for every process: state changes take data/lanes.lock and the merge queue runs under data/lanes-queue.lock, both directories holding the owner's pid and cleared when that process is gone. The host and scripts/lane-cli.mjs no longer lose each other's changes, and a merge still running in another process is no longer re-queued and merged twice.
+- A worktree not on its lane branch (detached, or switched) is refused at submit and at merge. Before, its commits could be dropped while the lane was reported merged and its worktree removed.
+- Changed files are read with git diff -z, so a path git would quote (a tab in a directory name) cannot hide a .env file or database from the guard.
+- Deleting an interface module now runs the type check, so a deletion that breaks an import cannot land.
+- A crash after main moved but before npm install now installs on recovery (pendingInstall).
+- Stopping a preview while it starts: the start notices at its next step and removes only what it made, so the stop holds and its ports are not reused under it.

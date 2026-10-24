@@ -3,7 +3,7 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, normalize } from 'node:path';
 import { promisify } from 'node:util';
@@ -33,6 +33,48 @@ export async function run(file, args, { cwd, env, timeout = 120000 } = {}) {
 
 export const lanesEnabled = (env = process.env) => env.MARS_LANES_DISABLED !== '1';
 
+/** Whether a lock directory's owner is gone: its process no longer runs, or it never wrote its pid. */
+async function staleLock(path) {
+  let pid = 0;
+  try { pid = Number(await readFile(join(path, 'owner'), 'utf8')); } catch { /* not written yet, or gone */ }
+  if (!pid) {
+    try { return Date.now() - (await stat(path)).mtimeMs > 10000; } catch { return false; }
+  }
+  try { process.kill(pid, 0); return false; } catch (error) { return error.code === 'ESRCH'; }
+}
+/**
+ * A lock every process on this machine shares (the host and scripts/lane-cli.mjs): a directory
+ * made atomically, holding its owner's pid, removed when the work ends or found stale after a
+ * crash. With wait false it gives up at once and returns { held: false }.
+ */
+export async function withFileLock(path, work, { wait = true, waitMs = 30000 } = {}) {
+  const started = Date.now();
+  for (;;) {
+    try { await mkdir(path, { mode: 0o700 }); break; } catch (error) {
+      if (error.code === 'ENOENT') { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); continue; }
+      if (error.code !== 'EEXIST') throw error;
+      if (await staleLock(path)) { await rm(path, { recursive: true, force: true }); continue; }
+      if (!wait) return { held: false };
+      if (Date.now() - started > waitMs) throw fail('The lanes are busy in another process; try again in a moment.', 503);
+      await sleep(20);
+    }
+  }
+  try {
+    await writeFile(join(path, 'owner'), String(process.pid), { mode: 0o600 });
+    return { held: true, value: await work() };
+  } finally {
+    await rm(path, { recursive: true, force: true });
+  }
+}
+
+/** git diff --name-status -z output as rows; -z keeps unusual file names unquoted. */
+export function parseNameStatus(text) {
+  const parts = text.split('\0');
+  const rows = [];
+  for (let i = 0; i + 1 < parts.length; i += 2) if (parts[i]) rows.push({ status: parts[i], path: parts[i + 1] });
+  return rows;
+}
+
 export function createLanes({
   repo, root, env = process.env, node = process.execPath,
   dir = env.MARS_LANES_DIR || join(dirname(repo), basename(repo) + '-lanes'),
@@ -50,12 +92,15 @@ export function createLanes({
     : run('npm', ['install', '--no-audit', '--no-fund'], { cwd, timeout: 900000 })),
 }) {
   const file = join(root, 'data/lanes.json');
-  let lock = Promise.resolve(), recovered = false, queueRun = Promise.resolve();
+  // State changes take stateLock (short); the merge queue runs under queueLock, held by one
+  // process at a time for as long as it merges.
+  const stateLock = join(root, 'data/lanes.lock'), queueLock = join(root, 'data/lanes-queue.lock');
+  let lock = Promise.resolve(), queueRun = Promise.resolve(), recovery = null, recovering = false;
   const git = (cwd, args, timeout) => run('git', args, { cwd, timeout });
 
   // The file is the only state: every change re-reads it, edits it and writes it back in one
-  // short step, one at a time, so long merges and previews never write a stale copy and a
-  // second process (scripts/lane-cli.mjs) sees the same lanes.
+  // short step under a lock all processes share, so long merges and previews never write a
+  // stale copy and a second process (scripts/lane-cli.mjs) never loses or undoes a change.
   async function read() {
     let state;
     try { state = JSON.parse(await readFile(file, 'utf8')); } catch { state = {}; }
@@ -68,23 +113,60 @@ export function createLanes({
     await writeFile(temp, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
     await rename(temp, file);
   }
-  function mutate(change) {
-    const next = lock.then(async () => {
+  // The first use in a process recovers merges a crash cut short, unless a live runner holds
+  // the queue (then that runner is still merging, and recovers nothing of its own).
+  async function mutate(change) {
+    if (!recovering) {
+      recovery ||= (async () => {
+        recovering = true;
+        try { await withFileLock(queueLock, recover, { wait: false }); } catch { /* the next runner recovers */ } finally { recovering = false; }
+      })();
+      await recovery;
+    }
+    return change === undefined ? undefined : mutateNow(change);
+  }
+  function mutateNow(change) {
+    const next = lock.then(() => withFileLock(stateLock, async () => {
       const state = await read();
-      if (!recovered) { recovered = true; await recover(state); }
       const result = await change(state);
       await write(state);
       return result;
-    });
+    }).then((locked) => locked.value));
     lock = next.catch(() => {});
     return next;
   }
-  /** A merge cut short by a restart: merged if main has it, otherwise first in the queue again. */
-  async function recover(state) {
-    for (const lane of Object.values(state.lanes)) if (lane.state === 'merging') {
+  /**
+   * A merge cut short by a crash, found by the next queue runner (only a runner holding
+   * queueLock may judge this, so a merge still running in another process is left alone):
+   * if main has it, finish what follows (installing dependencies, cleaning up); otherwise it
+   * goes first in the queue again.
+   */
+  async function recover() {
+    const stuck = await mutate((state) => Object.values(state.lanes).filter((lane) => lane.state === 'merging').map((lane) => ({ ...lane })));
+    for (const lane of stuck) {
       const done = (await git(repo, ['merge-base', '--is-ancestor', lane.branch, main])).code === 0;
-      if (done) Object.assign(lane, { state: 'merged', note: 'Merged (found after a restart).' });
-      else { lane.state = 'queued'; if (!state.queue.includes(lane.id)) state.queue.unshift(lane.id); }
+      if (!done) {
+        await mutate((state) => {
+          const l = state.lanes[lane.id];
+          if (!l || l.state !== 'merging') return;
+          l.state = 'queued';
+          if (!state.queue.includes(l.id)) state.queue.unshift(l.id);
+        });
+        continue;
+      }
+      let note = 'Merged (found after a restart).';
+      if (lane.pendingInstall) {
+        const installed = await installDependencies(repo);
+        note += installed.code === 0 ? ' Dependencies installed in the checkout.' : ' npm install in the checkout failed: ' + tail(installed.stdout + installed.stderr, 600) + ' Run npm install there.';
+      }
+      await mutate((state) => {
+        state.queue = state.queue.filter((q) => q !== lane.id);
+        const l = state.lanes[lane.id];
+        if (!l) return;
+        delete l.pendingInstall;
+        touch(l, { state: 'merged', note, mergedCommit: l.mergedCommit || null });
+      });
+      await cleanup(lane);
     }
   }
   const load = () => mutate(() => {});
@@ -141,9 +223,14 @@ export function createLanes({
     return { ...shown, next: 'Edit files only inside ' + worktree + ' (absolute paths, or host_exec with cwd set to it). lane_preview { id: "' + id + '" } runs this lane\'s own Mars for the owner to try; lane_submit { id: "' + id + '", message } queues it to merge into ' + main + '.' };
   }
 
-  async function changes(worktree, against) {
-    const out = await git(worktree, ['diff', '--name-status', '--no-renames', against]);
-    return out.stdout.split('\n').filter(Boolean).map((line) => { const [status, ...rest] = line.split('\t'); return { status, path: rest.join('\t') }; });
+  async function changes(worktree, against, cached = false) {
+    const out = await git(worktree, ['diff', ...(cached ? ['--cached'] : []), '--name-status', '-z', '--no-renames', against]);
+    return parseNameStatus(out.stdout);
+  }
+  /** The lane's worktree must be on its own branch: that branch is what merges. */
+  async function onBranch(l) {
+    const head = (await git(l.worktree, ['symbolic-ref', '-q', '--short', 'HEAD'])).stdout.trim();
+    return head === l.branch ? '' : 'The worktree is on ' + (head || 'a detached HEAD') + ', not ' + l.branch + '; run git switch ' + l.branch + ' in ' + l.worktree + ' (bring any commits along first).';
   }
 
   async function submit({ id, message }) {
@@ -153,10 +240,11 @@ export function createLanes({
     const gitDir = (await git(wt, ['rev-parse', '--absolute-git-dir'])).stdout.trim();
     if (['rebase-merge', 'rebase-apply'].some((name) => existsSync(join(gitDir, name))))
       throw fail('A rebase is still in progress in ' + wt + '. Finish it (git rebase --continue) or abort it first.');
+    const wrongBranch = await onBranch(l);
+    if (wrongBranch) throw fail(wrongBranch);
     await git(wt, ['add', '-A']);
     const base = (await git(wt, ['merge-base', main, 'HEAD'])).stdout.trim();
-    const staged = (await git(wt, ['diff', '--cached', '--name-status', '--no-renames', base])).stdout.split('\n').filter(Boolean)
-      .map((line) => { const [status, ...rest] = line.split('\t'); return { status, path: rest.join('\t') }; });
+    const staged = await changes(wt, base, true);
     const refused = guardChanges(staged);
     if (refused.length) { await git(wt, ['reset', '-q']); throw fail('Refused: ' + refused.map((r) => r.reason).join(' ') + ' Remove those changes and submit again.'); }
     if ((await git(wt, ['diff', '--cached', '--quiet'])).code === 1) {
@@ -184,7 +272,21 @@ export function createLanes({
   /** Merge queued lanes in order, one at a time. Calls queue behind each other. */
   function processQueue({ force = false } = {}) {
     queueRun = queueRun.then(async () => {
-      for (;;) {
+      // Another process may be the runner; it takes this lane in turn. If it is just letting go,
+      // try again briefly so a lane queued at that moment is not left waiting.
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const ran = await withFileLock(queueLock, () => runQueue(force), { wait: false });
+        if (ran.held) return;
+        const waiting = await mutate((state) => state.queue.length > 0 && (force || !state.paused));
+        if (!waiting) return;
+        await sleep(100);
+      }
+    }).catch(() => {});
+    return queueRun;
+  }
+  async function runQueue(force) {
+    await recover();
+    for (;;) {
         const next = await mutate((state) => {
           while (state.queue.length && !state.lanes[state.queue[0]]) state.queue.shift();
           if ((state.paused && !force) || !state.queue.length) return null;
@@ -199,13 +301,12 @@ export function createLanes({
           const l = state.lanes[next.id];
           if (!l) return;
           if (result.changed) l.changed = result.changed;
+          delete l.pendingInstall;
           if (result.blocked) touch(l, { state: 'blocked', note: result.blocked });
           else touch(l, { state: 'merged', mergedCommit: result.commit, note: result.note || '' });
         });
         if (!result.blocked) await cleanup(next);
-      }
-    }).catch(() => {});
-    return queueRun;
+    }
   }
   async function mergeNow() {
     await processQueue({ force: true });
@@ -216,6 +317,8 @@ export function createLanes({
     const wt = l.worktree;
     if (!existsSync(wt)) return { blocked: 'The worktree ' + wt + ' is gone.' };
     if ((await git(wt, ['status', '--porcelain'])).stdout.trim()) return { blocked: 'The worktree has edits that are not submitted; run lane_submit again to include them.' };
+    const wrongBranch = await onBranch(l);
+    if (wrongBranch) return { blocked: wrongBranch };
     const rebased = await git(wt, ['rebase', '-q', main]);
     if (rebased.code !== 0) {
       const conflicts = (await git(wt, ['diff', '--name-only', '--diff-filter=U'])).stdout.trim().split('\n').filter(Boolean);
@@ -230,10 +333,13 @@ export function createLanes({
     if (checked.failed) return { changed, blocked: 'Check failed: ' + checked.failed };
     const branch = (await git(repo, ['symbolic-ref', '--short', 'HEAD'])).stdout.trim();
     if (branch !== main) return { changed, blocked: 'The checkout is on ' + (branch || 'a detached HEAD') + ', not ' + main + '; the owner must switch it back first.' };
+    // Recorded before main moves, so a crash before the install still installs (recover).
+    const dependencies = changed.some((path) => /(^|\/)package(-lock)?\.json$/.test(path));
+    if (dependencies) await patch(l.id, { pendingInstall: true });
     const merged = await git(repo, ['merge', '-q', '--ff-only', l.branch]);
     if (merged.code !== 0) return { changed, blocked: 'git could not fast-forward ' + main + ': ' + tail(merged.stderr.trim(), 500) + ' An uncommitted edit in the checkout may touch the same file.' };
     let note = '';
-    if (changed.some((path) => /(^|\/)package(-lock)?\.json$/.test(path))) {
+    if (dependencies) {
       const installed = await installDependencies(repo);
       note = installed.code === 0 ? 'Dependencies installed in the checkout.' : 'Merged, but npm install in the checkout failed: ' + tail(installed.stdout + installed.stderr, 600) + ' Run npm install there.';
     }
@@ -255,7 +361,8 @@ export function createLanes({
     }
     ran.push('syntax');
     const ui = live.filter((path) => path.startsWith(UI));
-    if (ui.some((path) => /\.(tsx?|mts)$/.test(path))) {
+    // A deleted module can break what imports it, so deletions count for the type check.
+    if (rows.some((row) => row.path.startsWith(UI) && /\.(tsx?|mts)$/.test(row.path))) {
       const types = await limited(['node_modules/typescript/bin/tsc', '--noEmit', '-p', UI], wt);
       if (types.code !== 0) return { ran, failed: 'interface type check: ' + tail(types.stdout + types.stderr) };
       ran.push('ui types');
@@ -362,12 +469,21 @@ export function createLanes({
       let index = 1; while (used.has(index)) index++;
       const hostPort = 3400 + index * 10, uiPort = hostPort + 1, httpsPort = 8600 + index;
       try { if (publicOrigin) origin = 'https://' + new URL(publicOrigin).hostname + ':' + httpsPort; } catch { /* no public name */ }
-      const claimed = { index, hostPort, uiPort, httpsPort, url: 'http://127.0.0.1:' + hostPort + '/', published: false, state: 'starting' };
+      const claimed = { index, hostPort, uiPort, httpsPort, url: 'http://127.0.0.1:' + hostPort + '/', published: false, state: 'starting', token: randomBytes(6).toString('hex') };
       touch(find(state, id), { preview: claimed });
       return claimed;
     });
     const { hostPort, uiPort, httpsPort } = slot;
     l.preview = slot;
+    // A stop while this start is under way removes the record: each step checks it is still ours
+    // and, if not, undoes only what this start made.
+    const ours = async () => (await mutate((state) => state.lanes[id]?.preview?.token)) === slot.token;
+    const abandon = async () => {
+      const { host, ui } = units(l);
+      await systemctl(['stop', host, ui]);
+      if (l.preview.published) await run(tailscale, ['serve', '--https=' + httpsPort, 'off'], { timeout: 20000 });
+      throw fail('The preview was stopped while it was starting.', 409);
+    };
     try {
       const data = join(root, 'lanes', l.id);
       await mkdir(join(data, 'data'), { recursive: true, mode: 0o700 });
@@ -382,24 +498,33 @@ export function createLanes({
         MARS_PUBLIC_ORIGIN: origin, MARS_ALLOWED_ORIGINS: '', MARS_LANES_DISABLED: '1', MARS_HOST_SERVICE: host, MARS_UI_SERVICE: ui, PATH: env.PATH || '/usr/bin:/bin', HOME: env.HOME || '' };
       const h = await run('systemd-run', [...common, '--unit=' + host, '-p', 'MemoryMax=900M', ...setenv(vars), node, join(l.worktree, HOST + 'server.mjs')]);
       if (h.code !== 0) throw fail('Could not start the preview host: ' + tail(h.stderr, 400), 500);
+      if (!(await ours())) await abandon();
       // The same development server as the live interface (scripts/next.mjs, Turbopack).
       const u = await run('systemd-run', [...common, '--unit=' + ui, '-p', 'MemoryMax=2000M', '--working-directory=' + join(l.worktree, UI),
         ...setenv({ ...vars, MARS_PI_ORIGIN: 'http://127.0.0.1:' + hostPort }),
         node, join(l.worktree, UI + 'scripts/next.mjs'), 'dev']);
       if (u.code !== 0) throw fail('Could not start the preview interface: ' + tail(u.stderr, 400), 500);
+      if (!(await ours())) await abandon();
       let published = false;
       if (origin) published = (await run(tailscale, ['serve', '--bg', '--https=' + httpsPort, 'http://127.0.0.1:' + hostPort], { timeout: 20000 })).code === 0;
       const url = published ? origin + '/' : 'http://127.0.0.1:' + hostPort + '/';
       Object.assign(l.preview, { url, published });
-      await patch(id, { preview: { ...l.preview } });
+      const kept = await mutate((state) => {
+        const live = state.lanes[id];
+        if (live?.preview?.token !== slot.token) return false;
+        touch(live, { preview: { ...l.preview } });
+        return true;
+      });
+      if (!kept) await abandon();
     } catch (error) {
-      await stopPreview(l).catch(() => {});
+      if (error.status !== 409 && (await ours().catch(() => false))) await stopPreview(l).catch(() => {});
       throw error;
     }
     // Wait for the first interface page (it compiles on the first visit).
     let ready = false;
     const deadline = Date.now() + 150000;
     while (!ready && Date.now() < deadline) {
+      if (!(await ours())) return { ...(await patch(id, {})), next: 'The preview was stopped while it was starting.' };
       try { ready = (await fetch('http://127.0.0.1:' + uiPort + '/', { signal: AbortSignal.timeout(Math.max(1000, deadline - Date.now())) })).status < 500; } catch { /* starting */ }
       if (!ready) await sleep(1000);
     }
