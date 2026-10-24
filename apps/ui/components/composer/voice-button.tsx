@@ -38,11 +38,18 @@ export function VoiceButton({ disabled }: { disabled: boolean }) {
     const next = new VoiceRecorder({
       onText: write,
       onError: (message) => setActionError(message),
+      // The host ended the recording by itself (its time limit, a lost connection): the microphone
+      // is already off and the words so far stay in the message box.
+      onEnd: () => {
+        if (recorder.current !== next) return;
+        recorder.current = null;
+        setPhase("idle");
+      },
     });
     recorder.current = next;
     try {
       await next.start();
-      setPhase("recording");
+      if (recorder.current === next) setPhase("recording");
     } catch (failure) {
       recorder.current = null;
       setPhase("idle");

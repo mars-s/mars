@@ -511,3 +511,10 @@ From a read-only review of lanes.mjs; check-lanes-night.mjs covers each.
 - Concurrent first calls to a connector share one client being created, so a keyed stdio connector no longer leaks an unreachable server process.
 - A connector's known credentials are redacted from its output at any length (new `redactKnown` in secrets.mjs); broad host-secret redaction keeps its 12 character minimum. Structured results are scrubbed value by value.
 - Tests: packages/pi-host/check-connectors-night.mjs.
+## 2026-10-24 Night fixes: voice
+
+- Voice: words from a transcript poll that returns after Escape are dropped instead of overwriting the restored draft (`apps/ui/lib/pi/voice.ts`; `apps/ui/tests/voice-recorder.test.mjs`).
+- Voice: cancelling while the microphone, the host start or the audio worklet is still starting leaves nothing running: the late microphone is turned off, the late host stream is cancelled, and no audio graph, send timer or polling starts (`voice.ts`; `voice-recorder.test.mjs`).
+- Voice: when the host ends a recording by itself or the transcript cannot be read, the browser turns the microphone and send timer off, keeps the words so far, frees a still-open host stream, and the button returns to idle through a new `onEnd` callback (`voice.ts`, `voice-button.tsx`; `voice-recorder.test.mjs`).
+- Voice: resampling to 16 kHz keeps its fractional position and last sample between worklet blocks, so ten seconds at 48 kHz stay ten seconds instead of 9.84 (`apps/ui/lib/pi/pcm.ts` `createResampler`; `voice.test.mjs`, `voice-recorder.test.mjs`).
+- Voice host: starts waiting for the Claude token hold a place, so concurrent starts cannot pass the two-recording limit (`packages/pi-host/voice.mjs`; `packages/pi-host/check-voice-night.mjs`).

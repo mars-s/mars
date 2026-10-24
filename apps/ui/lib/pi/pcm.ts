@@ -3,20 +3,45 @@
 
 export const VOICE_RATE = 16000;
 
-/** Float samples at `from` Hz to 16-bit PCM at 16 kHz (linear interpolation, clamped). */
-export function toPcm16(samples: Float32Array, from: number): Int16Array {
+const toInt16 = (value: number) => {
+  const clamped = Math.max(-1, Math.min(1, value));
+  return clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+};
+
+/**
+ * A converter for one recording: float samples at `from` Hz in, 16-bit PCM at 16 kHz out (linear
+ * interpolation, clamped), one block at a time. The microphone arrives in small blocks (128
+ * samples from an AudioWorklet), so it keeps the fractional read position and the last sample of
+ * each block for the next one: the blocks come out exactly as if the whole recording were
+ * converted at once, with no samples dropped at the joins.
+ */
+export function createResampler(from: number): (samples: Float32Array) => Int16Array {
   const ratio = from / VOICE_RATE;
-  const length = Math.floor(samples.length / ratio);
-  const out = new Int16Array(length);
-  for (let i = 0; i < length; i++) {
-    const x = i * ratio;
-    const j = Math.floor(x);
-    const f = x - j;
-    const value = (samples[j] ?? 0) * (1 - f) + (samples[j + 1] ?? samples[j] ?? 0) * f;
-    const clamped = Math.max(-1, Math.min(1, value));
-    out[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-  }
-  return out;
+  // Where the next output sample falls, in input samples from the start of the next block. It is
+  // always above -1: a negative value falls between the previous block's last sample and this one.
+  let position = 0;
+  let previous = 0;
+  return (samples) => {
+    const length = samples.length;
+    if (!length) return new Int16Array(0);
+    const at = (index: number) => (index < 0 ? previous : (samples[Math.min(index, length - 1)] ?? 0));
+    const count = position > length - 1 ? 0 : Math.floor((length - 1 - position) / ratio) + 1;
+    const out = new Int16Array(count);
+    for (let i = 0; i < count; i++) {
+      const x = position + i * ratio;
+      const j = Math.floor(x);
+      const f = x - j;
+      out[i] = toInt16(at(j) * (1 - f) + at(j + 1) * f);
+    }
+    position += count * ratio - length;
+    previous = samples[length - 1] ?? 0;
+    return out;
+  };
+}
+
+/** One whole buffer of float samples at `from` Hz to 16-bit PCM at 16 kHz. */
+export function toPcm16(samples: Float32Array, from: number): Int16Array {
+  return createResampler(from)(samples);
 }
 
 /** Base64 of the bytes of an Int16Array, without building a giant string at once. */

@@ -9,7 +9,7 @@ import { piRequest, record } from "@/lib/pi/live-state";
  * polling. Nothing here holds a token.
  */
 
-import { VOICE_RATE, pcmToBase64, toPcm16 } from "@/lib/pi/pcm";
+import { VOICE_RATE, createResampler, pcmToBase64 } from "@/lib/pi/pcm";
 
 export { VOICE_RATE };
 const SEND_EVERY_MS = 200;
@@ -29,7 +29,16 @@ function parseView(value: unknown): VoiceView {
 // Policy allows scripts from 'self' only, so a blob: worklet is refused in production.
 const WORKLET_URL = "/voice-worklet.js";
 
-export type VoiceCallbacks = { onText: (text: string) => void; onError: (message: string) => void };
+export type VoiceCallbacks = {
+  onText: (text: string) => void;
+  onError: (message: string) => void;
+  /**
+   * The recording ended by itself, without stop() or cancel(): the host finished it (its time
+   * limit, an idle stream, a lost connection) or the transcript could not be read. The microphone
+   * is already off and the words so far have been passed to onText.
+   */
+  onEnd?: () => void;
+};
 
 /** One recording. start() asks for the microphone; stop() returns the final transcript. */
 export class VoiceRecorder {
@@ -42,47 +51,74 @@ export class VoiceRecorder {
   private timer?: ReturnType<typeof setInterval>;
   private polling = false;
   private stopped = false;
+  private cancelledOnHost = false;
   private text = "";
   private sending: Promise<unknown> = Promise.resolve();
-  constructor(private readonly callbacks: VoiceCallbacks, private readonly language = "en") {}
+  private readonly callbacks: VoiceCallbacks;
+  private readonly language: string;
+  constructor(callbacks: VoiceCallbacks, language = "en") {
+    this.callbacks = callbacks;
+    this.language = language;
+  }
 
+  /**
+   * Resolves once recording. If stop() or cancel() runs first (the composer closed while the
+   * browser asked for the microphone or the host was starting), it resolves without recording and
+   * closes whatever it had already opened.
+   */
   async start() {
     if (!navigator.mediaDevices?.getUserMedia)
       throw Error("This browser cannot record audio here. Voice input needs HTTPS and microphone access.");
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
     try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      if (this.stopped) return this.abandon();
       const view = parseView(await piRequest("/api/voice", { language: this.language }));
       this.id = view.id;
       this.seq = view.seq;
+      if (this.stopped) return this.abandon();
+      const context = new AudioContext();
+      this.context = context;
+      const source = context.createMediaStreamSource(this.stream);
+      const resample = createResampler(context.sampleRate);
+      const take = (samples: Float32Array) => {
+        if (!this.stopped) this.pending.push(resample(samples));
+      };
+      const loaded = await context.audioWorklet.addModule(WORKLET_URL).then(
+        () => true,
+        () => false,
+      );
+      if (this.stopped) return this.abandon();
+      this.node = (loaded && this.worklet(context, source, take)) || this.processor(context, source, take);
     } catch (failure) {
-      this.release();
+      this.abandon();
+      if (this.stopped) return;
       throw failure;
-    }
-    this.context = new AudioContext();
-    const source = this.context.createMediaStreamSource(this.stream);
-    const rate = this.context.sampleRate;
-    const take = (samples: Float32Array) => {
-      if (!this.stopped) this.pending.push(toPcm16(samples, rate));
-    };
-    try {
-      await this.context.audioWorklet.addModule(WORKLET_URL);
-      const worklet = new AudioWorkletNode(this.context, "mars-voice");
-      worklet.port.onmessage = (event: MessageEvent<Float32Array>) => take(event.data);
-      source.connect(worklet);
-      this.node = worklet;
-    } catch {
-      // A worklet that cannot load (an old browser, a stricter policy): the older processor, which
-      // works everywhere. It runs only while connected to the output, and writes silence there.
-      const processor = this.context.createScriptProcessor(4096, 1, 1);
-      processor.onaudioprocess = (event) => take(event.inputBuffer.getChannelData(0).slice(0));
-      source.connect(processor);
-      processor.connect(this.context.destination);
-      this.node = processor;
     }
     this.timer = setInterval(() => this.flush(), SEND_EVERY_MS);
     void this.poll();
+  }
+
+  private worklet(context: AudioContext, source: MediaStreamAudioSourceNode, take: (samples: Float32Array) => void) {
+    try {
+      const worklet = new AudioWorkletNode(context, "mars-voice");
+      worklet.port.onmessage = (event: MessageEvent<Float32Array>) => take(event.data);
+      source.connect(worklet);
+      return worklet;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // A worklet that cannot load (an old browser, a stricter policy): the older processor, which
+  // works everywhere. It runs only while connected to the output, and writes silence there.
+  private processor(context: AudioContext, source: MediaStreamAudioSourceNode, take: (samples: Float32Array) => void) {
+    const processor = context.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (event) => take(event.inputBuffer.getChannelData(0).slice(0));
+    source.connect(processor);
+    processor.connect(context.destination);
+    return processor;
   }
 
   private flush() {
@@ -104,22 +140,40 @@ export class VoiceRecorder {
   private async poll() {
     this.polling = true;
     while (this.polling) {
+      let view: VoiceView;
       try {
-        const view = parseView(await piRequest(`/api/voice/${this.id}?since=${this.seq}&wait=8000`));
-        this.seq = view.seq;
-        if (view.text !== this.text) {
-          this.text = view.text;
-          this.callbacks.onText(view.text);
-        }
-        if (view.error && view.error !== "Cancelled.") this.callbacks.onError(view.error);
-        if (view.done) break;
+        view = parseView(await piRequest(`/api/voice/${this.id}?since=${this.seq}&wait=8000`));
       } catch (failure) {
         if (!this.polling) break;
-        this.callbacks.onError(failure instanceof Error ? failure.message : "Voice input stopped.");
+        // The host may still hold the stream: free its place rather than wait for the idle sweep.
+        this.end(failure instanceof Error ? failure.message : "Voice input stopped.", true);
+        break;
+      }
+      // cancel() may have run while this request was out: its words must not reach the composer.
+      if (!this.polling) break;
+      this.seq = view.seq;
+      if (view.text !== this.text) {
+        this.text = view.text;
+        this.callbacks.onText(view.text);
+      }
+      if (view.done) {
+        this.end(view.error === "Cancelled." ? undefined : view.error);
         break;
       }
     }
     this.polling = false;
+  }
+
+  /** The recording ended by itself: turn the microphone off and tell the button. */
+  private end(message?: string, hostMayBeOpen = false) {
+    this.polling = false;
+    if (this.stopped) return;
+    this.stopped = true;
+    clearInterval(this.timer);
+    this.release();
+    if (hostMayBeOpen) void this.cancelOnHost();
+    if (message) this.callbacks.onError(message);
+    this.callbacks.onEnd?.();
   }
 
   /** Send what is left, wait for the last words, and return the whole transcript. */
@@ -141,7 +195,22 @@ export class VoiceRecorder {
     this.polling = false;
     clearInterval(this.timer);
     this.release();
-    if (this.id) await piRequest(`/api/voice/${this.id}/cancel`, {}).catch(() => undefined);
+    await this.cancelOnHost();
+  }
+
+  /** Startup failed or was cancelled part way: close what it opened, here and on the host. */
+  private abandon() {
+    this.release();
+    void this.cancelOnHost();
+  }
+
+  private cancelOnHost(): Promise<void> {
+    if (!this.id || this.cancelledOnHost) return Promise.resolve();
+    this.cancelledOnHost = true;
+    return piRequest(`/api/voice/${this.id}/cancel`, {}).then(
+      () => undefined,
+      () => undefined,
+    );
   }
 
   private release() {

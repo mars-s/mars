@@ -16,6 +16,9 @@ const openSocket = (url, headers) => new WebSocket(url, { headers });
 
 export function createVoice({ getToken, open = openSocket, maxSessions = 2, idleMs = 60000, maxMs = 5 * 60000, keepAliveMs = 8000, finishMs = 5000, sweepMs = 5000, now = Date.now } = {}) {
   const sessions = new Map();
+  // Starts waiting for the Claude token. They hold a place, so starts that arrive together (two
+  // tabs) cannot all pass the limit before any of them is in `sessions`.
+  let starting = 0;
 
   function publish(session) {
     session.seq++;
@@ -53,8 +56,11 @@ export function createVoice({ getToken, open = openSocket, maxSessions = 2, idle
     async start({ language = 'en' } = {}) {
       if (!LANGUAGE.test(String(language))) throw fail('language must be a code such as "en" or "en-AU"');
       const live = [...sessions.values()].filter((session) => !session.done);
-      if (live.length >= maxSessions) throw fail('Voice input is already in use. Stop the other recording first.', 409);
-      const token = await getToken();
+      if (live.length + starting >= maxSessions) throw fail('Voice input is already in use. Stop the other recording first.', 409);
+      starting++;
+      let token;
+      // The place passes to the session below with no await in between.
+      try { token = await getToken(); } finally { starting--; }
       if (!token) throw fail('Voice input uses your Claude account. Connect Claude in Settings, Account, first.', 409);
       const query = new URLSearchParams({ encoding: 'linear16', sample_rate: '16000', channels: '1', endpointing_ms: '300', utterance_end_ms: '1000', language: String(language).split('-')[0], use_conversation_engine: 'true' });
       const socket = open(`${VOICE_URL}?${query}`, { Authorization: `Bearer ${token}`, 'User-Agent': 'claude-cli/2.1.309 (external, cli)', 'x-app': 'cli', 'anthropic-client-platform': 'cli' });

@@ -19,7 +19,8 @@ sign-in for chat on the owner's instruction, and voice follows the same choice.
 
 1. The browser records the microphone (`getUserMedia`, an AudioWorklet), converts it to 16 kHz
    mono 16-bit PCM (`apps/ui/lib/pi/pcm.ts`) and sends it every 200 ms as base64 JSON, because
-   every Mars proxy accepts JSON.
+   every Mars proxy accepts JSON. Each recording has one converter that carries its position across
+   the 128-sample worklet blocks, so no samples are lost at the joins.
 2. The host (`packages/pi-host/voice.mjs`) holds one upstream WebSocket per recording with the
    Claude token from Pi's credentials (refreshed by Pi), sends keep-alives, forwards audio, and
    ends with `CloseStream`. The token never reaches the browser.
@@ -28,9 +29,14 @@ sign-in for chat on the owner's instruction, and voice follows the same choice.
 
 Routes (owner auth): `POST /api/voice` `{ language }` starts; `POST /api/voice/:id/audio`
 `{ audio }` (base64, at most 64 KB decoded, whole samples); `GET /api/voice/:id?since&wait`
-polls (up to 15 s); `POST /api/voice/:id/stop` and `/cancel`. At most two recordings at once;
+polls (up to 15 s); `POST /api/voice/:id/stop` and `/cancel`. At most two recordings at once,
+counting starts still waiting for the token, so starts from several tabs together cannot pass it;
 a recording idle for a minute or longer than five minutes is stopped.
 
 In the composer: the microphone button is off until Claude is connected; click to dictate,
-words appear after what was already typed, click again to keep them, Escape to cancel. It needs
+words appear after what was already typed, click again to keep them, Escape to cancel. If the
+host ends the recording by itself (the five-minute limit, an idle or lost stream) or the transcript
+can no longer be read, the microphone turns off, the words so far stay, and the button returns to
+idle. Cancelling, or closing the composer, while the microphone or the host is still starting
+leaves nothing running, and words that arrive after Escape are dropped. It needs
 HTTPS (or localhost) for microphone access.
