@@ -6,6 +6,16 @@ const sleep = (ms, signal) => new Promise((resolve) => {
   signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
 });
 
+/**
+ * In a group, Telegram names the bot in a command: "/status@MarsBot". Drop the name when it is
+ * this bot, so the gateway sees "/status". A command naming another bot is left as it is.
+ */
+export function forThisBot(username) {
+  if (!username) return (text) => text;
+  const named = new RegExp('^(/\\w+)@' + username.replace(/[^\w]/g, '') + '(?=\\s|$)', 'i');
+  return (text) => text.replace(named, '$1');
+}
+
 export function createTelegramAdapter({ token, baseUrl = 'https://api.telegram.org', pollTimeoutSeconds = 25, fetch: fetcher = globalThis.fetch }) {
   if (typeof token !== 'string' || !/^\d+:[\w-]{20,}$/.test(token)) throw Error('Invalid Telegram bot token format');
   const api = (method) => `${baseUrl}/bot${token}/${method}`;
@@ -40,6 +50,7 @@ export function createTelegramAdapter({ token, baseUrl = 'https://api.telegram.o
       account = String(me.id);
       state = 'running';
       detail = me.username ? '@' + me.username : '';
+      const text = forThisBot(me.username);
       let offset = 0;
       while (!signal.aborted) {
         let updates;
@@ -58,7 +69,7 @@ export function createTelegramAdapter({ token, baseUrl = 'https://api.telegram.o
               sender: { id: String(message.from.id), name: message.from.username || message.from.first_name || '' },
               chat: { id: String(message.chat.id), type: message.chat.type === 'private' ? 'dm' : 'group' },
               ...(message.is_topic_message && message.message_thread_id ? { thread: String(message.message_thread_id) } : {}),
-              text: message.text,
+              text: text(message.text),
               ...(update.edited_message ? { edited: true } : {}),
             });
           }

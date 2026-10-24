@@ -30,14 +30,15 @@ export function loopbackGatewayEnv(env) {
 /**
  * Start the gateway with the HTTP API adapter, plus Telegram and Discord only when the
  * owner turned them on (MARS_GATEWAY_TELEGRAM=1 / MARS_GATEWAY_DISCORD=1) and a token exists.
- * Owner sender ids from MARS_TELEGRAM_OWNER / MARS_DISCORD_OWNER are allowed at boot.
+ * Owner sender ids from MARS_TELEGRAM_OWNER / MARS_DISCORD_OWNER are allowed while they are
+ * set: they are never stored, so removing one and restarting stops it.
  */
 export async function startGateway({ harness, conversations, context, env = process.env, discordToken, log = console.error, ready, workersOf }) {
   const gateway = createGateway({ harness, conversations, context, log, ready, workersOf });
   const api = createApiAdapter({ store: { harness, context } });
   const configured = [];
   gateway.addAdapter(api);
-  await gateway.allow('api', 'owner');
+  gateway.setOwners('api', ['owner']);
   if (env.MARS_GATEWAY_TELEGRAM === '1' && env.MARS_TELEGRAM_TOKEN) {
     gateway.addAdapter(createTelegramAdapter({ token: env.MARS_TELEGRAM_TOKEN, ...(env.MARS_TELEGRAM_API ? { baseUrl: env.MARS_TELEGRAM_API } : {}) }));
     configured.push('telegram');
@@ -47,7 +48,7 @@ export async function startGateway({ harness, conversations, context, env = proc
     configured.push('discord');
   }
   for (const [channel, ids] of [['telegram', env.MARS_TELEGRAM_OWNER], ['discord', env.MARS_DISCORD_OWNER]])
-    for (const id of String(ids ?? '').split(',').map((s) => s.trim()).filter(Boolean)) await gateway.allow(channel, id);
+    gateway.setOwners(channel, String(ids ?? '').split(',').map((s) => s.trim()).filter(Boolean));
   await gateway.resume();
   const available = { telegram: configured.includes('telegram'), discord: configured.includes('discord') };
   return { gateway, api, available };
@@ -71,6 +72,12 @@ export async function gatewayRoute({ req, url, res, send, jsonBody, gateway, api
     if (typeof route !== 'string' || !route) throw Object.assign(Error('Send { route }'), { status: 400 });
     await gateway.unbind(route);
     send(res, 200, { unbound: route });
+    return true;
+  }
+  if (url.pathname === '/api/gateway/allow/delete' && req.method === 'POST') {
+    const { channel, sender } = await jsonBody(req);
+    if (typeof channel !== 'string' || !channel || typeof sender !== 'string' || !sender) throw Object.assign(Error('Send { channel, sender }'), { status: 400 });
+    send(res, 200, await gateway.disallow(channel, sender));
     return true;
   }
   if (url.pathname === '/api/gateway/api/messages' && req.method === 'POST') {

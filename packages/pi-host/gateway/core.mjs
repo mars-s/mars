@@ -5,10 +5,16 @@ import { randomInt } from 'node:crypto';
 import { InboxDoc, LiveDoc, defineDoc } from '@earendil-works/pi-durable';
 import { chunkText } from './chunk.mjs';
 
-/** Bindings, owner allowlist, pending pairings, recent event keys and the outbound queue. */
+/**
+ * Bindings, approved senders, pending pairings, recent event keys and the outbound queue.
+ * `allow` holds only senders the owner approved; senders from the host configuration are
+ * kept in memory (`setOwners`). `watching` maps a submission id to its conversation, and
+ * `origins` maps it to the chat that sent it, so the answer reaches that chat even after it
+ * moves to another conversation. Older documents have no `origins`.
+ */
 export const GatewayDoc = defineDoc({
   kind: 'mars.gateway', version: 1, scope: 'session',
-  initial: () => ({ bindings: {}, allow: {}, pairings: [], seen: [], delivered: [], outbox: [], watching: {}, nextJob: 1, sessionsShown: {} }),
+  initial: () => ({ bindings: {}, allow: {}, pairings: [], seen: [], delivered: [], outbox: [], watching: {}, origins: {}, nextJob: 1, sessionsShown: {} }),
 });
 /** The latest audit records, newest last. Message text is never stored here. */
 export const GatewayAuditDoc = defineDoc({ kind: 'mars.gateway-audit', version: 1, scope: 'session', initial: () => ({ records: [] }) });
@@ -39,6 +45,7 @@ export function routeKey({ channel, account, chat, thread }) {
   if (thread !== undefined && (typeof thread !== 'string' || !thread)) throw Error('Invalid thread');
   return `${channel}:${account}:${chat.type}:${chat.id}${thread ? `:thread:${thread}` : ''}`;
 }
+const STEER = /^\/steer(?=\s|$)/i;
 const eventKey = (event) => `gw:${event.channel}:${event.account}:${event.eventId}`;
 const nativeId = (value) => (typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value);
 const target = (route) => {
@@ -62,6 +69,7 @@ function answerText(entry) {
  */
 export function createGateway({ harness, conversations, context, now = Date.now, log = () => {}, backoff = { firstMs: 1000, maxMs: 60000 }, ready = async () => null, workersOf = async () => [], typingEveryMs = 4000 }) {
   const adapters = new Map(); // channel -> { adapter, state, detail, failures, controller }
+  const owners = new Map(); // channel -> Set of sender ids from the host configuration, this run only
   const waiters = new Map(); // submission id -> promise
   let closed = false;
   let pump = Promise.resolve();
@@ -148,7 +156,10 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     }
   }
 
-  /** Wait for a submission to settle, then send its answer to every route bound to the conversation. */
+  /**
+   * Wait for a submission to settle, then send its answer to every route bound to the
+   * conversation, and to the chat that sent it even if that chat has since moved on.
+   */
   function follow(conversationId, submissionId) {
     if (waiters.has(submissionId)) return waiters.get(submissionId);
     const promise = (async () => {
@@ -157,6 +168,8 @@ export function createGateway({ harness, conversations, context, now = Date.now,
       const settled = await submission.wait(context);
       const doc = await read();
       const routes = Object.entries(doc.bindings).filter(([, id]) => String(id) === String(conversationId)).map(([route]) => route);
+      const origin = doc.origins?.[submissionId];
+      if (origin && !routes.includes(origin)) routes.unshift(origin);
       if (settled.status === 'done') {
         const conversation = await harness.conversation(nativeId(conversationId), context);
         const entry = await conversation.commit((tx) => tx.entry(settled.answer), context);
@@ -167,7 +180,11 @@ export function createGateway({ harness, conversations, context, now = Date.now,
         const detail = settled.detail ? ` (${String(settled.detail).slice(0, 200)})` : '';
         for (const route of routes) await enqueue(route, `No answer: ${why}${detail}.`, { once: 'submission:' + submissionId });
       }
-      await commit(async (tx) => { delete (await tx.doc(GatewayDoc)).watching[submissionId]; });
+      await commit(async (tx) => {
+        const draft = await tx.doc(GatewayDoc);
+        delete draft.watching[submissionId];
+        if (draft.origins) delete draft.origins[submissionId];
+      });
     })().catch((error) => log('gateway follow: ' + error.message)).finally(() => waiters.delete(submissionId));
     waiters.set(submissionId, promise);
     return promise;
@@ -206,6 +223,9 @@ export function createGateway({ harness, conversations, context, now = Date.now,
   async function command(event, route, conversationId) {
     const [name, ...words] = event.text.trim().split(/\s+/);
     const rest = event.text.trim().slice(name.length).trim();
+    // Adapters drop their own bot's name ("/status@MarsBot" in a Telegram group), so a name
+    // left here is another bot's command: no reply.
+    if (name.includes('@')) return null;
     switch (name.toLowerCase()) {
       case '/help': case '/start': return HELP;
       case '/new': {
@@ -267,7 +287,7 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     const doc = await read();
     const base = { channel: event.channel, sender: event.sender.id, route, eventId: event.eventId };
     if (doc.seen.includes(key)) { await audit({ ...base, decision: 'duplicate' }); return { status: 'duplicate' }; }
-    const allowed = (doc.allow[event.channel] ?? []).includes(event.sender.id);
+    const allowed = isAllowed(doc, event.channel, event.sender.id);
     // An edited message is never sent again: the model already answered the original, and
     // resending would run it twice. It is only recorded.
     if (event.edited) {
@@ -276,23 +296,27 @@ export function createGateway({ harness, conversations, context, now = Date.now,
       return { status: 'edited' };
     }
     if (!allowed) return pairing(event, route, base, key);
-    const remember = async (extra = {}) => commit(async (tx) => {
+    const remember = async (watch) => commit(async (tx) => {
       const draft = await tx.doc(GatewayDoc);
       draft.seen.push(key);
       if (draft.seen.length > SEEN_LIMIT) draft.seen.splice(0, draft.seen.length - SEEN_LIMIT);
-      Object.assign(draft.watching, extra);
+      if (!watch) return;
+      draft.watching[watch.submissionId] = watch.conversationId;
+      // Assign, then write through the draft (see decidePairing).
+      if (!draft.origins) draft.origins = {};
+      draft.origins[watch.submissionId] = route;
     });
     let conversationId = doc.bindings[route];
     const text = event.text.trim();
-    if (text.startsWith('/') && !/^\/steer\b/i.test(text)) {
+    const steer = STEER.test(text);
+    if (text.startsWith('/') && !steer) {
       await remember();
       const reply = await command(event, route, conversationId);
       await audit({ ...base, decision: 'command', command: text.split(/\s+/)[0].toLowerCase(), conversationId: (await read()).bindings[route] ?? null });
-      await enqueue(route, reply);
+      if (reply) await enqueue(route, reply);
       return { status: 'command' };
     }
-    const steer = /^\/steer\b/i.test(text);
-    const content = steer ? text.replace(/^\/steer\s*/i, '') : text;
+    const content = steer ? text.replace(STEER, '').trim() : text;
     if (!content) { await enqueue(route, 'Nothing to send.'); return { status: 'empty' }; }
     if (!conversationId) conversationId = String((await bindNew(event, route, content)).id);
     const notReady = await ready(conversationId);
@@ -308,7 +332,7 @@ export function createGateway({ harness, conversations, context, now = Date.now,
       type: 'input', content, requestId: key, whenBusy: steer ? 'steer' : 'followUp',
       entry: { kind: 'mars.user', data: { attachments: [], channel: event.channel, sender: event.sender.name ?? event.sender.id } },
     }, context);
-    await remember({ [submission.id]: String(conversationId) });
+    await remember({ submissionId: submission.id, conversationId: String(conversationId) });
     await audit({ ...base, decision: 'accepted', conversationId: String(conversationId), submissionId: submission.id });
     const waiting = follow(conversationId, submission.id);
     showTyping(event.channel, route, waiting);
@@ -352,13 +376,44 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     return { channel: found.channel, sender: found.sender, approved: !!approve };
   }
 
-  /** Allow a sender directly (the owner's own account from configuration). Idempotent. */
+  /** A sender is allowed while the host configuration names it, or while it is approved. */
+  function isAllowed(doc, channel, sender) {
+    return !!owners.get(channel)?.has(sender) || (doc.allow[channel] ?? []).includes(sender);
+  }
+
+  /**
+   * The owner's own accounts from the host configuration (MARS_TELEGRAM_OWNER and the like).
+   * They are allowed for this run only and never written to the approved list, so taking one
+   * out of the configuration and restarting stops it (docs/GATEWAY.md "Access and pairing").
+   */
+  function setOwners(channel, ids) {
+    owners.set(channel, new Set(ids.map(String).filter(Boolean)));
+  }
+
+  /** Approve a sender directly, as a pairing approval does. Idempotent. */
   async function allow(channel, sender) {
     await commit(async (tx) => {
       const doc = await tx.doc(GatewayDoc);
       if (!doc.allow[channel]) doc.allow[channel] = [];
       if (!doc.allow[channel].includes(sender)) doc.allow[channel].push(sender);
     });
+  }
+
+  /**
+   * Take a sender off the approved list (the owner's Remove in Settings). Idempotent.
+   * `configured` is true when the host configuration still allows it.
+   */
+  async function disallow(channel, sender) {
+    const removed = await commit(async (tx) => {
+      const doc = await tx.doc(GatewayDoc);
+      const index = (doc.allow[channel] ?? []).indexOf(sender);
+      if (index < 0) return false;
+      doc.allow[channel].splice(index, 1);
+      return true;
+    });
+    const configured = !!owners.get(channel)?.has(sender);
+    if (removed) await audit({ channel, sender, decision: 'removed', ...(configured ? { detail: 'still set in the host configuration' } : {}) });
+    return { channel, sender, removed, configured };
   }
 
   async function unbind(route) {
@@ -411,6 +466,7 @@ export function createGateway({ harness, conversations, context, now = Date.now,
       bindings: Object.entries(doc.bindings).map(([route, conversationId]) => ({ route, channel: route.split(':')[0], conversationId, title: titles.get(conversationId) ?? `Conversation ${conversationId}` })),
       pairings: doc.pairings.filter((p) => p.expiresAt > now()).map(({ code, channel, sender, name, expiresAt }) => ({ code, channel, sender, name, expiresAt: new Date(expiresAt).toISOString() })),
       allowed: doc.allow,
+      owners: Object.fromEntries([...owners].map(([channel, ids]) => [channel, [...ids]])),
       outbox: doc.outbox.length,
       audit: audit.slice(-50).reverse(),
     };
@@ -440,5 +496,5 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     await pump.catch(() => {});
   }
 
-  return { receive, addAdapter, decidePairing, allow, unbind, status, resume, watchSubmission, close, idle: () => pump, settle: () => Promise.allSettled([...waiters.values()]).then(() => pump) };
+  return { receive, addAdapter, decidePairing, setOwners, allow, disallow, unbind, status, resume, watchSubmission, close, idle: () => pump, settle: () => Promise.allSettled([...waiters.values()]).then(() => pump) };
 }

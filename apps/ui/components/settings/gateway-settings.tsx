@@ -9,7 +9,9 @@ import {
   chatLabel,
   decidePairing,
   loadGateway,
+  removeSender,
   unbindChat,
+  type GatewaySender,
   type GatewayStatus,
 } from "@/lib/pi/gateway";
 import "./connection-settings.css";
@@ -20,6 +22,13 @@ const time = (iso: string) => {
   const date = new Date(iso);
   return Number.isNaN(date.valueOf()) ? "" : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 };
+
+const ownerSetting = (channel: string) => `MARS_${channel.toUpperCase()}_OWNER`;
+function senderNote({ channel, approved, configured }: GatewaySender) {
+  if (!configured) return "Approved";
+  if (approved) return `Approved, and set on the host (${ownerSetting(channel)})`;
+  return `Set on the host (${ownerSetting(channel)}). To remove it, take it out there and restart Mars.`;
+}
 
 /** Settings, Gateway: chat apps that reach Mars, linked chats, pairing requests and recent activity. */
 export function GatewaySettings({ onOpenConversation }: { onOpenConversation?: (id: string) => void }) {
@@ -145,6 +154,7 @@ export function GatewaySettings({ onOpenConversation }: { onOpenConversation?: (
               </ul>
             )}
           </section>
+          <SendersSection senders={status.senders.filter((row) => row.channel !== "api")} busy={busy} act={act} />
           <section aria-labelledby="gateway-activity-heading">
             <div className="connection-settings-heading">
               <h3 id="gateway-activity-heading">Recent activity</h3>
@@ -167,5 +177,40 @@ export function GatewaySettings({ onOpenConversation }: { onOpenConversation?: (
         </>
       )}
     </div>
+  );
+}
+
+/** Who may use Mars from a chat app, with Remove for the approved ones. */
+function SendersSection({ senders, busy, act }: { senders: GatewaySender[]; busy: string; act: (key: string, work: () => Promise<GatewayStatus>) => Promise<void> }) {
+  return (
+    <section aria-labelledby="gateway-senders-heading">
+      <div className="connection-settings-heading">
+        <h3 id="gateway-senders-heading">Allowed senders</h3>
+        <span>{senders.length || "None yet"}</span>
+      </div>
+      <p className="connection-settings-help">
+        Each of these can use Mars with the same power as you. After you remove a sender, their messages get a new
+        pairing code that only you can approve.
+      </p>
+      {senders.length > 0 && (
+        <ul className="gateway-list">
+          {senders.map((row) => (
+            <li key={row.channel + ":" + row.sender} className="gateway-row">
+              <ChannelMark channel={row.channel} />
+              <div className="gateway-row-text">
+                <strong>{channelName(row.channel)} sender {row.sender}</strong>
+                <span>{senderNote(row)}</span>
+              </div>
+              {row.approved && (
+                <Button size="sm" variant="ghost" disabled={!!busy} aria-label={`Remove ${channelName(row.channel)} sender ${row.sender}`}
+                  onClick={() => void act("remove" + row.channel + ":" + row.sender, () => removeSender(row.channel, row.sender))}>
+                  {busy === "remove" + row.channel + ":" + row.sender ? "Removing…" : "Remove"}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

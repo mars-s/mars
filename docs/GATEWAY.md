@@ -76,15 +76,28 @@ the gateway records the failure, marks the adapter `failed` and restarts it with
 ## Access and pairing
 
 - Only the **sender id** is checked, never the chat id, so a group cannot let strangers in.
-- Allowed senders are the owner's own accounts, listed per channel in `mars.gateway`.
+- A sender is allowed while either of these holds:
+  - its id is set in the host configuration (`MARS_TELEGRAM_OWNER`, `MARS_DISCORD_OWNER`;
+    the HTTP API's `owner` is always set). These ids are read at each boot and never stored,
+    so taking one out of the configuration and restarting Mars stops it, unless it is also
+    approved.
+  - it is on the approved list in `mars.gateway` (`allow`). Only approving a pairing adds to
+    the list, and only the owner's Remove (Settings, Gateway, Allowed senders, or
+    `POST /api/gateway/allow/delete`) takes a sender off it. Mars never adds or removes an
+    approved sender by itself.
+- Hosts before 2026-10-24 copied the configured ids into the approved list at every boot.
+  Those copies stay until the owner removes them; Settings shows them as "Approved, and set
+  on the host", and removing one leaves the configured id allowed while it stays configured.
+- A removed sender is treated as unknown again: their next message gets a new pairing code
+  and never reaches Pi.
 - An unknown sender's text never reaches Pi. They receive one reply with an 8-character
   pairing code (no ambiguous letters). Codes expire after 1 hour; at most 3 are pending
   per channel; a repeat message from the same sender reuses their pending code.
-- The owner approves or rejects a code in the web UI (Connections, Gateway). Approval adds
+- The owner approves or rejects a code in the web UI (Settings, Gateway). Approval adds
   that sender id to the allowlist. Mars has full VM control, so the UI says plainly that
   approving gives the sender the same power as the owner.
 - Every inbound event gets an audit record: time, channel, sender, route, decision
-  (`accepted`, `duplicate`, `paired`, `denied`, `command`), conversation id. Message text is
+  (`accepted`, `duplicate`, `paired`, `denied`, `command`, `removed`), conversation id. Message text is
   not stored in the audit log; Pi already has it for accepted messages.
 
 ## Admission and busy conversations
@@ -105,7 +118,8 @@ the gateway records the failure, marks the adapter `failed` and restarts it with
 ## Commands
 
 Commands start with `/` and are handled by the gateway, not the model. They bypass the
-busy queue.
+busy queue. In a Telegram group a command may name the bot (`/status@MarsBot`); the
+adapter drops its own bot's name, and a command naming another bot gets no reply.
 
 | Command | Effect |
 | --- | --- |
@@ -120,9 +134,16 @@ busy queue.
 ## Delivery
 
 - When a submission settles, the gateway reads the answer entry and delivers its text to
-  every route bound to that conversation, in order.
+  every route bound to that conversation, in order, and to the chat that sent the message
+  even if that chat has since moved to another conversation with `/new` or `/switch`. The
+  sending chat is stored with the watched submission (`origins`), so this holds across a
+  restart. One answer reaches each chat once.
 - Replies go through one chunker: split at paragraph, line, sentence, then space, then
   hard; never inside a code fence (a fence split across chunks is closed and reopened).
+  Only the fence marker and a short language name are carried into the next chunk, never
+  the rest of the opening line, and a marker longer than 10 characters is plain text, so
+  every pass makes progress and the chunker always finishes. Only line breaks are dropped
+  at a cut, so indented code keeps its indentation, and a hard cut never splits an emoji.
 - Each chunk is a delivery job in `mars.gateway.outbox` with an id, so a restart resumes
   unsent chunks. Rate limits wait `retryAfterMs` and retry; a permanent error (403, chat
   not found) drops the job and records `delivery_failed` in the audit log. Delivery is at
@@ -141,6 +162,11 @@ Owner-authenticated, like every `/api` route:
   pending pairings and the latest audit records.
 - `POST /api/gateway/pairings {code, approve}` approves or rejects a pairing.
 - `POST /api/gateway/bindings/delete {route}` unbinds a chat.
+- `POST /api/gateway/allow/delete {channel, sender}` takes a sender off the approved list.
+  It returns `{channel, sender, removed, configured}`; `configured: true` means the host
+  configuration still allows that id. Removing twice is harmless.
+- `GET /api/gateway` also returns `allowed` (the approved list per channel) and `owners`
+  (the configured ids per channel).
 
 ## Telegram and Discord adapters
 
