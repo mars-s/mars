@@ -8,6 +8,7 @@ const MAX_PIXELS = 32 * 1024 * 1024;
 const formats = new Map([['image/png', 'png'], ['image/jpeg', 'jpeg'], ['image/webp', 'webp'], ['image/gif', 'gif']]);
 const validId = (id) => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id);
 // The composer's image chip (apps/ui/lib/pi/image-chips.ts), with a host attachment id.
+const MAX_PLACEMENTS = 4;
 const IMAGE_CHIP = /:image\[([^\]\n]{1,80})\]\{name=([A-Za-z0-9-]{1,80})\}/g;
 /** Message text as a person reads it: each image chip becomes "[Image 1]". */
 export const plainImageChips = (text) => String(text).replace(IMAGE_CHIP, (_whole, label) => `[${label}]`);
@@ -83,9 +84,13 @@ export function createImageStore({ root }) {
       blocks.push({ type: 'image', data: (await readFile(path)).toString('base64'), mimeType: receipt.mimeType });
     };
     let from = 0;
+    // At most four images per message, however many chips repeat one: each placement is a
+    // whole image for the model, so a text of repeated chips must not multiply them.
+    let placements = 0;
     for (const match of text.matchAll(IMAGE_CHIP)) {
       const [whole, label, id] = match;
-      if (!ids.includes(id)) continue;
+      if (!ids.includes(id) || placements >= MAX_PLACEMENTS) continue;
+      placements++;
       addText(text.slice(from, match.index).trim());
       await addImage(id, label);
       from = match.index + whole.length;

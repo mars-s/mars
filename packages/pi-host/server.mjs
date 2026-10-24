@@ -82,8 +82,15 @@ try {
   token = (await readFile(ROOT + "/data/web-token", "utf8")).trim();
 } catch (e) {
   if (e.code !== "ENOENT") throw e;
+}
+// An empty token would let an empty cookie or header sign in, so a missing or blank file
+// (a write cut short, for example) gets a new token, written whole or not at all.
+if (!token) {
   token = randomBytes(32).toString("base64url");
-  await writeFile(ROOT + "/data/web-token", token, { mode: 0o600 });
+  const temporary = ROOT + "/data/web-token." + randomUUID();
+  await writeFile(temporary, token, { mode: 0o600 });
+  await rename(temporary, ROOT + "/data/web-token");
+  console.warn("Mars: the owner token was missing or empty, so a new one was made in data/web-token. Sign in again with it.");
 }
 let deviceId;
 try {
@@ -530,10 +537,17 @@ function send(res, status, value) {
   res.end(JSON.stringify(value));
 }
 function valid(value) {
-  if (typeof value !== "string") return false;
+  if (typeof value !== "string" || !value || !token) return false;
   const a = Buffer.from(value),
     b = Buffer.from(token);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+/**
+ * Whether any pi_trial cookie is the owner token. Cookies ignore the port, so a page on another
+ * port of this host can plant its own pi_trial with a longer path, which browsers send first.
+ */
+function ownerCookie(header) {
+  return String(header || "").split(";").map((s) => s.trim()).filter((s) => s.startsWith("pi_trial=")).some((s) => valid(s.slice(9)));
 }
 const workbench = createWorkbench({
   work: WORK,
@@ -590,12 +604,7 @@ const server = http.createServer(async (req, res) => {
     if (await workbench.handleKeyed(req, res, url)) return;
     // The OAuth redirect back from a connector's sign-in carries no owner cookie; its single-use state is the check (docs/CONNECTORS.md).
     if (await connectors.callback(req, res, url)) return;
-    const cookie = (req.headers.cookie || "")
-      .split(";")
-      .map((s) => s.trim())
-      .find((s) => s.startsWith("pi_trial="))
-      ?.slice(9);
-    if (!valid(cookie) && !valid(req.headers.authorization?.replace(/^Bearer /, ""))) {
+    if (!ownerCookie(req.headers.cookie) && !valid(req.headers.authorization?.replace(/^Bearer /, ""))) {
       send(res, 401, { error: "Use the private sign-in link supplied in Codex." });
       return;
     }
@@ -964,12 +973,7 @@ const server = http.createServer(async (req, res) => {
 attachNextUpgrade(server, (req) => {
   const host = req.headers.host;
   if (!policy.hostAllowed(host) || !policy.originAllowed(host, req.headers.origin)) return false;
-  const cookie = (req.headers.cookie || "")
-    .split(";")
-    .map((s) => s.trim())
-    .find((s) => s.startsWith("pi_trial="))
-    ?.slice(9);
-  return valid(cookie);
+  return ownerCookie(req.headers.cookie);
 });
 server.listen(PORT, "127.0.0.1", () => console.log(`Mars Pi agent ready on ${PORT}${STAGING ? " (staging)" : ""}`));
 // Staging and check hosts never check GitHub on a timer.

@@ -564,3 +564,11 @@ From a read-only review; packages/pi-host/check-conversations-night.mjs and apps
 - Allowed senders can be removed: `gateway.disallow`, `POST /api/gateway/allow/delete` and an Allowed senders list with Remove in Settings, Gateway. Configured owners (`MARS_TELEGRAM_OWNER`, `MARS_DISCORD_OWNER`) are allowed while configured and no longer written to the approved list, so removing one and restarting stops it. Mars never adds or removes an approved sender itself (docs/GATEWAY.md "Access and pairing"). Tests: `check-gateway-night.mjs`, `tests/gateway-night.test.mjs`, `tests/gateway-senders-ui-check.mjs`.
 - Telegram group commands that name the bot (`/status@MarsBot`, `/steer@MarsBot text`) work: the adapter drops its own bot's name, and a command naming another bot gets no reply. Test: `check-gateway-night.mjs`.
 - An answer still reaches the chat that asked after `/new` or `/switch` moved it to another conversation, including across a restart: the asking chat is stored with the watched submission. Test: `check-gateway-night.mjs`.
+
+## 2026-10-24 Night fixes: security
+
+From read-only reviews of auth, attachments and message rendering; check-security-night.mjs and tests/safe-image.test.mjs cover each.
+- An empty or blank data/web-token (a write cut short) let an empty cookie or Authorization header sign in as the owner. The host now makes a new token at boot when the file is blank, writes it whole (temp file and rename), and valid() never matches an empty value or token.
+- Any pi_trial cookie that is the token signs in. Cookies ignore the port, so a page on another port of the same host could plant a pi_trial with a longer path, which browsers send first, and lock the owner out.
+- Image chips can place an image at most four times. Tonight's fix for one image placed twice let a text of 1,250 repeated chips turn one attachment into 1,250 full images and run the host out of memory.
+- Images in replies load only from Mars itself or inline data. A remote image loaded as soon as the reply rendered, so a prompt injection could make the model leak data in its address; it now shows as a link naming the host.

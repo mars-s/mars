@@ -7,6 +7,7 @@ import { AlertCircle, Check, Copy } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import { record, type LiveMessage } from "@/lib/pi/live-state";
 import { userParts } from "@/lib/pi/image-chips";
+import { remoteImageHost, safeImageSource } from "@/lib/pi/safe-image";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import "./thread.css";
 
@@ -81,7 +82,18 @@ function MarkdownTable({ node: _node, ...props }: MarkdownProps<"table">) {
 function MarkdownLink({ node: _node, ...props }: MarkdownProps<"a">) {
   return <a {...props} target="_blank" rel="noreferrer" />;
 }
-const markdownComponents = { CodeHeader, table: MarkdownTable, a: MarkdownLink };
+function MarkdownImage({ node: _node, src, alt, ...props }: ComponentProps<"img"> & { node?: unknown }) {
+  // Only Mars's own or inline images load; a remote one becomes a link (lib/pi/safe-image.ts).
+  const safe = safeImageSource(src);
+  if (safe) return <img {...props} src={safe} alt={alt ?? ""} />;
+  const host = remoteImageHost(src);
+  return host ? (
+    <a href={String(src)} target="_blank" rel="noreferrer" className="mars-remote-image">
+      {alt ? `Image: ${alt}` : "Remote image"} ({host})
+    </a>
+  ) : null;
+}
+const markdownComponents = { CodeHeader, table: MarkdownTable, a: MarkdownLink, img: MarkdownImage };
 const remarkPlugins = [remarkGfm];
 
 function MarkdownText() {
