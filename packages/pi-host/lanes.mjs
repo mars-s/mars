@@ -33,18 +33,38 @@ export async function run(file, args, { cwd, env, timeout = 120000 } = {}) {
 
 export const lanesEnabled = (env = process.env) => env.MARS_LANES_DISABLED !== '1';
 
-/** Whether a lock directory's owner is gone: its process no longer runs, or it never wrote its pid. */
-async function staleLock(path) {
-  let pid = 0;
-  try { pid = Number(await readFile(join(path, 'owner'), 'utf8')); } catch { /* not written yet, or gone */ }
-  if (!pid) {
+// A lock's owner line: "<pid> <boot id> <process start time> <random>". The boot id and the
+// start time tell a dead owner from a live process that reused its pid (after a reboot, or
+// any other process); the random part makes each lock its own, so a process only ever removes
+// the lock it took, or the exact stale one it saw.
+const BOOT_ID = await readFile('/proc/sys/kernel/random/boot_id', 'utf8').then((s) => s.trim(), () => '');
+async function startTime(pid) {
+  try {
+    const stat = await readFile('/proc/' + pid + '/stat', 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] || '';
+  } catch { return ''; }
+}
+const ownLine = async () => [process.pid, BOOT_ID || '-', (await startTime(process.pid)) || '-', randomBytes(6).toString('hex')].join(' ');
+
+/** Whether a lock's owner is gone. Takes the owner line read from the lock (or null if none). */
+async function staleOwner(path, line) {
+  if (!line) {
     try { return Date.now() - (await stat(path)).mtimeMs > 10000; } catch { return false; }
   }
-  try { process.kill(pid, 0); return false; } catch (error) { return error.code === 'ESRCH'; }
+  const [pidText, boot, started] = line.split(' ');
+  const pid = Number(pidText);
+  if (!pid) return true;
+  if (boot && boot !== '-' && BOOT_ID && boot !== BOOT_ID) return true;
+  try { process.kill(pid, 0); } catch (error) { if (error.code === 'ESRCH') return true; }
+  // The pid runs (or belongs to another user): stale only if it is a different process now.
+  if (started && started !== '-') { const now = await startTime(pid); if (now && now !== started) return true; }
+  return false;
 }
+const readOwner = (path) => readFile(join(path, 'owner'), 'utf8').then((s) => s.trim(), () => '');
+
 /**
  * A lock every process on this machine shares (the host and scripts/lane-cli.mjs): a directory
- * made atomically, holding its owner's pid, removed when the work ends or found stale after a
+ * made atomically, holding its owner line, removed when the work ends or found stale after a
  * crash. With wait false it gives up at once and returns { held: false }.
  */
 export async function withFileLock(path, work, { wait = true, waitMs = 30000 } = {}) {
@@ -53,17 +73,29 @@ export async function withFileLock(path, work, { wait = true, waitMs = 30000 } =
     try { await mkdir(path, { mode: 0o700 }); break; } catch (error) {
       if (error.code === 'ENOENT') { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); continue; }
       if (error.code !== 'EEXIST') throw error;
-      if (await staleLock(path)) { await rm(path, { recursive: true, force: true }); continue; }
+      const seen = await readOwner(path);
+      if (await staleOwner(path, seen)) {
+        // Move it aside first (atomic, so only one process wins it), then make sure what was
+        // moved is the stale lock seen, not a fresh one another process took meanwhile.
+        const aside = path + '.stale-' + randomBytes(6).toString('hex');
+        if (await rename(path, aside).then(() => true, () => false)) {
+          if ((await readOwner(aside)) === seen) await rm(aside, { recursive: true, force: true });
+          else await rename(aside, path).catch(() => rm(aside, { recursive: true, force: true }));
+        }
+        continue;
+      }
       if (!wait) return { held: false };
       if (Date.now() - started > waitMs) throw fail('The lanes are busy in another process; try again in a moment.', 503);
       await sleep(20);
     }
   }
+  const mine = await ownLine();
   try {
-    await writeFile(join(path, 'owner'), String(process.pid), { mode: 0o600 });
+    await writeFile(join(path, 'owner'), mine, { mode: 0o600 });
     return { held: true, value: await work() };
   } finally {
-    await rm(path, { recursive: true, force: true });
+    // Only this lock: if it was judged stale and taken over meanwhile, the new owner keeps it.
+    if ((await readOwner(path)) === mine) await rm(path, { recursive: true, force: true });
   }
 }
 
@@ -82,7 +114,7 @@ export function createLanes({
   previewsMax = Number(env.MARS_LANE_PREVIEWS) || 2,
   publicOrigin = env.MARS_PUBLIC_ORIGIN || '',
   // Injected by the check: previews need systemd and tailscale; checks run real programs.
-  previews = true, checkTimeoutMs = 300000,
+  previews = true, checkTimeoutMs = 300000, retryMs = 60000,
   // The tailnet CLI; this machine wraps a user-space tailscaled in ~/.local/bin.
   tailscale = env.MARS_TAILSCALE || (existsSync(join(env.HOME || '', '.local/bin/tailscale')) ? join(env.HOME, '.local/bin/tailscale') : 'tailscale'),
   // After a merge that changes dependencies the checkout installs them, so the live interface
@@ -270,6 +302,12 @@ export function createLanes({
   }
 
   /** Merge queued lanes in order, one at a time. Calls queue behind each other. */
+  let retry = null;
+  function retryLater() {
+    if (retry) return;
+    retry = setTimeout(() => { retry = null; void processQueue(); }, retryMs);
+    retry.unref?.();
+  }
   function processQueue({ force = false } = {}) {
     queueRun = queueRun.then(async () => {
       // Another process may be the runner; it takes this lane in turn. If it is just letting go,
@@ -281,6 +319,9 @@ export function createLanes({
         if (!waiting) return;
         await sleep(100);
       }
+      // Still held by another process: try again in a minute, so a lane is not left waiting if
+      // that process stops before reaching it.
+      retryLater();
     }).catch(() => {});
     return queueRun;
   }
@@ -458,6 +499,9 @@ export function createLanes({
     if (stop) { await stopPreview(l); return { ...(await patch(id, {})), next: 'Preview stopped.' }; }
     if (!['open', 'blocked', 'queued'].includes(l.state)) throw fail('Lane ' + id + ' is ' + l.state + '; there is nothing to preview.');
     if (!previews) throw fail('Previews are off on this host.');
+    // A start already under way (a double click, two chats): leave it be rather than stopping it.
+    if (l.preview?.state === 'starting' && Date.now() - (l.preview.at || 0) < 180000)
+      return { ...(await patch(id, {})), next: 'Already starting. Open ' + l.preview.url + ' in a minute.' };
     if (l.preview) {
       const active = (await systemctl(['is-active', units(l).host])).stdout.trim() === 'active';
       if (active) return { ...(await patch(id, {})), next: 'Already running. Open ' + l.preview.url + '. Interface edits in the worktree reload by themselves; host edits need lane_preview with stop: true, then again.' };
@@ -472,7 +516,7 @@ export function createLanes({
       let index = 1; while (used.has(index)) index++;
       const hostPort = 3400 + index * 10, uiPort = hostPort + 1, httpsPort = 8600 + index;
       try { if (publicOrigin) origin = 'https://' + new URL(publicOrigin).hostname + ':' + httpsPort; } catch { /* no public name */ }
-      const claimed = { index, hostPort, uiPort, httpsPort, url: 'http://127.0.0.1:' + hostPort + '/', published: false, state: 'starting', token: randomBytes(6).toString('hex') };
+      const claimed = { index, hostPort, uiPort, httpsPort, url: 'http://127.0.0.1:' + hostPort + '/', published: false, state: 'starting', token: randomBytes(6).toString('hex'), at: Date.now() };
       touch(find(state, id), { preview: claimed });
       return claimed;
     });

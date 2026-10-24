@@ -596,3 +596,11 @@ From a read-only review; packages/pi-host/check-project-memory-night.mjs covers 
 
 - Settings, Gateway: the allowed senders note now reads "can do anything you can do in Mars", so the pairing warning is again the only "same power as you" text and gateway-ui-check passes (it broke when the senders list landed tonight).
 - Lanes run each check with its own TMPDIR inside the check's temporary root, removed afterwards. /tmp is memory on this machine, and checks had left about 350 "mars workbench" folders (23 MB each) and many more behind; clearing them freed about 900 MB and stopped the browser checks being killed for memory.
+
+## 2026-10-24 Night fixes: lane locks
+
+From a review of tonight's lanes changes; check-lane-locks-night.mjs covers each.
+- A lock records its owner's pid, boot id, process start time and a random part. A pid that now belongs to another process (after a crash or a reboot), or to another user (EPERM), no longer keeps a stale lock forever; before, one could block every lane call with a 503 until the folder was deleted by hand.
+- Taking over a stale lock moves it aside atomically and checks it is the one seen, and a holder removes only its own lock on release, so two processes can no longer hold the same lock after a crash.
+- When another process holds the merge queue, the host tries again a minute later, so a lane is not left waiting if that process stops before reaching it.
+- A second lane_preview while one is still starting (a double click, two chats) answers "already starting" instead of stopping the first and starting again under the same service names.
