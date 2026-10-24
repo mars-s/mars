@@ -75,12 +75,21 @@ export async function withFileLock(path, work, { wait = true, waitMs = 30000 } =
       if (error.code !== 'EEXIST') throw error;
       const seen = await readOwner(path);
       if (await staleOwner(path, seen)) {
-        // Move it aside first (atomic, so only one process wins it), then make sure what was
-        // moved is the stale lock seen, not a fresh one another process took meanwhile.
-        const aside = path + '.stale-' + randomBytes(6).toString('hex');
-        if (await rename(path, aside).then(() => true, () => false)) {
-          if ((await readOwner(aside)) === seen) await rm(aside, { recursive: true, force: true });
-          else await rename(aside, path).catch(() => rm(aside, { recursive: true, force: true }));
+        // One process at a time may clear a stale lock (a second lock beside it), and only
+        // after checking again that the lock is still the stale one it saw, not a fresh one
+        // another process took meanwhile.
+        const guard = path + '.takeover';
+        try { await mkdir(guard, { mode: 0o700 }); } catch (error) {
+          if (error.code !== 'EEXIST') throw error;
+          // A guard left by a crash is cleared after ten seconds; clearing takes milliseconds.
+          if (Date.now() - ((await stat(guard).catch(() => null))?.mtimeMs ?? Date.now()) > 10000) await rm(guard, { recursive: true, force: true });
+          await sleep(5);
+          continue;
+        }
+        try {
+          if ((await readOwner(path)) === seen && (await staleOwner(path, seen))) await rm(path, { recursive: true, force: true });
+        } finally {
+          await rm(guard, { recursive: true, force: true });
         }
         continue;
       }

@@ -601,6 +601,6 @@ From a read-only review; packages/pi-host/check-project-memory-night.mjs covers 
 
 From a review of tonight's lanes changes; check-lane-locks-night.mjs covers each.
 - A lock records its owner's pid, boot id, process start time and a random part. A pid that now belongs to another process (after a crash or a reboot), or to another user (EPERM), no longer keeps a stale lock forever; before, one could block every lane call with a 503 until the folder was deleted by hand.
-- Taking over a stale lock moves it aside atomically and checks it is the one seen, and a holder removes only its own lock on release, so two processes can no longer hold the same lock after a crash.
+- Clearing a stale lock takes a second guard lock and checks again that it is the stale one seen (a first attempt that moved it aside still let two holders in, 1 round in 20), and a holder removes only its own lock on release, so two processes can no longer hold the same lock after a crash.
 - When another process holds the merge queue, the host tries again a minute later, so a lane is not left waiting if that process stops before reaching it.
 - A second lane_preview while one is still starting (a double click, two chats) answers "already starting" instead of stopping the first and starting again under the same service names.
