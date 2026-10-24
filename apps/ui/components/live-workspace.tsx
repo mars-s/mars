@@ -169,6 +169,8 @@ export function LiveWorkspace() {
   const selected = useRef("");
   const selectionEpoch = useRef(0);
   const latestRefresh = useRef(0);
+  /** Renames, pins and archives the host has not answered yet. */
+  const organising = useRef(0);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const drafts = useRef(new Map<string, ConversationDraft>());
   let draft = drafts.current.get(selectedId);
@@ -200,6 +202,7 @@ export function LiveWorkspace() {
     const conversationId = selected.current;
     const epoch = selectionEpoch.current;
     const request = ++latestRefresh.current;
+    const organisingAtStart = organising.current > 0;
     try {
       const next = parseSnapshot(
         await piRequest(
@@ -225,25 +228,28 @@ export function LiveWorkspace() {
         history.replaceState({}, "", url);
         setSelectedId(next.conversationId);
       }
-      setConversations(
-        rows.length
-          ? rows
-          : [
-              {
-                id: next.conversationId,
-                title: `Pi conversation ${next.conversationId}`,
-                modelId: next.model,
-                provider: "",
-                running: next.running,
-                sideChats: [],
-                sideChatTotal: 0,
-                group: "",
-                archived: false,
-                pinned: false,
-                channel: "",
-              },
-            ],
-      );
+      // While a rename, pin or archive is being saved, the host may answer with the rows from
+      // before it, which would undo it on screen. Keep the rows shown until it has answered.
+      if (!organisingAtStart && organising.current === 0)
+        setConversations(
+          rows.length
+            ? rows
+            : [
+                {
+                  id: next.conversationId,
+                  title: `Pi conversation ${next.conversationId}`,
+                  modelId: next.model,
+                  provider: "",
+                  running: next.running,
+                  sideChats: [],
+                  sideChatTotal: 0,
+                  group: "",
+                  archived: false,
+                  pinned: false,
+                  channel: "",
+                },
+              ],
+        );
       setSnapshot(next);
       setConnectionError("");
     } catch (failure) {
@@ -392,8 +398,8 @@ export function LiveWorkspace() {
   };
   /** Rename, regroup, pin or archive a top-level chat. Rows update at once and the host confirms. */
   const organiseConversation = async (id: string, change: ConversationChange) => {
-    // A poll already on its way carries the rows from before this change: drop it.
-    latestRefresh.current++;
+    // Polls that start or arrive before the host answers leave the rows alone (see refresh).
+    organising.current++;
     setConversations((rows) =>
       rows.map((row) =>
         row.id === id
@@ -423,9 +429,12 @@ export function LiveWorkspace() {
     try {
       await action("/api/conversations/organise", { conversationId: id, ...change });
     } catch {
-      // Show what the host has now, which keeps any other change made in the meantime.
-      void refresh();
+      /* action shows the error. */
+    } finally {
+      organising.current--;
     }
+    // Show what the host has now: this change if it was saved, and any other made meanwhile.
+    void refresh();
   };
   const onNew = async (message: AppendMessage, mode?: "queue" | "steer") => {
     const conversationId = selected.current;

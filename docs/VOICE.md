@@ -25,7 +25,10 @@ sign-in for chat on the owner's instruction, and voice follows the same choice.
    Claude token from Pi's credentials (refreshed by Pi), sends keep-alives, forwards audio, and
    ends with `CloseStream`. The token never reaches the browser.
 3. The browser long-polls the transcript; interim text replaces itself, finished segments are
-   kept. Stop waits for the last words (at most 5 s).
+   kept. Stop waits for the last words (at most 5 s). A failed poll (a proxy error, a timeout, a network drop) is
+   tried again after 0.25, 0.5, 1 and 2 s while recording carries on. Only a stream the host no
+   longer has (404) or a poll that fails every retry ends the recording, and it ends with `/stop`,
+   so the transcript is kept.
 
 Routes (owner auth): `POST /api/voice` `{ language }` starts; `POST /api/voice/:id/audio`
 `{ audio }` (base64, at most 64 KB decoded, whole samples); `GET /api/voice/:id?since&wait`

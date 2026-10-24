@@ -2,8 +2,9 @@
 // - an unknown ?conversation= id opens the main conversation instead of blocking the workspace;
 // - a send that fails after the owner switched chats comes back into that chat's composer, with
 //   an error naming it, both when the chat is left and when it is opened again;
-// - a poll that was in flight before a rename, pin or archive cannot undo it, and a failed change
-//   no longer wipes out another change confirmed in the meantime.
+// - a poll that was in flight before a rename, pin or archive cannot undo it, nor can one that
+//   starts while the host is still saving it, and a failed change no longer wipes out another
+//   change confirmed in the meantime.
 import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -34,6 +35,8 @@ async function open() {
     /** Set to a deferred to hold the next /api/state answers, which keep the rows they arrived with. */
     stateGate: null,
     heldStates: 0,
+    /** Every /api/state answered, to tell that a poll ran. */
+    states: 0,
     /** Answers POST /api/chat; return a status and body. */
     chat: async () => ({ status: 202, json: { submissionId: "9" } }),
     /** Answers POST /api/conversations/organise before it applies the change, or fails it. */
@@ -65,6 +68,7 @@ async function open() {
       const id = url.searchParams.get("conversationId") || "1";
       if (fixture.missing.has(id)) return route.fulfill({ status: 404, json: { error: "Conversation not found" } });
       const answer = state(Number(id));
+      fixture.states++;
       if (fixture.stateGate) {
         fixture.heldStates++;
         await fixture.stateGate.promise;
@@ -185,6 +189,13 @@ try {
     await page.waitForTimeout(400);
     assert.equal(await sidebar.getByRole("button", { name: /^Archived/ }).count(), 1, "the older poll is dropped");
     assert.equal(await sidebar.getByRole("button", { name: "Release notes", exact: true }).count(), 0, "the archived row stays out of Recents");
+    // A slow host: the save takes longer than a poll, so new polls start and answer meanwhile.
+    const statesBefore = fixture.states;
+    for (let n = 0; n < 40 && fixture.states < statesBefore + 2; n++) await page.waitForTimeout(100);
+    await page.waitForTimeout(300);
+    assert.ok(fixture.states >= statesBefore + 2, "polls ran while the archive was being saved");
+    assert.equal(await sidebar.getByRole("button", { name: /^Archived/ }).count(), 1, "polls during the save are not shown");
+    assert.equal(await sidebar.getByRole("button", { name: "Release notes", exact: true }).count(), 0, "the archived row does not come back while it is saved");
     organised.resolve();
     await page.waitForTimeout(400);
     assert.equal(await sidebar.getByRole("button", { name: /^Archived/ }).count(), 1, "the host confirms the archive");

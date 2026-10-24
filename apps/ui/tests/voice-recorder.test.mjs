@@ -1,6 +1,7 @@
 // The voice recorder (lib/pi/voice.ts) with a fake microphone, Web Audio and host: what is left
 // running, and what reaches the composer, when a recording is cancelled part way, when the host
-// ends it by itself, and how many samples a recording sends. No browser, no network.
+// ends it by itself, when a transcript poll fails once or for good, and how many samples a
+// recording sends. No browser, no network.
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
@@ -21,8 +22,8 @@ const later = () => {
   const promise = new Promise((done) => (resolve = done));
   return { promise, resolve };
 };
-async function until(test, what) {
-  for (let i = 0; i < 200 && !test(); i++) await tick();
+async function until(test, what, ms = 1000) {
+  for (let i = 0; i < ms / 5 && !test(); i++) await tick();
   assert.ok(test(), `timed out waiting for ${what}`);
 }
 
@@ -96,7 +97,8 @@ function world({ sampleRate = 48000 } = {}) {
     // A long poll: the test answers it with { status, body }.
     const answer = later();
     state.polls.push(answer);
-    const { status = 200, body } = await answer.promise;
+    const { status = 200, body, drop } = await answer.promise;
+    if (drop) throw TypeError("Failed to fetch");
     return reply(body, status);
   };
   state.recorder = new VoiceRecorder({
@@ -186,16 +188,79 @@ test("when the host ends the recording, the microphone stops and the button is t
   assert.ok(!voice.requests.some((request) => request.endsWith("/stop")));
 });
 
-test("when the transcript cannot be read, the microphone stops and the host stream is freed", async () => {
+test("when the host no longer has the stream, the recording ends at once and keeps its words", async () => {
   const voice = world();
   await voice.recorder.start();
   await until(() => voice.polls.length === 1, "the first poll");
-  voice.polls[0].resolve({ status: 404, body: { error: "That voice session has ended. Start recording again." } });
+  voice.polls[0].resolve({ body: { id: ID, seq: 1, text: "the words", done: false } });
+  await until(() => voice.polls.length === 2, "the second poll");
+  voice.finalText = "the words so far";
+  voice.polls[1].resolve({ status: 404, body: { error: "That voice session has ended. Start recording again." } });
   await until(() => voice.ends === 1, "the end");
+  assert.equal(voice.polls.length, 2, "a lost stream is not polled again");
   assert.deepEqual(voice.errors, ["That voice session has ended. Start recording again."]);
   assert.ok(voice.nothingRunning(), "microphone off, audio closed, no send timer");
+  assert.ok(voice.requests.includes(`POST /api/voice/${ID}/stop`), "finished with /stop");
+  assert.equal(voice.cancels, 0, "not cancelled, which would throw the transcript away");
+  assert.deepEqual(voice.text, ["the words", "the words so far"], "the final words reach the composer");
+  assert.equal(await voice.recorder.stop(), "the words so far");
+});
+
+test("one failed poll does not end dictation: it is tried again and recording goes on", async () => {
+  const voice = world();
+  await voice.recorder.start();
+  await until(() => voice.polls.length === 1, "the first poll");
+  voice.polls[0].resolve({ status: 502, body: { error: "Bad gateway" } });
+  await until(() => voice.polls.length === 2, "a retried poll");
+  voice.polls[1].resolve({ drop: true });
+  await until(() => voice.polls.length === 3, "another retried poll");
+  assert.equal(voice.ends, 0, "still recording");
+  assert.deepEqual(voice.errors, [], "no error shown for a passing hiccup");
+  assert.ok(!voice.micOff(), "the microphone is still on");
+  assert.equal(intervals.size, 1, "audio is still sent");
+  assert.equal(voice.cancels, 0);
+  voice.polls[2].resolve({ body: { id: ID, seq: 2, text: "still listening", done: false } });
+  await until(() => voice.text.length === 1, "the words");
+  assert.deepEqual(voice.text, ["still listening"]);
+  voice.finalText = "still listening, and done";
+  assert.equal(await voice.recorder.stop(), "still listening, and done", "Stop still fetches the whole transcript");
+  voice.polls.slice(3).forEach((poll) => poll.resolve({ body: { id: ID, seq: 9, text: "", done: true } }));
   await tick();
-  assert.equal(voice.cancels, 1, "the host is told to let the stream go");
+  assert.ok(voice.nothingRunning());
+});
+
+test("a poll that keeps failing ends dictation with /stop and keeps the transcript", async () => {
+  const voice = world();
+  await voice.recorder.start();
+  await until(() => voice.polls.length === 1, "the first poll");
+  voice.polls[0].resolve({ body: { id: ID, seq: 1, text: "the words", done: false } });
+  voice.finalText = "the words and the rest";
+  for (let n = 1; voice.ends === 0; n++) {
+    assert.ok(n <= 10, "gives up after a few tries");
+    await until(() => voice.polls.length > n || voice.ends === 1, `poll ${n + 1}`, 5000);
+    if (voice.polls.length > n) voice.polls[n].resolve({ status: 502, body: { error: "Bad gateway" } });
+    await until(() => voice.polls.length > n + 1 || voice.ends === 1, "a retry or the end", 5000);
+  }
+  assert.ok(voice.polls.length > 2, "tried again before giving up");
+  assert.deepEqual(voice.errors, ["Bad gateway"]);
+  assert.ok(voice.nothingRunning(), "microphone off, audio closed, no send timer");
+  assert.ok(voice.requests.includes(`POST /api/voice/${ID}/stop`), "finished with /stop");
+  assert.equal(voice.cancels, 0, "not cancelled");
+  assert.deepEqual(voice.text, ["the words", "the words and the rest"]);
+});
+
+test("Escape while a failed recording is finished leaves the composer alone", async () => {
+  const voice = world();
+  await voice.recorder.start();
+  await until(() => voice.polls.length === 1, "the first poll");
+  voice.finalText = "late words";
+  voice.polls[0].resolve({ status: 404, body: { error: "That voice session has ended. Start recording again." } });
+  await voice.recorder.cancel();
+  await tick();
+  await tick();
+  assert.deepEqual(voice.text, [], "nothing is written back after cancel");
+  assert.deepEqual(voice.errors, []);
+  assert.ok(voice.nothingRunning());
 });
 
 test("a cancelled host stream ends quietly", async () => {

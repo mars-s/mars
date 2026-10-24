@@ -13,6 +13,9 @@ import { VOICE_RATE, createResampler, pcmToBase64 } from "@/lib/pi/pcm";
 
 export { VOICE_RATE };
 const SEND_EVERY_MS = 200;
+// A failed transcript poll (a proxy 502, a slow host, a brief network drop) is tried again after
+// these pauses. Recording ends only when the stream is gone or every retry fails too.
+export const POLL_RETRY_MS = [250, 500, 1000, 2000];
 type VoiceView = { id: string; seq: number; text: string; done: boolean; error?: string };
 function parseView(value: unknown): VoiceView {
   const data = record(value);
@@ -25,6 +28,31 @@ function parseView(value: unknown): VoiceView {
   };
 }
 
+/** A transcript poll that failed. `gone` means the host no longer has the stream (404). */
+class PollFailure extends Error {
+  readonly gone: boolean;
+  constructor(message: string, gone: boolean) {
+    super(message);
+    this.gone = gone;
+  }
+}
+
+/** One long poll. Unlike piRequest it keeps the status, so a lost stream is told from a hiccup. */
+async function readTranscript(path: string): Promise<VoiceView> {
+  const response = await fetch(path, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+  const data: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    const error = record(data).error;
+    throw new PollFailure(
+      typeof error === "string" && error ? error : `Pi request failed (${response.status}).`,
+      response.status === 404,
+    );
+  }
+  if (data === undefined) throw new PollFailure("Pi is unavailable. Check the connection and retry.", false);
+  return parseView(data);
+}
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // The capture node is a same-origin file (public/voice-worklet.js): the host's Content Security
 // Policy allows scripts from 'self' only, so a blob: worklet is refused in production.
 const WORKLET_URL = "/voice-worklet.js";
@@ -34,8 +62,9 @@ export type VoiceCallbacks = {
   onError: (message: string) => void;
   /**
    * The recording ended by itself, without stop() or cancel(): the host finished it (its time
-   * limit, an idle stream, a lost connection) or the transcript could not be read. The microphone
-   * is already off and the words so far have been passed to onText.
+   * limit, an idle stream, a lost connection), the stream is gone, or the transcript could not be
+   * read after several tries. The microphone is already off and the words so far have been passed
+   * to onText.
    */
   onEnd?: () => void;
 };
@@ -51,9 +80,12 @@ export class VoiceRecorder {
   private timer?: ReturnType<typeof setInterval>;
   private polling = false;
   private stopped = false;
+  private cancelled = false;
   private cancelledOnHost = false;
   private text = "";
   private sending: Promise<unknown> = Promise.resolve();
+  /** Set while a recording that could not be read is being finished with /stop. */
+  private ending?: Promise<void>;
   private readonly callbacks: VoiceCallbacks;
   private readonly language: string;
   constructor(callbacks: VoiceCallbacks, language = "en") {
@@ -139,14 +171,21 @@ export class VoiceRecorder {
 
   private async poll() {
     this.polling = true;
+    let failures = 0;
     while (this.polling) {
       let view: VoiceView;
       try {
-        view = parseView(await piRequest(`/api/voice/${this.id}?since=${this.seq}&wait=8000`));
+        view = await readTranscript(`/api/voice/${this.id}?since=${this.seq}&wait=8000`);
+        failures = 0;
       } catch (failure) {
         if (!this.polling) break;
-        // The host may still hold the stream: free its place rather than wait for the idle sweep.
-        this.end(failure instanceof Error ? failure.message : "Voice input stopped.", true);
+        const gone = failure instanceof PollFailure && failure.gone;
+        if (!gone && failures < POLL_RETRY_MS.length) {
+          // The microphone and the audio sends keep going meanwhile, so no words are lost.
+          await pause(POLL_RETRY_MS[failures++]);
+          continue;
+        }
+        this.ending = this.finish(failure instanceof Error ? failure.message : "Voice input stopped.");
         break;
       }
       // cancel() may have run while this request was out: its words must not reach the composer.
@@ -165,20 +204,48 @@ export class VoiceRecorder {
   }
 
   /** The recording ended by itself: turn the microphone off and tell the button. */
-  private end(message?: string, hostMayBeOpen = false) {
+  private end(message?: string) {
     this.polling = false;
     if (this.stopped) return;
     this.stopped = true;
     clearInterval(this.timer);
     this.release();
-    if (hostMayBeOpen) void this.cancelOnHost();
     if (message) this.callbacks.onError(message);
+    this.callbacks.onEnd?.();
+  }
+
+  /**
+   * The transcript could not be read: the stream is gone or every retry failed. Finish it with
+   * /stop rather than /cancel, so the words the host already has reach the composer.
+   */
+  private async finish(message: string) {
+    this.polling = false;
+    if (this.stopped) return;
+    this.stopped = true;
+    clearInterval(this.timer);
+    this.release();
+    await this.flush();
+    try {
+      const view = parseView(await piRequest(`/api/voice/${this.id}/stop`, {}));
+      if (view.text && view.text !== this.text && !this.cancelled) {
+        this.text = view.text;
+        this.callbacks.onText(view.text);
+      }
+    } catch {
+      /* The stream is gone or the host is out of reach: keep the words already shown. */
+    }
+    // Escape while this ran: the composer has its old text back, so leave it alone.
+    if (this.cancelled) return;
+    this.callbacks.onError(message);
     this.callbacks.onEnd?.();
   }
 
   /** Send what is left, wait for the last words, and return the whole transcript. */
   async stop(): Promise<string> {
-    if (this.stopped) return this.text;
+    if (this.stopped) {
+      await this.ending;
+      return this.text;
+    }
     this.stopped = true;
     clearInterval(this.timer);
     this.release();
@@ -191,6 +258,7 @@ export class VoiceRecorder {
   }
 
   async cancel() {
+    this.cancelled = true;
     this.stopped = true;
     this.polling = false;
     clearInterval(this.timer);
