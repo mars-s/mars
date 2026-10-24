@@ -146,11 +146,11 @@ export function DuetView() {
     ...messages,
     ...pending.map((row) => ({ id: "pending-" + row.id, from: "owner" as const, kind: "pending", text: row.text, taskId: row.taskId, label: row.label, quote: "" })),
   ];
-  const summary = active.length
-    ? active.length + " working" + (active.some((task) => task.state === "queued") ? " · " + active.filter((task) => task.state === "queued").length + " waiting" : "")
-    : tasks.length
-      ? "Nothing running"
-      : "";
+  const queued = active.filter((task) => task.state === "queued").length;
+  const needsYou = tasks.filter((task) => task.state === "waiting").length;
+  const summary =
+    [active.length - queued ? active.length - queued + " working" : "", queued ? queued + " waiting" : "", needsYou ? needsYou + " needs you" : ""].filter(Boolean).join(" · ") ||
+    (tasks.length ? "Nothing running" : "");
 
   return (
     <section className="duet" aria-label="Duet">

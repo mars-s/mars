@@ -14,7 +14,7 @@ export type DuetMessage = {
   /** The owner words that asked for a task, shown on its result. */
   quote: string;
 };
-export type DuetTaskState = "queued" | "running" | "stopping" | "done" | "stopped" | "failed" | "unknown";
+export type DuetTaskState = "queued" | "running" | "stopping" | "waiting" | "done" | "stopped" | "failed" | "unknown";
 export type DuetTask = {
   id: string;
   conversationId: string;
@@ -27,7 +27,7 @@ export type DuetTask = {
 };
 export type DuetView = { threadId: string; running: boolean; messages: DuetMessage[]; tasks: DuetTask[] };
 
-const STATES: readonly string[] = ["queued", "running", "stopping", "done", "stopped", "failed"];
+const STATES: readonly string[] = ["queued", "running", "stopping", "waiting", "done", "stopped", "failed"];
 const SENDERS: readonly string[] = ["owner", "duet", "system"];
 const text = (value: unknown, max = 100000) => (typeof value === "string" ? value.slice(0, max) : "");
 const list = (value: unknown) => (Array.isArray(value) ? value : []);
@@ -73,5 +73,5 @@ export const isActive = (task: DuetTask) => task.running || task.state === "runn
 export function stateWord(task: DuetTask): string {
   if (task.state === "stopping") return "Stopping…";
   if (task.running || task.state === "running") return "Working";
-  return { queued: "Waiting", done: "Done", stopped: "Stopped", failed: "Failed", unknown: "Unknown" }[task.state] ?? "Unknown";
+  return { queued: "Waiting", waiting: "Needs you", done: "Done", stopped: "Stopped", failed: "Failed", unknown: "Unknown" }[task.state] ?? "Unknown";
 }

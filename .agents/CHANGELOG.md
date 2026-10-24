@@ -482,3 +482,9 @@ Surveyed every surface at 1440x900 and 390x844 in dark and light against the pre
 - Browser checks that read the composer as a textarea now read its text (composerText, waitForComposer in tests/browser-options.mjs). New tests/image-chips.test.mjs, tests/image-chips-ui-check.mjs and check-image-chips.mjs.
 - .gitattributes merges .agents/CHANGELOG.md with the union driver: every lane appends to it, and the image chips lane was first blocked on exactly that conflict.
 - Fixed in a follow-up lane: resolving that conflict, the image chips lane wrote back a changelog read only in part (the file reader stops at 50 KB) and dropped the newest sections. This restores them. Edit the changelog by appending (cat >>), never by reading and rewriting it.
+
+## 2026-10-24 Duet: one message per question
+
+- The owner's first real Duet run showed one request as three bubbles: the front desk started a task and asked "what topic?", the task asked with duet_post, and its final answer repeated the question. Now the front desk asks for missing details before starting anything, a final answer that repeats a post the task made since its last input is not posted again, and a final answer ending in a question is posted once as a question. Such a task shows "Needs you" (state waiting) until the owner replies; the reply runs it on.
+- The task prompt says to end the turn with the question when it cannot go on, and to use duet_post questions only while it keeps working. The front desk is told not to use em dashes.
+- check-duet-questions.mjs covers the repeat, the waiting state, the reply running on to a result, and a different result after an update still being posted.
