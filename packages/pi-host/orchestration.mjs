@@ -8,12 +8,64 @@ const aliases = { sol: ['openai', 'gpt-6-sol'], luna: ['openai', 'gpt-6-luna'], 
 const answerText = messages => messages.filter(m => m.role === 'assistant').at(-1)?.content.filter(c => c.type === 'text').map(c => c.text).join('\n') || '';
 /** Most characters of one worker answer returned inline. Longer answers say so and worker_read pages the rest. */
 export const WORKER_INLINE_MAX = 12000;
-/** A fanout shares this many inline characters between its workers, at least 4000 each. */
+/** A fanout's stored answers share this many characters, at least 4000 each; fitWorkerOutput then fits the tool result in bytes. */
 export const FANOUT_INLINE_BUDGET = 48000;
 export const inlineLimit = count => Math.max(4000, Math.min(WORKER_INLINE_MAX, Math.floor(FANOUT_INLINE_BUDGET / Math.max(1, count))));
 /** The answer for a tool result: the text up to limit, plus truncated and length when it was cut. */
 export function inlineAnswer(text, limit = WORKER_INLINE_MAX) {
   return text.length > limit ? { result: text.slice(0, limit), truncated: true, length: text.length } : { result: text };
+}
+/**
+ * Pi keeps only the first maxBytes of a tool's text output (UTF-8, after JSON escaping), so
+ * the worker tools fit their answers into WORKER_OUTPUT_FIT bytes and declare this cap.
+ */
+export const WORKER_OUTPUT_MAX_BYTES = 50 * 1024;
+export const WORKER_OUTPUT_FIT = 48 * 1024;
+/** The bytes a value takes as JSON text: UTF-8, after escaping. */
+export const jsonBytes = value => Buffer.byteLength(JSON.stringify(value));
+const textBytes = text => jsonBytes(text) - 2;
+/** The longest start of text whose escaped JSON takes at most bytes, never splitting a character. */
+export function cutToBytes(text, bytes) {
+  let used = 0, end = 0;
+  for (const char of text) {
+    used += textBytes(char);
+    if (used > bytes) break;
+    end += char.length;
+  }
+  return text.slice(0, end);
+}
+/** Share budget bytes between texts of these sizes: those that fit keep all of theirs, the rest split what is left evenly. */
+export function shareBytes(sizes, budget) {
+  const allowed = new Array(sizes.length).fill(0);
+  let left = Math.max(0, budget);
+  const order = sizes.map((size, index) => ({ size, index })).sort((a, b) => a.size - b.size);
+  order.forEach(({ size, index }, rank) => {
+    allowed[index] = Math.min(size, Math.floor(left / (order.length - rank)));
+    left -= allowed[index];
+  });
+  return allowed;
+}
+/**
+ * A worker outcome whose JSON fits in maxBytes: answers too long for their share are cut and
+ * marked truncated with their whole length, so the caller knows to use worker_read.
+ */
+export function fitWorkerOutput(outcome, maxBytes = WORKER_OUTPUT_FIT) {
+  if (!Array.isArray(outcome?.result) || jsonBytes(outcome) <= maxBytes) return outcome;
+  const rows = outcome.result.map(row => ({ ...row, result: row.result || '' }));
+  const marked = row => ({ ...row, truncated: true, length: row.length ?? row.result.length });
+  const frame = { ...outcome, result: rows.map(row => ({ ...marked(row), result: '' })) };
+  const allowed = shareBytes(rows.map(row => textBytes(row.result)), maxBytes - jsonBytes(frame));
+  return { ...outcome, result: rows.map((row, index) => textBytes(row.result) <= allowed[index] ? row : { ...marked(row), result: cutToBytes(row.result, allowed[index]) }) };
+}
+export const NESTED_WORKER_REFUSAL = 'A worker cannot start workers, workflows or agents of its own. Do this part with your own tools, or say in your answer what still needs doing so the conversation that started you can hand it out.';
+/**
+ * Refuse worker, workflow and agent tools in a task-owned conversation (a worker or a workflow
+ * step), so helpers cannot multiply or leave background work their parent cannot see or stop.
+ * Chats, side chats, Duet threads and schedule runs are ownerless and keep these tools.
+ */
+export async function refuseInsideWorker(api, ctx) {
+  const record = await api.commit(tx => tx.conversation(api.conversationId), ctx);
+  if (record?.owner) throw new Error(NESTED_WORKER_REFUSAL);
 }
 /** The newest assistant text of a conversation, read from its entries. */
 export async function latestAnswer(tx, conversationId) {
@@ -108,7 +160,7 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
     provider: Type.String({ description: 'Provider used.' }),
     modelId: Type.String({ description: 'Model used.' }),
     status: Type.String({ description: '"completed", "aborted" or "unanswered".' }),
-    result: Type.String({ description: `The worker's final answer, up to ${WORKER_INLINE_MAX} characters (a fanout shares ${FANOUT_INLINE_BUDGET} between its workers, at least 4000 each).` }),
+    result: Type.String({ description: `The worker's final answer, up to ${WORKER_INLINE_MAX} characters. A fanout's answers share about ${WORKER_OUTPUT_FIT / 1024} KB, so long ones are cut.` }),
     truncated: Type.Optional(Type.Boolean({ description: 'True when result was cut. Read the rest with worker_read.' })),
     length: Type.Optional(Type.Integer({ description: 'Length of the whole answer when it was cut.' })),
     usage: Type.Any({ description: 'Token use, by model.' }),
@@ -119,9 +171,10 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
   }, { additionalProperties: true });
   const tools = [];
   function tool(name, description, parameters, result, execute, prepareArguments) {
-    tools.push(defineTool({ name, description, parameters, structuredOutputSchema: result, deferred: true, replay: 'safe', executionMode: 'parallel', ...(prepareArguments ? { prepareArguments } : {}), execute: async (args, api, ctx) => output(await execute(args, api, ctx)) }));
+    tools.push(defineTool({ name, description, parameters, structuredOutputSchema: result, deferred: true, replay: 'safe', executionMode: 'parallel', outputLimits: { maxBytes: WORKER_OUTPUT_MAX_BYTES }, ...(prepareArguments ? { prepareArguments } : {}), execute: async (args, api, ctx) => output(await execute(args, api, ctx)) }));
   }
   async function run(jobs, api, ctx) {
+    await refuseInsideWorker(api, ctx);
     if (!jobs.length || jobs.length > maxConcurrent) throw new Error(`Use 1..${maxConcurrent} workers per fanout`);
     const inputs = jobs.map(j => ({ ...j, selection: selectWorkerModel(models, j) }));
     for (const job of inputs) if (job.attachmentIds?.length && !models.getModel(job.selection.provider, job.selection.modelId)?.input?.includes('image')) throw new Error('Selected worker model does not support images');
@@ -141,7 +194,7 @@ export function createOrchestrationExtension({ models, maxConcurrent = 4, loadIm
     // Pi's conversation ids are numbers; the tool result promises strings (the stored receipt keeps
     // numbers, which receiptOf compares against).
     return Array.isArray(outcome?.result)
-      ? { ...outcome, result: outcome.result.map((row) => ({ ...row, id: String(row.id), conversationId: String(row.conversationId) })) }
+      ? fitWorkerOutput({ ...outcome, result: outcome.result.map((row) => ({ ...row, id: String(row.id), conversationId: String(row.conversationId) })) })
       : outcome;
   }
   tool('worker_run', `Hand one job to a helper model and wait for its answer.

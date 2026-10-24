@@ -89,3 +89,22 @@ use it for any task of three or more steps.
 - The thread shows the latest plan as a card above the run status: an empty circle for
   pending, a spinner for in progress, a tick for completed. Once every step is done it
   collapses to "4 of 4 done".
+
+### Workers and workflows
+
+- Only a chat, a side chat, a Duet thread or a schedule run starts helpers. In a
+  task-owned conversation (a `worker_run` or `worker_fanout` worker, an `agent_run`
+  agent or a workflow step) `worker_run`, `worker_fanout`, `agent_run` and
+  `workflow_start` refuse with "A worker cannot start workers, workflows or agents of its
+  own...", so helpers cannot multiply, and no background workflow is left that the
+  parent can neither see nor stop.
+- Pi keeps only the first 50 KB (UTF-8, after JSON escaping) of a tool's text output.
+  `worker_run`, `worker_fanout` and `agent_run` declare that cap and fit their answers
+  into 48 KB: answers that fit keep everything, the rest share what is left evenly and
+  are marked `truncated` with their whole `length`, so every worker's row arrives and
+  `worker_read` gets the rest.
+- A workflow keeps up to 4,000 characters of each step's answer (also passed to the
+  next step) and records the whole length of a longer one. `workflow_status` declares a
+  32 KB cap and fits into 30 KB: the last finished step keeps its answer, earlier steps
+  share the rest, and every cut answer is marked `truncated` with its `length`, with a
+  `note` saying to read it whole with `worker_read` and the step's `conversationId`.

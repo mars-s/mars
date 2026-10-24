@@ -1,18 +1,43 @@
 import {Type} from '@earendil-works/pi-ai';
 import {configure,defineExtension,defineTask,defineTool,UsageDoc} from '@earendil-works/pi-durable';
-import {forgivingList,nativeTitleDoc,selectWorkerModel} from './orchestration.mjs';
+import {cutToBytes,forgivingList,jsonBytes,nativeTitleDoc,refuseInsideWorker,selectWorkerModel,shareBytes} from './orchestration.mjs';
 const KIND='mars.linear-workflow.v1';
 const nativeId=value=>typeof value==='string'&&/^\d+$/.test(value)?Number(value):value;
-const answer=messages=>messages.filter(m=>m.role==='assistant').at(-1)?.content.filter(c=>c.type==='text').map(c=>c.text).join('\n').slice(0,4000)||'';
+const answerText=messages=>messages.filter(m=>m.role==='assistant').at(-1)?.content.filter(c=>c.type==='text').map(c=>c.text).join('\n')||'';
+/** Characters of a step's answer kept in the workflow (and passed to the next step); answerLength records a longer one. */
+const STEP_RESULT_MAX=4000;
+/** workflow_status declares this output cap and fits its answers into STATUS_FIT bytes, the last finished step first. */
+export const STATUS_OUTPUT_MAX_BYTES=32*1024;
+const STATUS_FIT=30*1024;
+const READ_NOTE='Some step answers are cut. Read a whole one with worker_read, passing the step\'s conversationId as workerId.';
+/** A status view whose JSON fits Pi's output cap: the last finished step keeps its answer, earlier ones share what is left. */
+function fitResults(view){
+ const withNote={...view,note:READ_NOTE};
+ if(!view.steps.some(step=>step.truncated)&&jsonBytes(view)<=STATUS_FIT)return view;
+ if(jsonBytes(withNote)<=STATUS_FIT)return withNote;
+ const has=view.steps.map(step=>typeof step.result==='string');
+ const last=has.lastIndexOf(true);
+ if(last<0)return withNote;
+ const marked=step=>({...step,truncated:true,length:step.length??step.result.length});
+ const size=index=>jsonBytes(view.steps[index].result)-2;
+ const frame={...withNote,steps:view.steps.map((step,index)=>has[index]?{...marked(step),result:''}:step)};
+ const allowed=new Array(view.steps.length).fill(0);
+ const budget=Math.max(0,STATUS_FIT-jsonBytes(frame));
+ allowed[last]=Math.min(size(last),budget);
+ const others=has.flatMap((present,index)=>present&&index!==last?[index]:[]);
+ shareBytes(others.map(size),budget-allowed[last]).forEach((bytes,rank)=>{allowed[others[rank]]=bytes;});
+ return {...withNote,steps:view.steps.map((step,index)=>!has[index]||size(index)<=allowed[index]?step:{...marked(step),result:cutToBytes(step.result,allowed[index])})};
+}
 function viewOf(task,includeResults=false){
  const saved=task.state.outcome?.result||task.state.checkpoint||{};
  const status=task.state.outcome?.status||'running';
- return {id:String(task.id),conversationId:String(task.conversationId),title:task.input.title,status,
+ const view={id:String(task.id),conversationId:String(task.conversationId),title:task.input.title,status,
  currentStep:saved.index??0,startedAt:task.input.startedAt,...(saved.finishedAt?{finishedAt:saved.finishedAt}:{}),
  ...(task.state.outcome?.error?{error:task.state.outcome.error.message}:{}),
  steps:(saved.steps||task.input.steps.map((step,index)=>({index,title:step.title,...(step.phase?{phase:step.phase}:{}),status:'pending',...step.selection}))).map(step=>{
-  const {result,...metadata}=step;return {...metadata,...(includeResults&&result?{result}:{})};
+  const {result,answerLength,...metadata}=step;return {...metadata,...(includeResults&&result?{result,...(answerLength?{truncated:true,length:answerLength}:{})}:{})};
  })};
+ return includeResults?fitResults(view):view;
 }
 export function createWorkflowExtension({models,loadImages,abortTask}){
  async function finish(task,runtime,ctx,status,steps,error){
@@ -48,7 +73,8 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
       ...(prepared?{entry:{kind:'mars.user',data:{attachments:prepared.attachments}}}:{}),requestId:`workflow:${runtime.taskId}:${state.index}`},ctx)).wait(ctx);
      const transcript=await runtime.context(state.childId,ctx);const usage=await runtime.snapshot(UsageDoc,state.childId,ctx)||{models:{},tools:{}};
      const status=settled.status==='done'?'completed':settled.reason==='aborted'?'aborted':'failed';
-     const steps=state.steps.map((row,index)=>index===state.index?{...row,status,finishedAt:runtime.now(),durationMs:runtime.now()-row.startedAt,usage,result:answer(transcript.messages)}:row);
+     const text=answerText(transcript.messages);
+     const steps=state.steps.map((row,index)=>index===state.index?{...row,status,finishedAt:runtime.now(),durationMs:runtime.now()-row.startedAt,usage,result:text.slice(0,STEP_RESULT_MAX),...(text.length>STEP_RESULT_MAX?{answerLength:text.length}:{})}:row);
      if(status!=='completed'){await finish(task,runtime,ctx,status,steps, status==='failed'?(settled.detail||settled.reason||'Step failed'):undefined);return;}
      if(state.index===task.input.steps.length-1){await finish(task,runtime,ctx,'completed',steps);return;}
      await runtime.commit(()=>({status:'running',checkpoint:{phase:'launch',index:state.index+1,steps}}),ctx);
@@ -78,7 +104,9 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
   index:Type.Integer({description:'Step number, from 0.'}),
   title:Type.String({description:'Step name.'}),
   status:Type.String({description:'"pending", "running", "completed", "failed" or "aborted".'}),
-  result:Type.Optional(Type.Any({description:'The step answer, once finished (workflow_status only).'})),
+  result:Type.Optional(Type.Any({description:'The step answer, once finished (workflow_status only), up to 4000 characters.'})),
+  truncated:Type.Optional(Type.Boolean({description:'True when result was cut. Read the whole answer with worker_read and this step\'s conversationId.'})),
+  length:Type.Optional(Type.Integer({description:'Length of the whole answer when it was cut.'})),
  },{additionalProperties:true});
  const WorkflowView=Type.Object({
   id:Type.String({description:'Workflow id.'}),
@@ -86,8 +114,9 @@ export function createWorkflowExtension({models,loadImages,abortTask}){
   status:Type.String({description:'"running", "completed", "failed" or "aborted".'}),
   currentStep:Type.Integer({description:'Index of the step running now.'}),
   steps:Type.Array(StepView),
+  note:Type.Optional(Type.String({description:'Present when some step answers were cut: how to read them whole.'})),
  },{additionalProperties:true});
- const make=(name,description,parameters,result,execute,prepareArguments)=>defineTool({name,description,parameters,deferred:true,replay:'safe',executionMode:'parallel',structuredOutputSchema:result,outputLimits:{maxBytes:10000},...(prepareArguments?{prepareArguments}:{}),execute:async(args,api,ctx)=>{const value=await execute(args,api,ctx);return{output:[{type:'text',text:JSON.stringify(value)}],structuredOutput:value};}});
+ const make=(name,description,parameters,result,execute,prepareArguments,maxBytes=10000)=>defineTool({name,description,parameters,deferred:true,replay:'safe',executionMode:'parallel',structuredOutputSchema:result,outputLimits:{maxBytes},...(prepareArguments?{prepareArguments}:{}),execute:async(args,api,ctx)=>{const value=await execute(args,api,ctx);return{output:[{type:'text',text:JSON.stringify(value)}],structuredOutput:value};}});
  const tools=[
   make('workflow_start',`Have helper models run several steps one after another in the background, each using the previous step's answer.
 Use it for multi-stage work where each step builds on the last, e.g. research, then outline, then draft: put one entry per stage in steps. Optionally group steps into phases you define (e.g. Research, Build, Review) by giving each step a phase. Each step gets its own brief plus the previous step's answer. It returns at once with workflowId; check progress and answers with workflow_status. It keeps running after a restart. For independent jobs at the same time, use worker_fanout.
@@ -100,6 +129,7 @@ Example: const { workflowId } = await tools.workflow_start({ title: "Blog post",
    status:Type.String({description:'"started".'}),
    background:Type.Boolean({description:'True: it runs on its own; this call does not wait.'}),
   }),async(args,api,ctx)=>{
+   await refuseInsideWorker(api,ctx);
    const steps=args.steps.map(step=>({...step,selection:selectWorkerModel(models,step)}));
    for(const step of steps)if(step.attachmentIds?.length&&!models.getModel(step.selection.provider,step.selection.modelId)?.input?.includes('image'))throw Error('Selected workflow model does not support images');
    const operationId=`workflow-start:${api.taskId}`;
@@ -122,7 +152,7 @@ Example: const { workflowId } = await tools.workflow_start({ title: "Blog post",
 Use it after workflow_start to see which step is running and to get the answers. The final answer is the result of the last step once status is "completed".
 Example: const { status, steps } = await tools.workflow_status({ workflowId: "88" })`,Type.Object({workflowId:Type.String({description:'Id from workflow_start, e.g. "88".'})}),WorkflowView,async(args,api,ctx)=>{
    const task=await api.getTask(nativeId(args.workflowId),ctx);if(task?.kind!==KIND||task.conversationId!==api.conversationId)throw Error('Workflow not found');return viewOf(task,true);
-  }),
+  },undefined,STATUS_OUTPUT_MAX_BYTES),
   make('workflow_stop',`Stop a running workflow, including the step running now.
 Use it when the workflow is no longer needed. Finished steps keep their answers; check them with workflow_status.
 Example: await tools.workflow_stop({ workflowId: "88" })`,Type.Object({workflowId:Type.String({description:'Id from workflow_start, e.g. "88".'})}),Type.Object({workflowId:Type.String({description:'The workflow stopped.'}),status:Type.String({description:'"stopping".'})}),async(args,api,ctx)=>{

@@ -102,7 +102,7 @@ export function agentInstructions(agent, body) {
     '',
     `You are running as the named agent "${agent.name}", started by another Mars conversation through agent_run. You do not see that conversation: the user message is your whole brief. Your final message is returned as your answer, so end with the result it asked for.`,
     '',
-    'These instructions may be written for Claude Code. Where they name its tools, use the Mars ones: Read, Write, Edit are read, write, edit; Bash, Grep, Glob are bash (or host_exec); WebFetch and WebSearch are web_fetch and web_search; the Skill tool is skill_read; the Task tool or another subagent is agent_run.',
+    'These instructions may be written for Claude Code. Where they name its tools, use the Mars ones: Read, Write, Edit are read, write, edit; Bash, Grep, Glob are bash (or host_exec); WebFetch and WebSearch are web_fetch and web_search; the Skill tool is skill_read. The Task tool and other subagents are not available here: an agent cannot start workers, workflows or agents of its own, so do that part yourself or say in your answer what still needs doing.',
     '',
     String(body).trim().slice(0, AGENT_TEXT_MAX),
   ].join('\n');

@@ -51,6 +51,10 @@ Files are reread at most every 15 seconds. Only `*.md` directly in each folder a
   preamble (who it is, that it does not see the chat, Claude Code tool names mapped to Mars ones)
   followed by the agent's body, up to 60000 characters. It returns `{ agent, id, status, result,
   provider, modelId }`; `id` works with `worker_followup`.
+- An agent cannot start workers, workflows or agents of its own: like any worker it is a
+  task-owned conversation, where `agent_run`, `worker_run`, `worker_fanout` and
+  `workflow_start` refuse (docs/TOOLS.md "Workers and workflows"). The preamble says so
+  instead of mapping the Task tool to `agent_run`.
 - `agent_create({ name, description, instructions, model? })` writes `<name>.md` in Mars's own
   folder. A name owned by a shared or plugin folder is refused.
 

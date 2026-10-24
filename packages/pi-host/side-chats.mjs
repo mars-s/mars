@@ -17,43 +17,95 @@ export const SideChatDoc = defineDoc({ kind: 'mars.side-chat', version: 1, scope
 // A fork of a parent starts with no side chats of its own.
 export const SideChatIndexDoc = defineDoc({ kind: 'mars.side-chat-index', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ children: [], requests: {} }) });
 /**
- * Set on a side chat when its parent's agent gives it work (side_chat_open with a task, or
- * side_chat_send). When that side chat next finishes an answer, the parent gets one note in its
- * context ("Side chat X finished: ...") and the flag clears. The owner chatting in a side chat
- * directly never notifies the parent.
+ * `requests` lists the request ids of the messages a side chat's parent agent sent it
+ * (side_chat_open with a task, or side_chat_send) that still await an answer. A final answer
+ * reports to the parent only when one of those messages was already in the side chat's
+ * transcript (its submission placed or done, not still queued), so the owner's own turns never
+ * notify the parent and each parent message is reported once. `pending` is the older single
+ * flag, still honoured for side chats flagged before this change.
  */
-export const SideChatNotifyDoc = defineDoc({ kind: 'mars.side-chat-notify', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ pending: false }) });
+export const SideChatNotifyDoc = defineDoc({ kind: 'mars.side-chat-notify', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ pending: false, requests: [] }) });
+/** Most outstanding parent messages remembered per side chat. */
+const NOTIFY_REQUESTS_MAX = 50;
 export const SIDE_CHAT_DONE = 'mars.side-chat-done';
 const REPLY_EXCERPT = 4000;
 const textOf = (message) => (Array.isArray(message?.content) ? message.content.filter((part) => part.type === 'text').map((part) => part.text).join('\n') : typeof message?.content === 'string' ? message.content : '').trim();
 
 /**
- * Tell the parent that a side chat it gave work to has finished: clear the flag and write one
- * model-visible entry into the parent, keyed so a replay never writes it twice.
+ * Record, once, that the parent sent a side chat the message with this request id. A replayed
+ * call whose message was already submitted records nothing, so it cannot claim a later answer.
+ * Called before the submit, so a stop in between still leaves the message expected.
  */
-export async function notifyParent({ harness, sideChatId, taskId, answer, context }) {
+export async function expectAnswer({ harness, sideChatId, requestId, context }) {
   const id = nativeId(String(sideChatId));
-  const cleared = await harness.commit(async (tx) => {
+  await harness.commit(async (tx) => {
+    if (await tx.submissionByRequest(id, requestId)) return;
     const flag = await tx.doc(SideChatNotifyDoc, id);
-    if (!flag.pending) return undefined;
-    flag.pending = false;
+    const requests = flag.requests ?? [];
+    if (!requests.includes(requestId)) flag.requests = [...requests, requestId].slice(-NOTIFY_REQUESTS_MAX);
+  }, context);
+}
+
+/**
+ * Which expected parent messages a final answer settles: `answered` were in the transcript
+ * before this answer (placed or done), `dropped` will never be answered. Queued ones wait.
+ */
+export async function settledRequests({ harness, sideChatId, requests, context }) {
+  const id = nativeId(String(sideChatId));
+  return harness.commit(async (tx) => {
+    const answered = [], dropped = [];
+    for (const requestId of requests) {
+      const submission = await tx.submissionByRequest(id, requestId);
+      if (submission?.status === 'placed' || submission?.status === 'done') answered.push(requestId);
+      else if (submission?.status === 'unanswered') dropped.push(requestId);
+    }
+    return { answered, dropped };
+  }, context);
+}
+
+/**
+ * Tell the parent that a side chat finished answering messages it sent (`requestIds`, or the
+ * older `legacy` flag). The note carries the answer recorded for the first of those messages,
+ * else `answer`. The model-visible entry is written first, keyed by the first answered
+ * request, and only then are those requests cleared: a stop in between repeats the same keyed
+ * write on the next answer instead of losing the note, and a replay never writes it twice.
+ */
+export async function notifyParent({ harness, sideChatId, taskId, answer, requestIds = [], dropped = [], legacy = false, context }) {
+  const id = nativeId(String(sideChatId));
+  const due = await harness.commit(async (tx) => {
+    const flag = await tx.doc(SideChatNotifyDoc, id);
+    const waiting = requestIds.filter((requestId) => (flag.requests ?? []).includes(requestId));
+    if (!waiting.length && !(legacy && flag.pending)) return undefined;
     const link = await tx.doc(SideChatDoc, id);
     const label = await tx.doc(nativeTitleDoc, id);
-    return { parentId: link.parentId, title: label.title || 'Side chat' };
+    // A message already answered (a note that failed before) reports its own answer, not this one.
+    const submission = waiting.length ? await tx.submissionByRequest(id, waiting[0]) : undefined;
+    const entry = submission?.status === 'done' ? await tx.entry(submission.answer) : undefined;
+    const own = textOf((entry?.model ?? []).filter((message) => message.role === 'assistant').at(-1));
+    return { parentId: link.parentId, title: label.title || 'Side chat', key: waiting[0] ?? `legacy:${taskId}`, answer: own || answer };
   }, context);
-  if (!cleared?.parentId) return false;
-  const parent = await harness.conversation(nativeId(cleared.parentId), context);
-  if (!parent) return false;
-  const excerpt = answer.length > REPLY_EXCERPT ? answer.slice(0, REPLY_EXCERPT) + '…' : answer;
+  const clear = () => harness.commit(async (tx) => {
+    const flag = await tx.doc(SideChatNotifyDoc, id);
+    const done = new Set([...requestIds, ...dropped]);
+    if ((flag.requests ?? []).some((requestId) => done.has(requestId))) flag.requests = flag.requests.filter((requestId) => !done.has(requestId));
+    if (legacy && flag.pending) flag.pending = false;
+  }, context);
+  const parent = due?.parentId ? await harness.conversation(nativeId(due.parentId), context) : undefined;
+  if (!parent) {
+    await clear();
+    return false;
+  }
+  const excerpt = due.answer.length > REPLY_EXCERPT ? due.answer.slice(0, REPLY_EXCERPT) + '…' : due.answer;
   await parent.submit({
     type: 'write',
-    requestId: `side-chat-done:${sideChatId}:${taskId}`,
+    requestId: `side-chat-done:${sideChatId}:${due.key}`,
     entry: {
       kind: SIDE_CHAT_DONE,
-      data: { sideChatId: String(sideChatId), title: cleared.title },
-      model: [{ role: 'user', content: [{ type: 'text', text: `[Side chat "${cleared.title}" (id ${sideChatId}) finished. Its answer:]\n${excerpt || '(no text)'}\n[Use side_chat_read for the full answer, or side_chat_send to continue it.]` }], timestamp: Date.now() }],
+      data: { sideChatId: String(sideChatId), title: due.title },
+      model: [{ role: 'user', content: [{ type: 'text', text: `[Side chat "${due.title}" (id ${sideChatId}) finished. Its answer:]\n${excerpt || '(no text)'}\n[Use side_chat_read for the full answer, or side_chat_send to continue it.]` }], timestamp: Date.now() }],
     },
   }, context);
+  await clear();
   return true;
 }
 
@@ -172,8 +224,9 @@ Example: await tools.side_chat_open({ title: "Release names", task: "Suggest thr
           }
           if (args.task) {
             const child = await api.conversation(nativeId(id), ctx);
-            await getHarness().commit(async (tx) => { (await tx.doc(SideChatNotifyDoc, nativeId(id))).pending = true; }, ctx);
-            await child.submit({ type: 'input', content: args.task, requestId: `side-chat-open:${api.taskId}:${api.callId}` }, ctx);
+            const requestId = `side-chat-open:${api.taskId}:${api.callId}`;
+            await expectAnswer({ harness: getHarness(), sideChatId: id, requestId, context: ctx });
+            await child.submit({ type: 'input', content: args.task, requestId }, ctx);
           }
           return { id, title, parentId: String(api.conversationId) };
         },
@@ -206,8 +259,9 @@ Example: await tools.side_chat_send({ sideChatId: "42", text: "Make them shorter
         }),
         async (args, api, ctx) => {
           const child = await ownSideChat(api, args.sideChatId, ctx);
-          await getHarness().commit(async (tx) => { (await tx.doc(SideChatNotifyDoc, child.id)).pending = true; }, ctx);
-          const submission = await child.submit({ type: 'input', content: args.text, whenBusy: 'followUp', requestId: `side-chat-send:${api.taskId}:${api.callId}` }, ctx);
+          const requestId = `side-chat-send:${api.taskId}:${api.callId}`;
+          await expectAnswer({ harness: getHarness(), sideChatId: child.id, requestId, context: ctx });
+          const submission = await child.submit({ type: 'input', content: args.text, whenBusy: 'followUp', requestId }, ctx);
           return { sent: true, sideChatId: args.sideChatId, submissionId: String(submission.id) };
         },
       ),
@@ -244,16 +298,21 @@ Example: await tools.side_chat_read({ sideChatId: "42" })`,
     hooks: [{
       task: 'pi.generation',
       handlers: {
-        // A final answer (no tool calls) from a side chat with work from its parent: notify the
-        // parent after this commit, never delaying the side chat itself.
+        // A final answer (no tool calls) from a side chat with work from its parent. Which parent
+        // messages it answers is read now: this runs before the run takes its next queued message,
+        // so a parent message still queued behind the owner's turn is not claimed by the owner's
+        // answer. The parent is notified after this commit, never delaying the side chat itself.
         afterResponse: async (message, api, ctx) => {
           if (message.stopReason !== 'stop') return;
           const flag = await api.snapshot(SideChatNotifyDoc, api.conversationId, ctx);
-          if (!flag?.pending) return;
+          const legacy = !!flag?.pending;
+          if (!legacy && !flag?.requests?.length) return;
           const sideChatId = String(api.conversationId);
+          const { answered, dropped } = flag.requests?.length ? await settledRequests({ harness: getHarness(), sideChatId, requests: flag.requests, context: ctx }) : { answered: [], dropped: [] };
+          if (!legacy && !answered.length && !dropped.length) return;
           const taskId = String(api.taskId);
           const answer = textOf(message);
-          setImmediate(() => { notifyParent({ harness: getHarness(), sideChatId, taskId, answer, context: BACKGROUND_CONTEXT }).catch(() => {}); });
+          setImmediate(() => { notifyParent({ harness: getHarness(), sideChatId, taskId, answer, requestIds: answered, dropped, legacy, context: BACKGROUND_CONTEXT }).catch(() => {}); });
         },
       },
     }],

@@ -24,7 +24,14 @@ For longer how-to instructions, use skills (docs/SKILLS.md).
 ## Side chat notes
 
 When a conversation's agent gives a side chat work (`side_chat_open` with a task, or
-`side_chat_send`), the side chat is flagged. Its next final answer writes one
-`mars.side-chat-done` entry into the parent: the model reads it as a note with the answer
-(up to 4,000 characters); the UI shows "Side chat "X" finished." The owner typing in a side chat
-directly never notifies the parent. `side_chat_read` returns the newest answer on demand.
+`side_chat_send`), the side chat records that message's request id (`mars.side-chat-notify`
+`requests`) before sending it. A replayed call whose message was already sent records nothing.
+A final answer of the side chat reports only the parent messages that were already in its
+transcript (placed or answered, not still queued behind the owner's turn), so the owner typing
+in a side chat directly never notifies the parent, and each parent message is reported once
+with its own answer. The report is one `mars.side-chat-done` entry in the parent: the model
+reads it as a note with the answer (up to 4,000 characters); the UI shows "Side chat "X"
+finished." The entry is written before the request is cleared and is keyed by the request id,
+so a stop in between repeats the same write on the side chat's next answer (still with the
+answer recorded for that message) instead of losing it. `side_chat_read` returns the newest
+answer on demand.
