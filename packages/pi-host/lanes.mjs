@@ -336,26 +336,34 @@ export function createLanes({
   }
   async function runQueue(force) {
     await recover();
+    // A lane's outcome is recorded after its cleanup, in the same step that picks the next
+    // lane, so once a lane reads merged the runner touches the lanes files no more for it
+    // (a crash before the record leaves it merging; recover() finds main has it and finishes).
+    let finished = null;
     for (;;) {
-        const next = await mutate((state) => {
-          while (state.queue.length && !state.lanes[state.queue[0]]) state.queue.shift();
-          if ((state.paused && !force) || !state.queue.length) return null;
-          const l = state.lanes[state.queue[0]];
-          touch(l, { state: 'merging', note: '' });
-          return { ...l };
-        });
-        if (!next) return;
-        const result = await mergeOne(next).catch((error) => ({ blocked: 'The merge failed unexpectedly: ' + error.message }));
-        await mutate((state) => {
-          state.queue = state.queue.filter((q) => q !== next.id);
-          const l = state.lanes[next.id];
-          if (!l) return;
-          if (result.changed) l.changed = result.changed;
-          delete l.pendingInstall;
-          if (result.blocked) touch(l, { state: 'blocked', note: result.blocked });
-          else touch(l, { state: 'merged', mergedCommit: result.commit, note: result.note || '' });
-        });
-        if (!result.blocked) await cleanup(next);
+      const next = await mutate((state) => {
+        if (finished) {
+          const { lane, result } = finished;
+          state.queue = state.queue.filter((q) => q !== lane.id);
+          const l = state.lanes[lane.id];
+          if (l) {
+            if (result.changed) l.changed = result.changed;
+            delete l.pendingInstall;
+            if (result.blocked) touch(l, { state: 'blocked', note: result.blocked });
+            else touch(l, { state: 'merged', mergedCommit: result.commit, note: result.note || '' });
+          }
+        }
+        while (state.queue.length && !state.lanes[state.queue[0]]) state.queue.shift();
+        if ((state.paused && !force) || !state.queue.length) return null;
+        const l = state.lanes[state.queue[0]];
+        touch(l, { state: 'merging', note: '' });
+        return { ...l };
+      });
+      finished = null;
+      if (!next) return;
+      const result = await mergeOne(next).catch((error) => ({ blocked: 'The merge failed unexpectedly: ' + error.message }));
+      if (!result.blocked) await cleanup(next).catch(() => {});
+      finished = { lane: next, result };
     }
   }
   async function mergeNow() {
