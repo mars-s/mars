@@ -76,15 +76,16 @@ export function createImageStore({ root }) {
     const addText = (piece) => { if (piece.trim()) blocks.push({ type: 'text', text: words(piece) }); };
     const addImage = async (id, label = '') => {
       const { path, ...receipt } = await get(id);
+      // The same image may be placed twice (two chips for identical bytes); its receipt once.
+      if (!placed.has(id)) attachments.push(receipt);
       placed.add(id);
-      attachments.push(receipt);
       blocks.push({ type: 'text', text: `Attachment ${id}: ${receipt.name}${label ? ` [${label}]` : ''}` });
       blocks.push({ type: 'image', data: (await readFile(path)).toString('base64'), mimeType: receipt.mimeType });
     };
     let from = 0;
     for (const match of text.matchAll(IMAGE_CHIP)) {
       const [whole, label, id] = match;
-      if (!ids.includes(id) || placed.has(id)) continue;
+      if (!ids.includes(id)) continue;
       addText(text.slice(from, match.index).trim());
       await addImage(id, label);
       from = match.index + whole.length;

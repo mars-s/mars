@@ -35,6 +35,13 @@ test("chips still in a message's text are placed too", () => {
   const images = [{ id: A, name: "cat.png", url: "/api/attachments/" + A }];
   assert.deepEqual(userParts(`:image[Image 1]{name=${A}} :image[Image 2]{name=${A}} Retry caption`, images), [
     { type: "image", image: images[0], label: "Image 1" },
-    { type: "text", text: "[Image 2] Retry caption" },
+    // The same image placed twice shows twice, each with its own label.
+    { type: "image", image: images[0], label: "Image 2" },
+    { type: "text", text: "Retry caption" },
   ]);
+});
+
+test("a command followed only by image chips still counts as a command", async () => {
+  const { withoutImageChips } = await import("../lib/pi/image-chips.ts");
+  assert.equal(withoutImageChips(` ${imageDirective("Image 1", "d1")} `).trim(), "");
 });

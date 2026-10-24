@@ -19,6 +19,8 @@ export function VoiceButton({ disabled }: { disabled: boolean }) {
   const [seconds, setSeconds] = useState(0);
   const recorder = useRef<VoiceRecorder | null>(null);
   const before = useRef("");
+  // The words dictation has written so far, right after `before` in the composer.
+  const dictated = useRef("");
   const claude = snapshot?.anthropicAuth.connected === true;
 
   useEffect(() => {
@@ -29,10 +31,27 @@ export function VoiceButton({ disabled }: { disabled: boolean }) {
   }, [phase]);
   useEffect(() => () => void recorder.current?.cancel(), []);
 
-  const write = (text: string) => aui.composer.setText(before.current + text);
+  // Replace only the dictated words: anything added after them meanwhile (an image chip, typing)
+  // stays. If the owner edited before or inside them, only new words are added at the end.
+  const rest = () => {
+    const current = aui.composer.getState().text;
+    // `before` may end in a space the composer does not have yet (no words written so far).
+    const head = before.current.trimEnd();
+    if (!current.startsWith(head)) return null;
+    const from = head.length + (/^\s*/.exec(current.slice(head.length))?.[0].length ?? 0);
+    return current.startsWith(dictated.current, from) ? current.slice(from + dictated.current.length) : null;
+  };
+  const write = (text: string) => {
+    const after = rest();
+    if (after !== null) aui.composer.setText(before.current + text + after);
+    else if (text.startsWith(dictated.current) && text.length > dictated.current.length)
+      aui.composer.setText(aui.composer.getState().text + text.slice(dictated.current.length));
+    dictated.current = text;
+  };
   const start = async () => {
     const current = aui.composer.getState().text;
     before.current = current && !/\s$/.test(current) ? current + " " : current;
+    dictated.current = "";
     setSeconds(0);
     setPhase("starting");
     const next = new VoiceRecorder({
@@ -74,7 +93,8 @@ export function VoiceButton({ disabled }: { disabled: boolean }) {
     const active = recorder.current;
     recorder.current = null;
     setPhase("idle");
-    aui.composer.setText(before.current.trimEnd());
+    const after = rest();
+    aui.composer.setText(after === null ? aui.composer.getState().text : (before.current + after).trimEnd());
     await active?.cancel();
   };
   useEffect(() => {

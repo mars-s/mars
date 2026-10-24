@@ -103,16 +103,19 @@ function ConversationRuntime({
     // both the text and the images of a message the host did not confirm.
     queue: snapshot?.running ? queue : undefined,
   });
-  // A message the host did not accept goes back into an empty composer so it is not lost.
+  // A queued or steered message the host did not accept goes back into the composer with its
+  // images, so it is not lost: before any newer draft, which stays. Each file keeps its draft id
+  // (image-attachments.ts), so its chips in the text still name it (docs/IMAGE-CHIPS.md).
   restore.current = (message) => {
     const composer = runtime.thread.composer;
-    if (composer.getState().text.trim()) return;
-    composer.setText(
-      message.content
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("\n"),
-    );
+    const failed = message.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+    const now = composer.getState().text;
+    composer.setText(now.trim() ? `${failed}\n${now}` : failed);
+    for (const attachment of message.attachments ?? [])
+      if (attachment.file) void composer.addAttachment(attachment.file).catch(() => undefined);
   };
   useEffect(() => {
     runtime.thread.composer.setText(draft.text);

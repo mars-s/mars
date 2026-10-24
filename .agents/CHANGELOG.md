@@ -518,3 +518,11 @@ From a read-only review of lanes.mjs; check-lanes-night.mjs covers each.
 - Voice: when the host ends a recording by itself or the transcript cannot be read, the browser turns the microphone and send timer off, keeps the words so far, frees a still-open host stream, and the button returns to idle through a new `onEnd` callback (`voice.ts`, `voice-button.tsx`; `voice-recorder.test.mjs`).
 - Voice: resampling to 16 kHz keeps its fractional position and last sample between worklet blocks, so ten seconds at 48 kHz stay ten seconds instead of 9.84 (`apps/ui/lib/pi/pcm.ts` `createResampler`; `voice.test.mjs`, `voice-recorder.test.mjs`).
 - Voice host: starts waiting for the Claude token hold a place, so concurrent starts cannot pass the two-recording limit (`packages/pi-host/voice.mjs`; `packages/pi-host/check-voice-night.mjs`).
+
+## 2026-10-24 Night fixes: image chips
+
+From a read-only review; tests/image-chips-night-ui-check.mjs and check-image-chips-night.mjs cover each.
+- Dictation replaces only the words it wrote, so a chip pasted (or text typed) while recording stays. Before, the next transcript update rebuilt the whole draft from the start of recording, which erased the chip and with it the image.
+- A queued or steered message the host refuses comes back with its images (same draft ids, so its chips still name them), placed before any newer draft instead of being dropped when the composer was not empty.
+- The same image placed twice (identical bytes, one host id) now goes in both places, each labelled, for the model and in the transcript (each placement has its own #fragment address).
+- The slash menu opens when a command is typed straight before an image chip, and choosing a skill keeps the chips.

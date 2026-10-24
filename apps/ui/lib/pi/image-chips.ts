@@ -31,6 +31,9 @@ export function resolveImageChips(text: string, hostIds: ReadonlyMap<string, str
   });
 }
 
+/** The text with its image chips taken out. */
+export const withoutImageChips = (text: string) => text.replace(DIRECTIVE, "");
+
 /** The text a person reads: each chip becomes "[Image 1]". */
 export const plainImageChips = (text: string) => text.replace(DIRECTIVE, (_whole, label: string) => `[${label}]`);
 
@@ -79,7 +82,7 @@ export function userParts(text: string, images: readonly ImageRef[]): UserPart[]
       const chipImage = byId.get(chip.id);
       rest += line.slice(from, chip.start);
       from = chip.end;
-      if (!chipImage || shown.has(chipImage.id)) {
+      if (!chipImage) {
         rest += `[${chip.label}]`;
         continue;
       }

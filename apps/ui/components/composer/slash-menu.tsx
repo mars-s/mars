@@ -4,6 +4,7 @@ import { useAui, useAuiState } from "@assistant-ui/react";
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { parseSkills } from "@/components/settings/skills-section";
 import { piRequest } from "@/lib/pi/live-state";
+import { withoutImageChips } from "@/lib/pi/image-chips";
 
 type Skill = { name: string; description: string };
 
@@ -24,7 +25,11 @@ export function useSlashMenu() {
   const aui = useAui();
   const listId = useId();
   const text = useAuiState((state) => state.composer.text);
-  const match = /^\/([\w.-]*)$/.exec(text);
+  // A command alone, or typed straight before image chips (docs/IMAGE-CHIPS.md), which stay put.
+  // A space after the command ends the menu, as before.
+  const lead = /^\/([\w.-]*)/.exec(text);
+  const rest = lead ? text.slice(lead[0].length) : "";
+  const match = lead && (rest === "" || (rest.startsWith(":image[") && !withoutImageChips(rest).trim())) ? lead : null;
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [active, setActive] = useState(0);
   const [dismissed, setDismissed] = useState("");
@@ -43,7 +48,7 @@ export function useSlashMenu() {
   const open = options.length > 0;
   const current = Math.min(active, Math.max(0, options.length - 1));
   const choose = (skill: Skill) => {
-    aui.composer.setText(`/${skill.name} `);
+    aui.composer.setText(`/${skill.name} ${rest.trimStart()}`);
     setActive(0);
   };
   const onKeyDown = (event: KeyboardEvent) => {

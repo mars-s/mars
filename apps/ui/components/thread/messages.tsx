@@ -13,14 +13,17 @@ import "./thread.css";
 export function convertMessage(message: LiveMessage): ThreadMessageLike {
   // A sent message reads in order, each image where it was placed (docs/IMAGE-CHIPS.md).
   const parts = message.role === "user" ? userParts(message.text, message.images ?? []) : null;
+  // Each placed image gets its own address (a #fragment), so the same image placed twice keeps
+  // both labels; the browser loads it once.
+  const placed = parts?.map((part, index) => (part.type === "image" ? `${part.image.url}#${index}` : ""));
   return {
     id: message.id,
     role: message.role,
     content: parts
-      ? parts.map((part) =>
+      ? parts.map((part, index) =>
           part.type === "text"
             ? { type: "text" as const, text: part.text }
-            : { type: "image" as const, image: part.image.url, filename: part.image.name },
+            : { type: "image" as const, image: placed![index], filename: part.image.name },
         )
       : [{ type: "text", text: message.text }],
     metadata: {
@@ -28,7 +31,7 @@ export function convertMessage(message: LiveMessage): ThreadMessageLike {
         tools: message.tools,
         summary: message.summary,
         outcome: message.outcome,
-        imageLabels: parts ? Object.fromEntries(parts.flatMap((part) => (part.type === "image" && part.label ? [[part.image.url, part.label]] : []))) : {},
+        imageLabels: parts ? Object.fromEntries(parts.flatMap((part, index) => (part.type === "image" && part.label ? [[placed![index], part.label]] : []))) : {},
       },
     },
     ...(message.role === "assistant"
