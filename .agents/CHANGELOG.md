@@ -535,3 +535,10 @@ From a read-only review; check-skills-models-night.mjs covers each.
 - Relative links inside a skill stay relative when installed (verbatimSymlinks); before they pointed into the deleted temporary clone.
 - The old copy of a replaced skill waits in the install's own temporary folder, so installing "foo" no longer deletes a skill named "foo.previous".
 - Changing the default model without naming an effort clears the default effort, so new chats and schedules no longer use an effort Settings does not show.
+## 2026-10-24 Night fixes: workbench
+
+- Browser: a browse key minted for a known process now stops working when the port's owner can no longer be seen (another user's service that `ss -p` hides, or a configured port that stopped answering), and a keyed request is checked against a discovery at most 10 s old, so a key never reaches a process that took over its port. Test: packages/pi-host/check-workbench-night.mjs (1).
+- Browser pane: Reload and a typed address revoke the held key and mint a new one, so a tab left idle past 15 minutes or open across a host restart recovers instead of loading a page whose assets all fail. Keys live in components/workbench/browse-keys.ts. Test: apps/ui/tests/workbench-browse-keys.test.mjs.
+- Services: a listener that only ran out of time on the 1.5 s probe (a dev server compiling its first page) is probed again after 30 seconds instead of 5 minutes, and at once when the owner asks for a key for its port. Test: check-workbench-night.mjs (2).
+- Suggestions: a failing pages folder (a plain file, or a link out of the workspace) or service list leaves its own rows out instead of failing the whole list. Test: check-workbench-night.mjs (3).
+- Changes: filesystem errors become plain 404, 403 or 500 messages, so a dangling repo link no longer sends an absolute host path. Test: check-workbench-night.mjs (4).

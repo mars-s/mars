@@ -169,15 +169,18 @@ authority the agent's own `host_exec` tool already has.
 - `GET /api/workbench/services`: TCP listeners on loopback or wildcard addresses found
   by `lsof` (macOS) or `ss` (Linux), excluding the host port, the UI port and
   `MARS_WORKBENCH_EXCLUDE_PORTS`, each probed with HTTP GET `/` (1.5 s) and kept only
-  if it answers HTTP: `{ port, title?, status }`. Cached 10 s. A listener that did not
-  answer HTTP is not probed again for 5 minutes. `MARS_WORKBENCH_PORTS` adds ports
-  lsof or ss cannot see.
+  if it answers HTTP: `{ port, title?, status }`. Cached 10 s. A listener that answered
+  something other than HTTP, or refused, is not probed again for 5 minutes; one that only
+  ran out of time (a dev server compiling its first page) is probed again after 30
+  seconds, and at once when the owner asks for a key for its port.
+  `MARS_WORKBENCH_PORTS` adds ports lsof or ss cannot see.
 - `POST /api/workbench/browse-key {port}` (owner, exact origin): mints a browse key for
   one discovered, non-excluded port, `201 {key}`, else 403. 32 random bytes in
   base64url, held in memory only and never logged. A key expires after 15 minutes idle
   or 8 hours, at most 32 live keys (oldest evicted). It is bound to the process
   listening on the port when it was minted: if that process exits and another takes
-  the port, the key stops working. `POST
+  the port, or the owner can no longer be seen (`ss -p` hides other users' processes),
+  the key stops working. A keyed request is checked against a discovery at most 10 s old. `POST
   /api/workbench/browse-key/revoke {key}`; the pane revokes its keys when the tab closes.
 - `GET|POST /api/workbench/browse/<port>/~<key>/<path>`: the keyed proxy. It is
   checked before owner authentication, because a sandboxed page's own requests are
@@ -218,7 +221,10 @@ authority the agent's own `host_exec` tool already has.
 - The pane: address bar, Back, Forward and Reload from its own history stack, the
   iframe with `sandbox="allow-scripts allow-forms allow-popups"` (never
   `allow-same-origin`) and `referrerpolicy="no-referrer"`, and loading and error
-  states. Messages from the frame are accepted only from that frame's window and only
+  states. The pane holds one key per port. Back and Forward reuse it; Reload and a typed
+  address revoke it and mint a new one, because the host drops keys after 15 idle
+  minutes or a restart and the sandboxed frame cannot report that. Messages from the
+  frame are accepted only from that frame's window and only
   for paths under the tab's own port prefix. An external URL is never proxied; the
   pane offers "Open in a new tab" (`noopener noreferrer`). The tab keeps its URL.
 - Development: the Next dev proxy forwards the keyed form without the owner token,

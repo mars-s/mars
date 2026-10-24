@@ -12,6 +12,9 @@ const CACHE_MS = 10_000;
 // A listener that did not answer HTTP is not asked again for this long (per pid and
 // port), so databases on loopback are not sent a stray "GET /" every 10 seconds.
 const NOT_HTTP_MS = 5 * 60_000;
+// One that only ran out of time is asked again sooner: a dev server often takes longer
+// than the probe to compile its first page, and is quick from then on.
+const SLOW_MS = 30_000;
 const TITLE_SCAN = 64 * 1024;
 const HEADERS_MS = 30_000;
 const KEY_IDLE_MS = 15 * 60_000;
@@ -113,15 +116,16 @@ export function htmlTitle(html) {
 const hostHeader = (address, port) => `${address.includes(":") ? `[${address}]` : address}:${port}`;
 const isHtml = (type = "") => /^\s*(text\/html|application\/xhtml\+xml)\b/i.test(type);
 
-/** GET / within 1.5 s: { http: true, status, title } or { http: false, refused }. */
+/** GET / within 1.5 s: { http: true, status, title } or { http: false, refused, slow }. */
 function probe(address, port) {
   return new Promise((rawResolve) => {
     // A hard deadline: a listener that sends headers and then trickles or stalls must
     // not hold up discovery (and with it every browse request) past 1.5 s.
     let req;
+    const signal = AbortSignal.timeout(PROBE_MS);
     const deadline = setTimeout(() => {
       req?.destroy();
-      rawResolve({ http: false, refused: false });
+      rawResolve({ http: false, refused: false, slow: true });
     }, PROBE_MS + 100);
     const resolve = (value) => {
       clearTimeout(deadline);
@@ -132,7 +136,7 @@ function probe(address, port) {
         host: address,
         port,
         path: "/",
-        signal: AbortSignal.timeout(PROBE_MS),
+        signal,
         headers: { host: hostHeader(address, port), accept: "text/html,*/*;q=0.8", "user-agent": "Mars workbench" },
       },
       (res) => {
@@ -156,7 +160,7 @@ function probe(address, port) {
         res.on("close", done);
       },
     );
-    req.on("error", (error) => resolve({ http: false, refused: error.code === "ECONNREFUSED" }));
+    req.on("error", (error) => resolve({ http: false, refused: error.code === "ECONNREFUSED", slow: signal.aborted }));
   });
 }
 
@@ -207,7 +211,7 @@ export function createBrowser({ hostPort, uiPort, env = process.env, platform = 
     return tool.name === "ss" ? parseSs(stdout) : parseLsof(stdout);
   }
 
-  const notHttp = new Map(); // `${pid}:${port}` -> when it last failed to answer HTTP
+  const notHttp = new Map(); // `${pid}:${port}` -> { at, wait } after it failed to answer HTTP
   const routes = new Map(); // port -> loopback address that answered
   let cached = { at: 0, list: Promise.resolve([]) };
 
@@ -216,13 +220,16 @@ export function createBrowser({ hostPort, uiPort, env = process.env, platform = 
     const found = await Promise.all(
       withConfigured(loopbackPorts(await listeners(), excluded), extraPorts).map(async ({ port, pid, addresses }) => {
         const key = `${pid}:${port}`;
-        if (pid !== "configured" && now - (notHttp.get(key) ?? -Infinity) < NOT_HTTP_MS) return null;
+        const failed = notHttp.get(key);
+        if (pid !== "configured" && failed && now - failed.at < failed.wait) return null;
+        let slow = false;
         for (const address of addresses) {
           const result = await probe(address, port);
           if (result.http) return { port, address, pid, status: result.status, title: result.title };
+          slow = result.slow;
           if (!result.refused) break;
         }
-        notHttp.set(key, now);
+        notHttp.set(key, { at: now, wait: slow ? SLOW_MS : NOT_HTTP_MS });
         return null;
       }),
     );
@@ -250,6 +257,21 @@ export function createBrowser({ hostPort, uiPort, env = process.env, platform = 
     return extraPorts.includes(port) ? "127.0.0.1" : null;
   }
 
+  /**
+   * target() for a port the owner asked for by name. A port held back by an earlier
+   * failed probe is probed again at once, so a dev server that was slow on its first
+   * page opens as soon as it answers instead of after the backoff.
+   */
+  async function requested(port) {
+    const address = await target(port);
+    if (address) return address;
+    let forgot = false;
+    for (const key of notHttp.keys()) if (key.endsWith(`:${port}`)) forgot = notHttp.delete(key);
+    if (!forgot) return null;
+    cached.at = 0;
+    return target(port);
+  }
+
   // Browse keys (docs/WORKBENCH.md "Services and browser"). A proxied page runs in an
   // opaque origin, so its own asset, link and form requests are cross-site and carry no
   // SameSite=Strict owner cookie. The owner mints a key for one port with an
@@ -258,7 +280,7 @@ export function createBrowser({ hostPort, uiPort, env = process.env, platform = 
   // never logged, expire after 30 minutes idle or 8 hours, and can be revoked.
   const keys = new Map(); // key -> { port, created, used }
   const live = (row, now = Date.now()) => now - row.used < KEY_IDLE_MS && now - row.created < KEY_LIFE_MS;
-  /** The process listening on `port` now, from the last discovery (null when unknown). */
+  /** The process listening on `port` now, from the last discovery (null when unknown or gone). */
   const owner = (port) => routes.get(port)?.pid ?? null;
   function mint(port) {
     const now = Date.now();
@@ -280,7 +302,10 @@ export function createBrowser({ hostPort, uiPort, env = process.env, platform = 
       if (known.length === given.length && timingSafeEqual(known, given)) match = row;
     }
     if (!match || match.port !== port || !live(match)) return false;
-    if (match.pid !== null && owner(port) !== null && owner(port) !== match.pid) return false;
+    // A key minted for a known process works only while that same process is seen on the
+    // port. An owner that can no longer be seen (another user's service, which ss -p
+    // hides, or a port that stopped answering) is not a match.
+    if (match.pid !== null && owner(port) !== match.pid) return false;
     match.used = Date.now();
     return true;
   }
@@ -296,9 +321,14 @@ export function createBrowser({ hostPort, uiPort, env = process.env, platform = 
     await proxy(req, res, { send, port, address, key: keyed ? key : undefined, path: rest + url.search });
   }
 
-  const parse = (url) => {
+  const parse = async (url) => {
     const match = BROWSE.exec(url.pathname);
-    return match && { port: Number(match[1]), key: match[2], rest: match[3], keyed: keyValid(Number(match[1]), match[2]) };
+    if (!match) return null;
+    const port = Number(match[1]);
+    // A key is checked against a discovery at most 10 s old, so a takeover of its port
+    // is seen before anything is forwarded to the newcomer.
+    if (match[2]) await services();
+    return { port, key: match[2], rest: match[3], keyed: keyValid(port, match[2]) };
   };
 
   return {
@@ -308,14 +338,14 @@ export function createBrowser({ hostPort, uiPort, env = process.env, platform = 
       if (route === "services" && req.method === "GET") return send(res, 200, { services: await services() }), true;
       if (route === "browse-key" && req.method === "POST") {
         const port = Number((await jsonBody(req))?.port);
-        if (!(await target(port))) return send(res, 403, { error: `localhost:${port} is not a running local web service the workbench can open.` }), true;
+        if (!(await requested(port))) return send(res, 403, { error: `localhost:${port} is not a running local web service the workbench can open.` }), true;
         return send(res, 201, { key: mint(port), port }), true;
       }
       if (route === "browse-key/revoke" && req.method === "POST") {
         const key = String((await jsonBody(req))?.key ?? "");
         return send(res, 200, { revoked: keys.delete(key) }), true;
       }
-      const request = parse(url);
+      const request = await parse(url);
       if (!request) return false;
       await browse(req, res, url, send, request);
       return true;
@@ -326,7 +356,7 @@ export function createBrowser({ hostPort, uiPort, env = process.env, platform = 
      * for everything else, which then meets the normal owner check.
      */
     async handleKeyed(req, res, url, { send }) {
-      const request = parse(url);
+      const request = await parse(url);
       if (!request?.keyed) return false;
       await browse(req, res, url, send, request);
       return true;

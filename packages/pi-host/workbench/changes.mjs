@@ -18,6 +18,15 @@ const SKIP = new Set([".git", "node_modules"]);
 
 const fail = (message, status) => Object.assign(new Error(message), { status });
 
+/** Host errors become plain messages; never echo an absolute host path. */
+function publicError(error) {
+  if (error.status) return error;
+  if (error.code === "ENOENT" || error.code === "ENOTDIR") return fail("That folder does not exist.", 404);
+  if (error.code === "EACCES" || error.code === "EPERM") return fail("The host is not allowed to read that folder.", 403);
+  if (error.code === "ELOOP") return fail("Path must stay inside the workspace", 403);
+  return fail("The host could not read that repository.", 500);
+}
+
 // Repo-local config is untrusted: it may name pagers, external diffs, textconv,
 // fsmonitor hooks or clean filters, all of which run commands. These settings and
 // the per-repo filter overrides below switch every one of them off. They are passed
@@ -259,8 +268,12 @@ export function createChanges({ work }) {
       if (req.method !== "GET" || (route !== "repos" && route !== "changes")) return false;
       const ready = await available();
       if (!ready.ok) return send(res, 503, { error: ready.reason }), true;
-      if (route === "repos") send(res, 200, { repos: await repos() });
-      else send(res, 200, await changes(url.searchParams.get("repo") ?? ""));
+      try {
+        if (route === "repos") send(res, 200, { repos: await repos() });
+        else send(res, 200, await changes(url.searchParams.get("repo") ?? ""));
+      } catch (error) {
+        throw publicError(error);
+      }
       return true;
     },
   };

@@ -34,9 +34,13 @@ export function createWorkbench({ work, send, jsonBody, tools = {}, extensionUis
   }
   async function suggestions() {
     const rows = [];
-    if (tools.browser) for (const service of await tools.browser.services()) rows.push({ kind: "service", title: service.title || `localhost:${service.port}`, port: service.port });
+    // Each source is optional: one that fails (say WORK/pages is a file or links out of
+    // the workspace) leaves its rows out and never takes the others down with it.
+    const services = tools.browser ? await tools.browser.services().catch(() => []) : [];
+    const pages = tools.pages ? await tools.pages.list().catch(() => []) : [];
+    for (const service of services) rows.push({ kind: "service", title: service.title || `localhost:${service.port}`, port: service.port });
     for (const extension of extensionUis()) rows.push({ kind: "extension", title: extension.title, hash: extension.hash });
-    if (tools.pages) for (const page of (await tools.pages.list()).slice(0, 5)) rows.push({ kind: "page", title: page.title, name: page.name });
+    for (const page of pages.slice(0, 5)) rows.push({ kind: "page", title: page.title, name: page.name });
     return { suggestions: rows };
   }
   return {

@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, Globe, LoaderCircle, RotateCw } fr
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { piRequest } from "@/lib/pi/live-state";
 import { browseTarget } from "@/lib/pi/workbench";
+import { browseKeys } from "./browse-keys";
 import { useWorkbench } from "./workbench-context";
 import type { WorkbenchTab } from "./workbench-state";
 import "./browser-pane.css";
@@ -19,6 +20,12 @@ type View =
 
 const PREFIX = /^\/api\/workbench\/browse\/(\d{1,5})\/~[A-Za-z0-9_-]{43}(\/[^?#]*)?/;
 const display = ({ port, path }: Local) => `localhost:${port}${path === "/" ? "" : path}`;
+async function mintKey(port: number) {
+  const reply = (await piRequest("/api/workbench/browse-key", { port })) as { key?: unknown };
+  if (typeof reply.key !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(reply.key)) throw Error("Pi did not return a browse key.");
+  return reply.key;
+}
+const revokeKey = (key: string) => void piRequest("/api/workbench/browse-key/revoke", { key }).catch(() => undefined);
 const src = (target: Local, key: string) => `/api/workbench/browse/${target.port}/~${key}${target.path.startsWith("/") ? target.path : `/${target.path}`}`;
 
 /**
@@ -29,7 +36,7 @@ const src = (target: Local, key: string) => `/api/workbench/browse/${target.port
 export function BrowserPane({ tab }: { tab: BrowserTab }) {
   const { dispatch } = useWorkbench();
   const frame = useRef<HTMLIFrameElement>(null);
-  const keys = useRef(new Map<number, string>());
+  const [keys] = useState(() => browseKeys(mintKey, revokeKey));
   const history = useRef<{ stack: Local[]; index: number }>({ stack: [], index: -1 });
   const [view, setView] = useState<View>({ kind: "idle" });
   const [address, setAddress] = useState(tab.url ?? "");
@@ -38,7 +45,7 @@ export function BrowserPane({ tab }: { tab: BrowserTab }) {
   const remember = useCallback((url: string) => dispatch({ type: "update", id: tab.id, patch: { url } }), [dispatch, tab.id]);
 
   const open = useCallback(
-    async (target: Local, { push = true }: { push?: boolean } = {}) => {
+    async (target: Local, { push = true, fresh = false }: { push?: boolean; fresh?: boolean } = {}) => {
       if (push) {
         const { stack, index } = history.current;
         history.current = { stack: [...stack.slice(0, index + 1), target], index: index + 1 };
@@ -46,14 +53,14 @@ export function BrowserPane({ tab }: { tab: BrowserTab }) {
       setTick((n) => n + 1);
       setAddress(display(target));
       remember(`http://localhost:${target.port}${target.path}`);
-      let key = keys.current.get(target.port);
+      // The host may have dropped a held key (15 idle minutes, or a restart) and the
+      // sandboxed frame cannot say so, so Reload and a typed address start a new one.
+      if (fresh) keys.drop(target.port);
+      let key = keys.held(target.port);
       if (!key) {
         setView({ kind: "minting", target });
         try {
-          const reply = (await piRequest("/api/workbench/browse-key", { port: target.port })) as { key?: unknown };
-          if (typeof reply.key !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(reply.key)) throw Error("Pi did not return a browse key.");
-          key = reply.key;
-          keys.current.set(target.port, key);
+          key = await keys.fresh(target.port);
         } catch (failure) {
           setView({ kind: "error", target, message: failure instanceof Error ? failure.message : "Pi did not answer." });
           return;
@@ -61,12 +68,12 @@ export function BrowserPane({ tab }: { tab: BrowserTab }) {
       }
       setView({ kind: "page", target, key, src: src(target, key), loading: true, nonce: Date.now() });
     },
-    [remember],
+    [keys, remember],
   );
 
   const go = (input: string) => {
     const parsed = browseTarget(input);
-    if (parsed.kind === "local") return void open({ port: parsed.port, path: parsed.path || "/" });
+    if (parsed.kind === "local") return void open({ port: parsed.port, path: parsed.path || "/" }, { fresh: true });
     if (parsed.kind === "external") {
       setView({ kind: "external", url: parsed.url });
       setAddress(parsed.url);
@@ -87,12 +94,7 @@ export function BrowserPane({ tab }: { tab: BrowserTab }) {
   }, [open, tab.url]);
 
   // Revoke every key this tab minted when it closes.
-  useEffect(() => {
-    const minted = keys.current;
-    return () => {
-      for (const key of minted.values()) void piRequest("/api/workbench/browse-key/revoke", { key }).catch(() => undefined);
-    };
-  }, []);
+  useEffect(() => () => keys.revokeAll(), [keys]);
 
   // In-page navigation (links, forms, pushState) is reported by the proxy's shim with
   // postMessage. The frame is opaque, so the message is untrusted: only a message from
@@ -129,8 +131,7 @@ export function BrowserPane({ tab }: { tab: BrowserTab }) {
     void open(next, { push: false });
   };
   const reload = () => {
-    if (view.kind === "page") setView({ ...view, src: src(view.target, view.key), loading: true, nonce: Date.now() });
-    else if (view.kind === "error" && view.target) void open(view.target, { push: false });
+    if ((view.kind === "page" || view.kind === "error") && view.target) void open(view.target, { push: false, fresh: true });
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
