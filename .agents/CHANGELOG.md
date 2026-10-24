@@ -526,3 +526,12 @@ From a read-only review; tests/image-chips-night-ui-check.mjs and check-image-ch
 - A queued or steered message the host refuses comes back with its images (same draft ids, so its chips still name them), placed before any newer draft instead of being dropped when the composer was not empty.
 - The same image placed twice (identical bytes, one host id) now goes in both places, each labelled, for the model and in the transcript (each placement has its own #fragment address).
 - The slash menu opens when a command is typed straight before an image chip, and choosing a skill keeps the chips.
+
+## 2026-10-24 Night fixes: skills and models
+
+From a read-only review; check-skills-models-night.mjs covers each.
+- Skill descriptions in double quotes are read as JSON strings, so skill_create's escapes no longer show as literal " in the prompt and skill_list (single quotes unescape '' too).
+- skill_install of a repository whose root is the skill and whose SKILL.md has no name: now uses the repository's name instead of "repo".
+- Relative links inside a skill stay relative when installed (verbatimSymlinks); before they pointed into the deleted temporary clone.
+- The old copy of a replaced skill waits in the install's own temporary folder, so installing "foo" no longer deletes a skill named "foo.previous".
+- Changing the default model without naming an effort clears the default effort, so new chats and schedules no longer use an effort Settings does not show.

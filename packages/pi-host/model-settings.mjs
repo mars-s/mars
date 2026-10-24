@@ -37,6 +37,9 @@ export function createModelSettings({ file, resolve }) {
         if (change[key] && !resolve(change[key])) throw fail(`Unknown model ${change[key]}`);
         next[key] = change[key];
       }
+      // An effort belongs to its default model: changing the model without naming an effort
+      // clears it, so new chats never use an effort Settings no longer shows.
+      if (change.defaultModel !== undefined && change.defaultModel !== (await read()).defaultModel && change.defaultEffort === undefined) next.defaultEffort = '';
       if (change.defaultEffort !== undefined) {
         if (change.defaultEffort !== '' && !EFFORTS.includes(change.defaultEffort)) throw fail('defaultEffort must be an effort level or ""');
         next.defaultEffort = change.defaultEffort;

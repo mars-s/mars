@@ -44,7 +44,10 @@ export function parseSkill(text) {
         const block = [];
         while (i + 1 < lines.length && (/^\s/.test(lines[i + 1]) || lines[i + 1] === '')) block.push(lines[++i].trim());
         value = value.startsWith('>') ? block.join(' ').replace(/\s+/g, ' ').trim() : block.join('\n').trim();
-      } else if (/^(["']).*\1$/.test(value)) value = value.slice(1, -1);
+      } else if (/^".*"$/.test(value)) {
+        // Double quotes carry escapes (skill_create writes them with JSON.stringify).
+        try { value = JSON.parse(value); } catch { value = value.slice(1, -1); }
+      } else if (/^'.*'$/.test(value)) value = value.slice(1, -1).replace(/''/g, "'");
       meta[pair[1]] = value;
     }
   }
@@ -182,14 +185,18 @@ export function createSkills({ roots, cacheMs = 15000 }) {
       try {
         let from;
         let sub = '';
+        // A skill at the root of a cloned repository with no name: in front matter takes the
+        // repository's name, not the clone folder's ("repo").
+        let repoName = '';
         if (spec.startsWith('/') || spec.startsWith('~/')) from = resolve(spec.replace(/^~(?=\/)/, homedir()));
         else {
           let url = spec;
           const short = /^([\w.-]+)\/([\w.-]+)((?:\/[\w.@-]+)*)$/.exec(spec);
           const github = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/tree\/([^/]+)((?:\/[^/]+)*))?\/?$/.exec(spec);
-          if (short) { url = `https://github.com/${short[1]}/${short[2]}.git`; sub = short[3].slice(1); }
-          else if (github) { url = `https://github.com/${github[1]}/${github[2]}.git`; ref ??= github[3]; sub = (github[4] || '').slice(1); }
+          if (short) { url = `https://github.com/${short[1]}/${short[2]}.git`; sub = short[3].slice(1); repoName = short[2]; }
+          else if (github) { url = `https://github.com/${github[1]}/${github[2]}.git`; ref ??= github[3]; sub = (github[4] || '').slice(1); repoName = github[2]; }
           else if (!/^(https:\/\/|git@|file:\/\/)[\w.@:/~-]+$/.test(spec)) throw fail('source must be owner/repo, a GitHub or git URL, or a local folder');
+          repoName ||= basename(spec.replace(/\/+$/, '').replace(/\.git$/, '').replace(/^.*:/, ''));
           await run('git', ['clone', '--depth', '1', ...(ref ? ['--branch', ref] : []), '--', url, join(work, 'repo')], { timeout: 120000 });
           from = join(work, 'repo');
         }
@@ -210,16 +217,19 @@ export function createSkills({ roots, cacheMs = 15000 }) {
         const skipped = [];
         for (const dir of found) {
           const { meta } = parseSkill(await readFile(join(dir, 'SKILL.md'), 'utf8'));
-          const name = String(meta.name || basename(dir)).trim().toLowerCase();
+          const name = String(meta.name || (dir === from && repoName ? repoName : basename(dir))).trim().toLowerCase();
           if (!NAME.test(name)) { skipped.push({ path: relative(from, dir), reason: 'name is not a valid skill name' }); continue; }
           const target = join(own.dir, name);
           const staged = join(work, 'staged-' + name);
-          await cp(dir, staged, { recursive: true, dereference: false, filter: (path) => !/(^|\/)(\.git|node_modules)(\/|$)/.test(relative(dir, path)) });
-          await rm(target + '.previous', { recursive: true, force: true });
+          // verbatimSymlinks: a relative link inside the skill stays relative (Node would point it
+          // into the temporary clone, deleted below). read() still refuses links leaving the skill.
+          await cp(dir, staged, { recursive: true, dereference: false, verbatimSymlinks: true, filter: (path) => !/(^|\/)(\.git|node_modules)(\/|$)/.test(relative(dir, path)) });
+          // The old copy waits in this install's own temporary folder, never beside the skills,
+          // where "<name>.previous" could be another skill's folder.
+          const previous = join(work, 'previous-' + name);
           const had = await lstat(target).then(() => true, () => false);
-          if (had) await rename(target, target + '.previous');
-          await rename(staged, target).catch(async () => { await cp(staged, target, { recursive: true }); });
-          if (had) await rm(target + '.previous', { recursive: true, force: true });
+          if (had) await rename(target, previous).catch(async () => { await cp(target, previous, { recursive: true, verbatimSymlinks: true }); await rm(target, { recursive: true, force: true }); });
+          await rename(staged, target).catch(async () => { await cp(staged, target, { recursive: true, verbatimSymlinks: true }); });
           installed.push({ name, description: oneLine(meta.description, 300), replaced: had });
         }
         forget();
