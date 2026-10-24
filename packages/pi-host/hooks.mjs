@@ -103,8 +103,12 @@ export function createSessionHooks({ work, home = process.env.HOME || homedir(),
       files.push(...found.files);
       ignored.push(...found.ignored);
     }
-    for (const file of files) file.text = (await readFile(file.path, 'utf8').catch(() => '')).slice(0, FILE_MAX).trim();
-    const report = { files: files.filter((f) => f.text), ignored };
+    // A file named by several hooks (a "*" and a "startup" group, or one command twice) is added
+    // once, as Claude Code runs identical hook commands once.
+    const seen = new Set();
+    const unique = files.filter((file) => !seen.has(file.path) && seen.add(file.path));
+    for (const file of unique) file.text = (await readFile(file.path, 'utf8').catch(() => '')).slice(0, FILE_MAX).trim();
+    const report = { files: unique.filter((f) => f.text), ignored };
     cache = { at: Date.now(), report };
     return report;
   }

@@ -86,7 +86,9 @@ Claude Code subagents do not get SessionStart output. Sources, in order:
 1. `<MARS_PI_ROOT>/workspace/hooks/session-start/*.md`, by file name.
 2. Each plugin's `hooks/hooks.json` `SessionStart` entries that Mars can read safely.
 
-Each file is cut at 8000 characters and the section at 16000.
+Each file is cut at 8000 characters and the section at 16000. A file named by several hooks
+(a `*` group and a `startup` group, or one command listed twice) is added once, as Claude Code
+runs identical hook commands once.
 
 ### The supported hook shape
 

@@ -572,3 +572,13 @@ From read-only reviews of auth, attachments and message rendering; check-securit
 - Any pi_trial cookie that is the token signs in. Cookies ignore the port, so a page on another port of the same host could plant a pi_trial with a longer path, which browsers send first, and lock the owner out.
 - Image chips can place an image at most four times. Tonight's fix for one image placed twice let a text of 1,250 repeated chips turn one attachment into 1,250 full images and run the host out of memory.
 - Images in replies load only from Mars itself or inline data. A remote image loaded as soon as the reply rendered, so a prompt injection could make the model leak data in its address; it now shows as a link naming the host.
+
+## 2026-10-24 Night fixes: project and memory
+
+From a read-only review; packages/pi-host/check-project-memory-night.mjs covers each fix and fails on the old code (9 of 9 checks).
+- Project instructions: AGENTS.md or CLAUDE.md is read only when its real path (after symlinks) stays inside the repository, so a cloned repo whose AGENTS.md links to /proc/self/environ or ~/.ssh no longer puts host secrets in the prompt. Links inside the repo still work. Test: check (1).
+- Project instructions: only a regular file is read, opened non-blocking, and only its first 48,000 bytes, so a FIFO no longer hangs the chat and Node's file threads, and a huge file or device no longer costs hundreds of MB every turn. Tests: check (2a), (2b).
+- Memory: updates run one at a time per file and each write uses its own temporary file, so concurrent memory_update calls keep every note and report the right result. Test: check (3).
+- Memory: an update removes only the note lines asked for and keeps headings, numbered lists and paragraphs the owner wrote; notes are matched as shown (spaces collapsed); a MEMORY.md that exists but cannot be read is refused instead of overwritten. Tests: check (4a), (4b), (4c).
+- Memory: the Memory section stops at 8,000 characters and says how many notes were left out. Test: check (5).
+- Session start hooks: a plugin file named by several SessionStart hooks is added once. Test: check (6).

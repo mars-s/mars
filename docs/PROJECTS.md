@@ -12,7 +12,10 @@ document (a fork keeps it; a new conversation starts without one).
   Automatic detection never switches an existing project.
 - Explicit: `project_open({ path })` sets or switches it.
 
-Files are reread when they change (by modification time).
+Files are reread when they change (by modification time and size). Only a regular file whose
+real path (after symlinks) stays inside the repository is read, and only its first 48,000 bytes,
+so a link to `/proc/self/environ` or `~/.ssh`, a FIFO, a device or a huge file is skipped or
+cut instead of reaching the prompt or hanging the host.
 
 ## Memory
 
@@ -20,6 +23,18 @@ Files are reread when they change (by modification time).
 of every conversation. `memory_update({ add, remove })` changes it; the owner can edit the file
 by hand. Notes are single lines up to 500 characters; the file is capped at 8,000 characters.
 For longer how-to instructions, use skills (docs/SKILLS.md).
+
+- Notes are the `- ` or `* ` list lines. An update removes only the note lines asked for and
+  adds new notes after the last note line; headings, numbered lists and paragraphs the owner
+  wrote stay as they are.
+- A note is matched for removal and duplicates as it is shown: spaces collapsed, case ignored.
+- Updates run one at a time, so concurrent `memory_update` calls never lose a note. Each write
+  goes to its own temporary file and is renamed into place.
+- When MEMORY.md exists but cannot be read (for example its permissions), `memory_update` is
+  refused and the file is left alone; it is never overwritten from an empty read.
+- The Memory section shows notes up to 8,000 characters, then says how many were left out, so
+  a long hand-edited file never floods every prompt. An update may always shrink a file that is
+  already over the cap.
 
 ## Side chat notes
 

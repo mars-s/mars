@@ -3,9 +3,10 @@
 // remembered per conversation in a native document: set by project_open, or found automatically
 // from the first tool call that names a path inside a git repository.
 import { execFile } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open as openFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { Type } from '@earendil-works/pi-ai';
 import { defineDoc, defineExtension, defineTool, section } from '@earendil-works/pi-durable';
@@ -14,6 +15,8 @@ const run = promisify(execFile);
 export const ProjectDoc = defineDoc({ kind: 'mars.project', version: 1, scope: 'conversation', history: 'latest', fork: 'current', initial: () => ({ root: '' }) });
 export const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'];
 const FILE_MAX = 12000;
+// Bytes read at most: enough for FILE_MAX characters of any UTF-8 text.
+const READ_MAX = FILE_MAX * 4;
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 
 /** The git top level containing `path` (a file or folder), or '' when it is not in a repository. */
@@ -52,21 +55,46 @@ export function pathOfCall(name, args, base) {
 
 export function createProjects({ harness, work, context }) {
   const cache = new Map();
-  async function instructionFile(path) {
-    let info;
-    try { info = await stat(path); } catch { return undefined; }
-    const hit = cache.get(path);
-    if (hit && hit.mtime === info.mtimeMs) return hit.text;
-    const raw = await readFile(path, 'utf8');
-    const text = raw.length > FILE_MAX ? raw.slice(0, FILE_MAX) + `\n\n(Cut at ${FILE_MAX} characters; read the file for the rest.)` : raw;
-    cache.set(path, { mtime: info.mtimeMs, text });
-    return text;
+  /**
+   * The text of one instruction file, or undefined. Only a regular file whose real path stays
+   * inside the repository is read (a link to /proc/self/environ or ~/.ssh is not), and only its
+   * first READ_MAX bytes, so a FIFO, a device or a huge file never hangs or floods the host.
+   */
+  async function instructionFile(root, name) {
+    let real;
+    try {
+      real = await realpath(join(root, name));
+      if (!real.startsWith((await realpath(root)) + sep)) return undefined;
+    } catch { return undefined; }
+    let fh;
+    // O_NONBLOCK: opening a FIFO with no writer returns at once instead of waiting for one.
+    try { fh = await openFile(real, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW); } catch { return undefined; }
+    try {
+      const info = await fh.stat();
+      if (!info.isFile()) return undefined;
+      const hit = cache.get(real);
+      if (hit && hit.mtime === info.mtimeMs && hit.size === info.size) return hit.text;
+      const buffer = Buffer.alloc(Math.min(info.size, READ_MAX));
+      let length = 0;
+      while (length < buffer.length) {
+        const { bytesRead } = await fh.read(buffer, length, buffer.length - length, length);
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      const raw = buffer.subarray(0, length).toString('utf8');
+      const cut = raw.length > FILE_MAX || info.size > READ_MAX;
+      const text = cut ? raw.slice(0, FILE_MAX) + `\n\n(Cut at ${FILE_MAX} characters; read the file for the rest.)` : raw;
+      cache.set(real, { mtime: info.mtimeMs, size: info.size, text });
+      return text;
+    } finally {
+      await fh.close().catch(() => {});
+    }
   }
   /** The instruction files of a repository root, in order, as [name, text]. */
   async function instructions(root) {
     const out = [];
     for (const name of INSTRUCTION_FILES) {
-      const text = await instructionFile(join(root, name));
+      const text = await instructionFile(root, name);
       if (text?.trim()) out.push([name, text.trim()]);
     }
     return out;
