@@ -10,7 +10,7 @@ import { Compile } from "typebox/compile";
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { Credentials, atomicJson } from "./security.mjs";
-import { redactText } from "./secrets.mjs";
+import { redactKnown } from "./secrets.mjs";
 import { McpClient, McpError, httpTransport, readCapped, resultText, stdioTransport } from "./mcp-client.mjs";
 import * as oauth from "./connector-oauth.mjs";
 
@@ -35,17 +35,39 @@ function ipv4Class(address) {
   if (a === 0 || a === 10 || a >= 224 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)) return "private";
   return "public";
 }
+/** The 16 bytes of an IPv6 literal that isIP accepted, in any spelling (zone dropped). */
+function ipv6Bytes(address) {
+  let value = address.toLowerCase().replace(/%.*$/, "");
+  const dotted = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(value);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(1).map(Number);
+    value = value.slice(0, dotted.index) + ((a << 8) | b).toString(16) + ":" + ((c << 8) | d).toString(16);
+  }
+  const [head, tail] = value.split("::");
+  const groups = (part) => (part ? part.split(":") : []);
+  const left = groups(head);
+  const right = tail === undefined ? [] : groups(tail);
+  const words = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right].map((word) => parseInt(word, 16));
+  return words.flatMap((word) => [word >> 8, word & 255]);
+}
 /** "loopback", "private" or "public" for an IP literal; null for a host name. */
 export function ipClass(address) {
   const kind = isIP(address);
   if (kind === 4) return ipv4Class(address);
   if (kind !== 6) return null;
-  const value = address.toLowerCase();
-  if (value === "::1") return "loopback";
-  if (value === "::") return "private";
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(value);
-  if (mapped) return ipv4Class(mapped[1]);
-  if (/^f[cd]/.test(value) || /^fe[89ab]/.test(value)) return "private";
+  // Read the bytes, not the text: URL writes ::ffff:127.0.0.1 as ::ffff:7f00:1.
+  const bytes = ipv6Bytes(address);
+  const zeros = (from, to) => bytes.slice(from, to).every((byte) => byte === 0);
+  const ipv4 = () => ipv4Class(bytes.slice(12).join("."));
+  if (zeros(0, 15) && bytes[15] === 1) return "loopback";
+  if (zeros(0, 16)) return "private";
+  // IPv4-mapped (::ffff:a.b.c.d) and the NAT64 prefix (64:ff9b::a.b.c.d) reach an IPv4 address.
+  if (zeros(0, 10) && bytes[10] === 255 && bytes[11] === 255) return ipv4();
+  if (bytes[0] === 0 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b && zeros(4, 12)) return ipv4();
+  // The deprecated IPv4-compatible form (::a.b.c.d) is never a real public server.
+  if (zeros(0, 12)) return "private";
+  // Unique local fc00::/7, fe00::/8 (link-local fe80::/10, old site-local fec0::/10) and multicast ff00::/8.
+  if ((bytes[0] & 0xfe) === 0xfc || bytes[0] === 0xfe || bytes[0] === 0xff) return "private";
   return "public";
 }
 /** The worst class of every address a host name resolves to. */
@@ -173,10 +195,15 @@ function exampleArguments(schema) {
   }
   return JSON.stringify(out);
 }
-/** Mars names, descriptions and schemas for a server's tools. Names are conn_<id>_<tool>, at most 64 characters, unique. */
-export function describeTools(connector, list) {
+/**
+ * Mars names, descriptions and schemas for a server's tools. Names are conn_<id>_<tool>, at
+ * most 64 characters, unique within the list and against `taken`, the names other
+ * connectors already use (connector foo's tool bar_baz and foo-bar's baz are both
+ * conn_foo_bar_baz before the suffix).
+ */
+export function describeTools(connector, list, taken = []) {
   const prefix = "conn_" + connector.id.replace(/-/g, "_") + "_";
-  const used = new Set();
+  const used = new Set(taken);
   return list.map((tool) => {
     const base = prefix + toolSlug(tool.name, 64 - prefix.length);
     let name = base;
@@ -260,7 +287,16 @@ export function createConnectors({
     const secret = await secretOf(id);
     return [secret.key, secret.accessToken, secret.refreshToken, secret.clientSecret].filter((value) => typeof value === "string" && value).sort((a, b) => b.length - a.length);
   }
-  const clean = (text, values) => redactText(String(text ?? ""), values);
+  // Known credentials are removed at any length (redactKnown), unlike broad host-secret discovery.
+  const clean = (text, values) => redactKnown(String(text ?? ""), values);
+  // Every string, object key and number in a JSON value, so a short key cannot break the JSON.
+  const scrub = (value, values) => {
+    if (typeof value === "string") return clean(value, values);
+    if (typeof value === "number" || typeof value === "bigint") return clean(String(value), values) === String(value) ? value : clean(String(value), values);
+    if (Array.isArray(value)) return value.map((item) => scrub(item, values));
+    if (object(value)) return Object.fromEntries(Object.entries(value).map(([key, item]) => [clean(key, values), scrub(item, values)]));
+    return value;
+  };
 
   async function view(row) {
     const secret = await secretOf(row.id);
@@ -415,11 +451,21 @@ export function createConnectors({
   async function dropClient(id) {
     const entry = clients.get(id);
     clients.delete(id);
-    if (entry) await entry.close().catch(() => {});
+    if (entry) await entry.then((created) => created.close()).catch(() => {});
   }
-  async function client(row) {
+  // The map holds the promise of the client, set before the first await, so concurrent
+  // first calls share one client (and one stdio process) that dropClient can close.
+  function client(row) {
     const existing = clients.get(row.id);
     if (existing) return existing;
+    const entry = createClient(row);
+    clients.set(row.id, entry);
+    entry.catch(() => {
+      if (clients.get(row.id) === entry) clients.delete(row.id);
+    });
+    return entry;
+  }
+  async function createClient(row) {
     let transport;
     if (row.transport === "stdio") {
       const childEnv = {};
@@ -438,18 +484,20 @@ export function createConnectors({
         headers: () => authHeaders(row.id),
       });
     }
-    const created = new McpClient(transport, timeouts);
-    clients.set(row.id, created);
-    return created;
+    return new McpClient(transport, timeouts);
   }
   async function loadTools(id, host, retried = false) {
     const row = find(id);
     await dropClient(id);
     try {
-      const list = await (await client(row)).listTools();
-      const tools = describeTools(row, list);
+      // Discovery is scrubbed too: a server may echo the key in a description or schema.
+      const list = scrub(await (await client(row)).listTools(), await secretValues(id));
       await update(id, (r) => {
-        r.tools = tools;
+        r.tools = describeTools(
+          r,
+          list,
+          rows.filter((other) => other.id !== id).flatMap((other) => other.tools.map((tool) => tool.name)),
+        );
         r.status = "connected";
         r.lastError = "";
         r.connectedAt = iso(now());
@@ -693,8 +741,8 @@ export function createConnectors({
       if (isError) throw Object.assign(Error(safe.slice(0, 4000) || `${mcpName} failed on the ${row.name} server`), { fromServer: true });
       let structured;
       if (result.structuredContent !== undefined) {
-        const json = JSON.stringify(result.structuredContent);
-        if (json.length <= OUTPUT_CHARS) structured = JSON.parse(clean(json, values));
+        const safeStructured = scrub(result.structuredContent, values);
+        if (JSON.stringify(safeStructured).length <= OUTPUT_CHARS) structured = safeStructured;
       }
       return { text: safe, truncated, ...(structured !== undefined ? { structured } : {}) };
     } catch (error) {

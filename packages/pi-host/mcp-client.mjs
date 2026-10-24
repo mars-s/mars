@@ -240,6 +240,8 @@ export function stdioTransport({ command, args = [], env = {}, cwd, maxBytes = M
     } catch {
       return; // Some servers log plain text to stdout; skip it.
     }
+    // A JSON log line such as null, a number or a list is not a message; skip it too.
+    if (message === null || typeof message !== "object" || Array.isArray(message)) return;
     if (typeof message.method === "string" && message.id !== undefined) return write(answerServer(message));
     const waiter = message.id !== undefined && pending.get(message.id);
     if (!waiter) return;

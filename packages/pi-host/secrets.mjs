@@ -48,6 +48,18 @@ export function redactText(text, secrets) {
 }
 
 /**
+ * Replace explicitly known credentials, such as a connector's own key, at any length.
+ * redactText keeps its minimum because it serves broad discovery of host secrets, where a
+ * short value is more likely a false match than a credential.
+ */
+export function redactKnown(text, secrets) {
+  if (typeof text !== "string") return text;
+  const sorted = secrets.filter((secret) => typeof secret === "string" && secret).sort((a, b) => b.length - a.length);
+  for (const secret of sorted) if (text.includes(secret)) text = text.split(secret).join(MARK);
+  return text;
+}
+
+/**
  * Replace every secret in a file, in place, reading it in chunks. A tail as long as the
  * longest secret is carried between chunks, so a secret split across two writes is still
  * found. Files without a secret are only read. Returns the number of replacements.

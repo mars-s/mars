@@ -502,3 +502,12 @@ From a read-only review of lanes.mjs; check-lanes-night.mjs covers each.
 
 - Schedules: trimming run history to 20 no longer drops a run that is still starting or running, so a long run followed by 20 or more skipped occurrences can no longer let a second run through or make Run now available (`schedules.mjs` `record`; `check-schedules-night.mjs`).
 - Schedules: a task recovered at its "send" checkpoint after the schedule was paused or its timing changed (a crash before the old task was aborted) now ends without sending and records the run as failed (`schedules.mjs` send phase; `check-schedules-night.mjs`). Spec updated in docs/SCHEDULES.md.
+## 2026-10-24 Night fixes: connectors
+
+- IPv6 addresses are classified from their bytes, so an IPv4-mapped address such as `[::ffff:169.254.169.254]` (which URL rewrites as `::ffff:a9fe:a9fe`) or a NAT64 one gets its IPv4 class; IPv6 multicast and the IPv4-compatible form count as private (connectors.mjs `ipClass`).
+- A stdio MCP server that prints JSON which is not an object (`null`, a number, a list) no longer crashes the host; the line is skipped (mcp-client.mjs).
+- Discovered tool metadata (names, descriptions, schemas) is scrubbed of the connector's own secrets before it is cached in connectors.json or offered to the model.
+- Connector tool names are allocated against every other connector's names, so `foo`'s `bar_baz` and `foo-bar`'s `baz` no longer share `conn_foo_bar_baz`; the second gets `_2`.
+- Concurrent first calls to a connector share one client being created, so a keyed stdio connector no longer leaks an unreachable server process.
+- A connector's known credentials are redacted from its output at any length (new `redactKnown` in secrets.mjs); broad host-secret redaction keeps its 12 character minimum. Structured results are scrubbed value by value.
+- Tests: packages/pi-host/check-connectors-night.mjs.

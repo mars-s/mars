@@ -33,10 +33,12 @@ replace the key) or `error` (with `lastError`, at most 300 characters, secrets r
 - `data/connector-secrets.json`: keys and tokens by connector id, through the same
   `Credentials` store as `auth.json` (security.mjs), mode 0600. `secrets.mjs` reads it,
   so `host_exec` output and saved artefacts redact these values like every other host
-  secret.
+  secret (that broad discovery skips values under 12 characters).
 - Nothing secret is returned by `/api/connectors`, the `connector_` tools or connector
-  tool results. Connector output is also scrubbed of that connector's own secret values
-  in case a server echoes them back.
+  tool results. Connector output is also scrubbed of that connector's own secret values,
+  at any length, in case a server echoes them back: tool results, structured results,
+  `connector_request` bodies, errors, and the discovered tool list (names, descriptions
+  and schemas) before it is cached or offered to the model.
 - Pending OAuth sign-ins (state, PKCE verifier) live in memory for 10 minutes. A restart
   forgets them; the owner presses Connect again.
 
@@ -53,7 +55,9 @@ replace the key) or `error` (with `lastError`, at most 300 characters, secrets r
   pings are answered. `Mcp-Session-Id` from `initialize` is sent on every later request
   and `MCP-Protocol-Version` after initialisation. A 404 on a session starts a new
   session once. Removing a connector sends `DELETE` to end its session.
-- Stdio: newline-delimited JSON over the child's stdin and stdout. The command runs in
+- Stdio: newline-delimited JSON over the child's stdin and stdout. A line that is not a
+  JSON object (plain text, or JSON such as `null` or a list) is skipped. Concurrent first
+  calls share one client, so one connector runs at most one server process. The command runs in
   the workspace folder with a minimal environment (`PATH`, `HOME`, `USER`, `LANG`,
   `TMPDIR`, plus the key variable when auth is `key`), never the host's own environment,
   so host secrets are not inherited. The last 2 KB of stderr explains a failure.
@@ -72,7 +76,9 @@ name. This is the same path installed extensions use, so the Extensions page and
 tool is not offered to the model. There is no second registry.
 
 - Names: `conn_<id>_<tool>`, lowercased, every character outside `[a-z0-9_]` becomes
-  `_`, at most 64 characters; a clash gets `_2`, `_3`.
+  `_`, at most 64 characters; a clash, within the connector or with a name another
+  connector already uses (`foo`'s `bar_baz` and `foo-bar`'s `baz`), gets `_2`, `_3`.
+  The name is kept in the cache, so it stays the same after a restart.
 - Every tool is deferred, so `tool_search` and codemode (`tools.conn_<id>_<tool>`, the
   `connectorTools` namespace) find it without adding every schema to every request.
 - The description is the server's own, with a line naming the connector and a
@@ -130,7 +136,10 @@ not against the owner:
   `169.254/16`, `fc00::/7`, `fe80::/10`, `0.0.0.0`) are refused unless the connector is
   added with `allowPrivateNetwork: true`, the owner's deliberate choice for a server on
   the home network or tailnet. Host names are resolved and every address is checked, so a
-  public name pointing at a private address is refused too. (The check runs before each
+  public name pointing at a private address is refused too. IPv6 addresses are read as
+  bytes, so an IPv4-mapped address (`::ffff:169.254.169.254`, however it is written) or a
+  NAT64 one (`64:ff9b::/96`) gets the class of its IPv4 address, and IPv6 multicast and
+  the old IPv4-compatible form count as private. (The check runs before each
   connection; a name that changes its address between the check and the request is not
   caught.)
 - URLs a server hands back (resource metadata, authorization server, token and
