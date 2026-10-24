@@ -4,6 +4,7 @@
 // apply refuses here because the host is not a systemd service.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { copyFile, mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +14,10 @@ import { createUpdates } from "./updates.mjs";
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" };
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, env: ENV, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+// A staged deploy runs this from <deploy>/stage/app, away from the checkout; host_deploy passes
+// the checkout as MARS_REPO_ROOT. From the checkout itself, its own scripts are used.
+const HERE = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = existsSync(join(HERE, "scripts", "update.mjs")) ? HERE : process.env.MARS_REPO_ROOT || HERE;
 
 // A checkout with the real updater scripts, tracking a bare "origin".
 const base = await mkdtemp(join(tmpdir(), "mars updates "));
