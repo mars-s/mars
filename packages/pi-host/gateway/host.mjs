@@ -31,7 +31,8 @@ export function loopbackGatewayEnv(env) {
  * Start the gateway with the HTTP API adapter, plus Telegram and Discord only when the
  * owner turned them on (MARS_GATEWAY_TELEGRAM=1 / MARS_GATEWAY_DISCORD=1) and a token exists.
  * Owner sender ids from MARS_TELEGRAM_OWNER / MARS_DISCORD_OWNER are allowed while they are
- * set: they are never stored, so removing one and restarting stops it.
+ * set: they are never stored, so removing one and restarting stops it. Copies an older host
+ * stored are dropped once (dropStoredOwners).
  */
 export async function startGateway({ harness, conversations, context, env = process.env, discordToken, log = console.error, ready, workersOf }) {
   const gateway = createGateway({ harness, conversations, context, log, ready, workersOf });
@@ -49,6 +50,7 @@ export async function startGateway({ harness, conversations, context, env = proc
   }
   for (const [channel, ids] of [['telegram', env.MARS_TELEGRAM_OWNER], ['discord', env.MARS_DISCORD_OWNER]])
     gateway.setOwners(channel, String(ids ?? '').split(',').map((s) => s.trim()).filter(Boolean));
+  await gateway.dropStoredOwners();
   await gateway.resume();
   const available = { telegram: configured.includes('telegram'), discord: configured.includes('discord') };
   return { gateway, api, available };

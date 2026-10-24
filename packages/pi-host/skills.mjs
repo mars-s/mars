@@ -3,6 +3,7 @@
 // the shared user folders, lists them to the model in one short section, and loads a skill's
 // full text only when the model asks for it. The files on disk are the only store.
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join, relative, resolve, sep } from 'node:path';
@@ -220,16 +221,33 @@ export function createSkills({ roots, cacheMs = 15000 }) {
           const name = String(meta.name || (dir === from && repoName ? repoName : basename(dir))).trim().toLowerCase();
           if (!NAME.test(name)) { skipped.push({ path: relative(from, dir), reason: 'name is not a valid skill name' }); continue; }
           const target = join(own.dir, name);
-          const staged = join(work, 'staged-' + name);
-          // verbatimSymlinks: a relative link inside the skill stays relative (Node would point it
-          // into the temporary clone, deleted below). read() still refuses links leaving the skill.
-          await cp(dir, staged, { recursive: true, dereference: false, verbatimSymlinks: true, filter: (path) => !/(^|\/)(\.git|node_modules)(\/|$)/.test(relative(dir, path)) });
-          // The old copy waits in this install's own temporary folder, never beside the skills,
-          // where "<name>.previous" could be another skill's folder.
-          const previous = join(work, 'previous-' + name);
+          // The new copy and the old one wait in hidden, uniquely named folders beside the
+          // skills: on the same disk, so the swap is two renames that cannot fail half way
+          // through a copy. A dot name is never a skill, and scan() skips it.
+          const tag = randomUUID();
+          const staged = join(own.dir, `.installing-${name}-${tag}`);
+          const previous = join(own.dir, `.previous-${name}-${tag}`);
+          const discard = (path) => rm(path, { recursive: true, force: true });
+          try {
+            // verbatimSymlinks: a relative link inside the skill stays relative (Node would point
+            // it into the temporary clone, deleted below). read() still refuses links leaving the skill.
+            await cp(dir, staged, { recursive: true, dereference: false, verbatimSymlinks: true, filter: (path) => !/(^|\/)(\.git|node_modules)(\/|$)/.test(relative(dir, path)) });
+          } catch (error) {
+            await discard(staged);
+            throw error;
+          }
           const had = await lstat(target).then(() => true, () => false);
-          if (had) await rename(target, previous).catch(async () => { await cp(target, previous, { recursive: true, verbatimSymlinks: true }); await rm(target, { recursive: true, force: true }); });
-          await rename(staged, target).catch(async () => { await cp(staged, target, { recursive: true, verbatimSymlinks: true }); });
+          try {
+            if (had) await rename(target, previous);
+            await rename(staged, target);
+          } catch (error) {
+            await discard(staged);
+            // Put the old copy back. If even that fails it stays in its hidden folder, never deleted.
+            if (had && !(await lstat(target).then(() => true, () => false)))
+              await rename(previous, target).catch(() => { error.message += `; the old copy is kept in ${previous}`; });
+            throw error;
+          }
+          if (had) await discard(previous);
           installed.push({ name, description: oneLine(meta.description, 300), replaced: had });
         }
         forget();

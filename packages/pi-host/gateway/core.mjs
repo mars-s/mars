@@ -10,7 +10,8 @@ import { chunkText } from './chunk.mjs';
  * `allow` holds only senders the owner approved; senders from the host configuration are
  * kept in memory (`setOwners`). `watching` maps a submission id to its conversation, and
  * `origins` maps it to the chat that sent it, so the answer reaches that chat even after it
- * moves to another conversation. Older documents have no `origins`.
+ * moves to another conversation. Older documents have no `origins`. `storedOwnersDropped`
+ * marks the one-time cleanup of owner copies older hosts stored (dropStoredOwners).
  */
 export const GatewayDoc = defineDoc({
   kind: 'mars.gateway', version: 1, scope: 'session',
@@ -390,6 +391,31 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     owners.set(channel, new Set(ids.map(String).filter(Boolean)));
   }
 
+  /**
+   * Once per install, after setOwners: hosts before 2026-10-24 copied every configured owner
+   * into the approved list at each boot. Take out those copies of the ids configured now (and
+   * the HTTP API's owner), so the configuration alone allows them and taking one out of it
+   * stops it. Runs once, so a later approval of a configured id is never undone.
+   */
+  async function dropStoredOwners() {
+    const dropped = await commit(async (tx) => {
+      const doc = await tx.doc(GatewayDoc);
+      if (doc.storedOwnersDropped) return [];
+      doc.storedOwnersDropped = true;
+      const found = [];
+      for (const [channel, ids] of owners) {
+        const list = doc.allow[channel] ?? [];
+        const kept = list.filter((sender) => !ids.has(sender));
+        if (kept.length === list.length) continue;
+        found.push(...list.filter((sender) => ids.has(sender)).map((sender) => ({ channel, sender })));
+        doc.allow[channel] = kept;
+      }
+      return found;
+    });
+    for (const { channel, sender } of dropped) await audit({ channel, sender, decision: 'removed', detail: 'a copy an older host stored; allowed while set in the host configuration' });
+    return dropped;
+  }
+
   /** Approve a sender directly, as a pairing approval does. Idempotent. */
   async function allow(channel, sender) {
     await commit(async (tx) => {
@@ -496,5 +522,5 @@ export function createGateway({ harness, conversations, context, now = Date.now,
     await pump.catch(() => {});
   }
 
-  return { receive, addAdapter, decidePairing, setOwners, allow, disallow, unbind, status, resume, watchSubmission, close, idle: () => pump, settle: () => Promise.allSettled([...waiters.values()]).then(() => pump) };
+  return { receive, addAdapter, decidePairing, setOwners, dropStoredOwners, allow, disallow, unbind, status, resume, watchSubmission, close, idle: () => pump, settle: () => Promise.allSettled([...waiters.values()]).then(() => pump) };
 }

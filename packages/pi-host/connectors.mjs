@@ -223,6 +223,9 @@ export function describeTools(connector, list, taken = []) {
   });
 }
 
+const DISCOVERY_TEXT = new Set(["description", "title", "default", "examples"]);
+const DISCOVERY_NAMES = new Set(["properties", "patternProperties", "$defs", "definitions", "dependentSchemas"]);
+
 const ToolResult = Type.Object({
   text: Type.String({ description: "The tool's answer as text, cut at 20000 characters." }),
   truncated: Type.Boolean({ description: "True when the text was cut." }),
@@ -296,6 +299,16 @@ export function createConnectors({
     if (Array.isArray(value)) return value.map((item) => scrub(item, values));
     if (object(value)) return Object.fromEntries(Object.entries(value).map(([key, item]) => [clean(key, values), scrub(item, values)]));
     return value;
+  };
+  // Discovery: only the words a server writes for people (descriptions, titles, defaults and
+  // examples) are scrubbed. Tool names, property names, types, required lists, enums and numbers
+  // stay as sent, or a short key such as "test" would rename run_tests and break its schema.
+  // `names` marks an object whose keys are property names, not schema keywords.
+  const scrubDiscovery = (value, values, names = false) => {
+    if (Array.isArray(value)) return value.map((item) => scrubDiscovery(item, values));
+    if (!object(value)) return value;
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
+      !names && DISCOVERY_TEXT.has(key) ? scrub(item, values) : scrubDiscovery(item, values, !names && DISCOVERY_NAMES.has(key))]));
   };
 
   async function view(row) {
@@ -491,7 +504,7 @@ export function createConnectors({
     await dropClient(id);
     try {
       // Discovery is scrubbed too: a server may echo the key in a description or schema.
-      const list = scrub(await (await client(row)).listTools(), await secretValues(id));
+      const list = scrubDiscovery(await (await client(row)).listTools(), await secretValues(id));
       await update(id, (r) => {
         r.tools = describeTools(
           r,

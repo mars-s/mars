@@ -84,12 +84,15 @@ export function createImageStore({ root }) {
       blocks.push({ type: 'image', data: (await readFile(path)).toString('base64'), mimeType: receipt.mimeType });
     };
     let from = 0;
-    // At most four images per message, however many chips repeat one: each placement is a
-    // whole image for the model, so a text of repeated chips must not multiply them.
+    // At most four images per message in all, placed or not: each is a whole image for the
+    // model, so a text of repeated chips must not multiply them. Every attached image keeps a
+    // slot, so a repeat is placed only while there is room beyond the images still to come.
     let placements = 0;
     for (const match of text.matchAll(IMAGE_CHIP)) {
       const [whole, label, id] = match;
-      if (!ids.includes(id) || placements >= MAX_PLACEMENTS) continue;
+      if (!ids.includes(id)) continue;
+      const waiting = ids.filter((other) => !placed.has(other)).length;
+      if (placed.has(id) && placements + waiting >= MAX_PLACEMENTS) continue;
       placements++;
       addText(text.slice(from, match.index).trim());
       await addImage(id, label);

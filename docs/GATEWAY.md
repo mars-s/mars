@@ -84,10 +84,13 @@ the gateway records the failure, marks the adapter `failed` and restarts it with
   - it is on the approved list in `mars.gateway` (`allow`). Only approving a pairing adds to
     the list, and only the owner's Remove (Settings, Gateway, Allowed senders, or
     `POST /api/gateway/allow/delete`) takes a sender off it. Mars never adds or removes an
-    approved sender by itself.
+    approved sender by itself, apart from the one-time cleanup below.
 - Hosts before 2026-10-24 copied the configured ids into the approved list at every boot.
-  Those copies stay until the owner removes them; Settings shows them as "Approved, and set
-  on the host", and removing one leaves the configured id allowed while it stays configured.
+  The first boot after that change removes, once, the copies of every id still configured
+  (and the HTTP API's `owner`), with a `removed` audit record for each. From then on only
+  the configuration allows those ids, so taking one out and restarting stops it. A copy of
+  an id that was already out of the configuration at that boot looks the same as an
+  approval, so it stays until the owner removes it in Settings, Gateway.
 - A removed sender is treated as unknown again: their next message gets a new pairing code
   and never reaches Pi.
 - An unknown sender's text never reaches Pi. They receive one reply with an 8-character

@@ -77,21 +77,30 @@ export function createConversationManager({ harness, root, context, defaultAgent
     return { items: await Promise.all(page.items.map(topRow)), next: page.next };
   }
   /**
-   * Pinned top-level chats older than the page that ends at `cursor`. Reads one small document
-   * per older chat; owned workers are skipped by their record and side chats cannot be pinned.
+   * The ids of pinned top-level chats, newest first. Found by one scan of every conversation the
+   * first time the sidebar asks, then kept here: organise() is the only way to pin or unpin, so
+   * the sidebar's poll reads only the pinned rows, never every older chat. Owned workers are
+   * skipped by their record and side chats cannot be pinned.
    */
-  async function pinnedAfter(cursor, present) {
-    const rows = [];
-    for (let next = cursor; next;) {
-      const batch = await harness.commit(tx => tx.scanConversations({ order: 'descending' }, 100, next), context);
-      for (const record of batch.items) {
-        if (record.owner || present.has(String(record.id))) continue;
-        if ((await harness.snapshot(OrganiseDoc, record.id, context))?.pinned !== true) continue;
-        if (!(await sideChatParent(harness, record.id, context))) rows.push(await topRow(record));
+  let pins;
+  function pinnedIds() {
+    pins ??= (async () => {
+      const ids = new Set();
+      for (let next, first = true; first || next; first = false) {
+        const batch = await harness.commit(tx => tx.scanConversations({ order: 'descending' }, 100, next), context);
+        for (const record of batch.items)
+          if (!record.owner && (await harness.snapshot(OrganiseDoc, record.id, context))?.pinned === true
+            && !(await sideChatParent(harness, record.id, context))) ids.add(record.id);
+        next = batch.next;
       }
-      next = batch.next;
-    }
-    return rows;
+      return ids;
+    })().catch((error) => { pins = undefined; throw error; });
+    return pins;
+  }
+  /** Pinned top-level chats not already in `present`, newest first. */
+  async function pinnedOutside(present) {
+    const ids = [...(await pinnedIds())].filter(id => !present.has(String(id))).sort((a, b) => b - a);
+    return Promise.all(ids.map(id => topRow({ id })));
   }
   return {
     resolve,
@@ -117,7 +126,7 @@ export function createConversationManager({ harness, root, context, defaultAgent
      * many newer chats there are (docs/LIVE-INTEGRATION.md).
      */
     async list(options) {
-      const { items, next } = await listPage(options);
+      const { items } = await listPage(options);
       const pinned = [];
       if (!items.some(item => item.id === String(root.id))) {
         if (items.length === 100) {
@@ -126,7 +135,7 @@ export function createConversationManager({ harness, root, context, defaultAgent
         }
         items.push(await topRow({ id: root.id }));
       }
-      return [...items, ...pinned, ...(await pinnedAfter(next, new Set(items.map(item => item.id))))];
+      return [...items, ...pinned, ...(await pinnedOutside(new Set([...items, ...pinned].map(item => item.id))))];
     },
     async create(options = {}) {
       const agent = { ...defaultAgent };
@@ -162,6 +171,8 @@ export function createConversationManager({ harness, root, context, defaultAgent
       if (archived !== undefined && typeof archived !== 'boolean') throw fail('archived must be true or false');
       if (pinned !== undefined && typeof pinned !== 'boolean') throw fail('pinned must be true or false');
       if (label === undefined && group === undefined && archived === undefined && pinned === undefined) throw fail('Nothing to change: give title, group, archived or pinned');
+      // Loaded before the change, so a first scan running now cannot miss or undo it.
+      const pinnedSet = pinned === undefined ? undefined : await pinnedIds();
       await conversation.commit(async tx => {
         if (label !== undefined) {
           // The owner's own name: the background model never replaces it.
@@ -176,6 +187,8 @@ export function createConversationManager({ harness, root, context, defaultAgent
           if (pinned !== undefined) filed.pinned = pinned;
         }
       }, context);
+      if (pinned === true) pinnedSet.add(conversation.id);
+      if (pinned === false) pinnedSet.delete(conversation.id);
       return row(record);
     },
     /** Name an untitled top-level conversation after its first message. Never renames. */
