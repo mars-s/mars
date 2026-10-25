@@ -53,6 +53,13 @@
   border: 0;
   background: var(--text-muted);
 }
+/* Left in progress when the reply ended: a still, half-filled mark, not a spinner. */
+.live-plan[data-idle] .live-plan-mark[data-status="in_progress"] {
+  animation: none;
+  border-color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  border-top-color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--text-muted) 45%, transparent) 50%, transparent 50%);
+}
 @keyframes live-plan-spin {
   to {
     transform: rotate(360deg);

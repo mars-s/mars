@@ -45,7 +45,7 @@ export function ConversationView() {
               onStop={(workerId) => safely(action("/api/workers/stop", { workerId }))}
             />
           )}
-          <PlanCard plan={snapshot?.plan ?? null} />
+          <PlanCard plan={snapshot?.plan ?? null} running={!!snapshot?.running} />
           {snapshot && <AgentActivity workers={workers} />}
           <RunProgress steps={runSteps(snapshot, toolViews)} />
         </div>

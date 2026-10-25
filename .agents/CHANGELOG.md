@@ -666,3 +666,7 @@ After Lee Robinson's talk on always-on agents (workspace/duet-research/07-always
 - The Duet thread is no longer listed in Recents or the chat list (nor its tasks with it): it is a different kind from the chats, which stay the working view with tool steps. A link or bookmark to the Duet conversation opens Duet's own page (?view=duet). New GET /api/duet/thread; createConversationManager takes hidden(id).
 - Typing dots show from the moment the owner sends to the front desk, before the host reports the turn, and go when Duet answers. GET /api/duet reports typing only for the owner's turns, so an event turn (whose replies are private) shows no dots.
 - check-duet-apart.mjs and tests/duet-apart-ui-check.mjs cover both; both fail on the old code.
+
+## 2026-10-25 Plan card: no spinner once the reply has ended
+
+- The plan card's in-progress spinner now turns only while the agent is working. A step left in progress when the reply ended (for example the agent forgot to tick its last step) shows as a still, half-filled mark and is read as "started, not finished". tests/plan-idle-ui-check.mjs covers both states.
