@@ -645,3 +645,14 @@ The owner approved changes to these protected files. scripts/test-update-night.m
 - Duet's own replies and results get Not right: on hover on a desktop, a long press on the bubble on a phone (the button stays for screen readers and keyboards). It opens "What was wrong? (optional)" and posts POST /api/duet/feedback { messageId, note }; the bubble then shows "Marked not right", as it does for "feedback": "wrong" from the host.
 - The task strip shows the thread's prompt cache, e.g. "Cache 91%", with a tooltip saying it is how much of the prompt the model provider reused. Hidden when the host has no figure. Without tasks it sits alone above the composer.
 - lib/pi/duet.ts no longer imports live-state, so node can load it: tests/duet.test.mjs (in npm test) covers the parsing, folding and cache wording. tests/duet-quiet-confirm-ui-check.mjs (in test:ui) covers the quiet card, both confirm answers, Not right on hover and by long press on a phone, and the cache figure. tests/duet-ui-check.mjs still passes.
+## 2026-10-25 Duet as a personal assistant (host)
+
+After Lee Robinson's talk on always-on agents (workspace/duet-research/07-always-on-agents-talk.md) and the owner's call on approvals. Spec docs/DUET.md "Assistant behaviour"; check-duet-assistant.mjs covers each point.
+- A request is the approval: Duet and its tasks act without asking, and ask only in a genuine grey area with duet_confirm, a Go ahead / Don't box (POST /api/duet/confirm). A task waits for the answer.
+- The owner's message steers a running front desk turn instead of queueing behind it.
+- An event router: duet_notify from any chat, POST /api/duet/event and "Not right" feedback are de-duplicated, merged into one turn behind the current one, and that turn's plain replies stay private; duet_send is the only way out to the owner.
+- Quiet by default: results of work the owner did not ask for are filed quietly; interim updates are limited to one every 30 minutes.
+- The front desk and task sections are byte-stable; tasks and the scratchpad arrive as a "[Duet now]" note only when they change, so the provider's cache holds. GET /api/duet reports the cache hit rate.
+- The thread is compacted about ten minutes after the owner goes quiet once it is large.
+- Layered memory: duet_journal (dated files), duet_scratch (an hour), memory_update for core facts.
+- Mistakes become evals: "Not right" (POST /api/duet/feedback) and duet_eval_add save cases in workspace/duet/evals.

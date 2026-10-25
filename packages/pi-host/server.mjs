@@ -203,7 +203,7 @@ const schedules = createSchedules({ harness: () => late.harness, rootId: () => l
   defaultAgent: () => ({ ...(late.defaultModel ? { model: late.defaultModel } : {}), cwd: WORK, modelTools: discovery.modelTools }) });
 registry.install(schedules.extension);
 // Duet: the owner's assistant thread over parallel background tasks (docs/DUET.md).
-const duet = createDuet({ harness: () => late.harness, models, context, openProject: (id, path) => projects.open(id, path),
+const duet = createDuet({ harness: () => late.harness, models, context, work: WORK, openProject: (id, path) => projects.open(id, path),
   ready: async (id) => providerReady(await late.conversations.state(id)),
   defaultAgent: () => ({ ...(late.defaultModel ? { model: late.defaultModel } : {}), cwd: WORK, modelTools: discovery.modelTools }) });
 registry.install(createDuetExtension({ duet }));

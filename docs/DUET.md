@@ -42,6 +42,47 @@ Code: `packages/pi-host/duet.mjs` (host), `apps/ui/components/duet/` and `apps/u
   answer, `chat_send` messages any chat. A code session is `lane_start`, then `chat_create`
   with the lane worktree as project. These tools work from any conversation.
 
+## Assistant behaviour
+
+Duet works like a personal assistant that mostly just does things (after Lee Robinson's
+"How always-on agents work", notes in workspace/duet-research/07-always-on-agents-talk.md).
+
+- **A request is the approval.** The front desk and tasks do what the owner asked, including
+  sending, booking, buying within what was said, deleting what was named, pushing or deploying.
+  They ask only in a genuine grey area (an ambiguous target, money or people the request did not
+  mention, something irreversible where they doubt it is what was meant, or going beyond the
+  request), with `duet_confirm`: a small box with **Go ahead** and **Don't**. A task waits for
+  the answer (its turn ends without a result), and the answer reaches it as a message.
+  `POST /api/duet/confirm { confirmId, answer: "yes" | "no" }` answers once.
+- **The owner comes first.** The owner's message to the front desk is a Pi steer: it cuts into
+  a running turn at its next step instead of waiting behind it.
+- **Events and the router.** `duet_notify` (from any other chat), `POST /api/duet/event
+  { text, source?, dedupeKey?, important? }` and "Not right" hand events to Duet. The same
+  `dedupeKey` is delivered once; events arriving within about 2.5 seconds are merged into one
+  front desk turn, queued behind the current one. That turn's input is a `mars.duet-wake` entry,
+  and its plain replies stay private: only `duet_send` reaches the owner. Often nothing does.
+- **Quiet by default.** A task started without the owner's words (`origin`) files its result
+  quietly (`quiet: true` on the bubble; the page groups them, collapsed). `quiet` on
+  `duet_task_start` overrides it. Interim updates are limited to one every 30 minutes and are for
+  news that changes what the owner should do; `duet_progress` updates the card silently.
+- **A byte-stable prompt.** The front desk and task sections never change between turns, so the
+  provider keeps reusing its cache. What changes (the tasks, the scratchpad) is appended as a
+  model-only `mars.duet-context` note ("[Duet now]") before a front desk turn, only when it
+  changed. Tasks list the others with `duet_task_list`. `GET /api/duet` reports
+  `context: { cacheHitPercent, cachedTokens, inputTokens, turns }` over the last 20 answers.
+- **Compaction after idle.** About ten minutes after the owner's last message, if the thread is
+  idle and its last turn used more than 60,000 tokens, the thread is compacted while the cache is
+  still warm, so the owner's return resumes from a short summary.
+- **Layered memory.** Core facts: `memory_update` (every prompt). A dated journal:
+  `duet_journal` writes `workspace/duet/journal/YYYY-MM-DD.md` (looked up with grep). An
+  hour-long scratchpad: `duet_scratch`, shown in the "[Duet now]" note. Everything else: files.
+- **Mistakes become evals.** "Not right" on a Duet message (`POST /api/duet/feedback
+  { messageId, note }`) saves the message, the owner's request and the messages before it as
+  `workspace/duet/evals/<date>-<id>.json`, marks the bubble (`feedback: "wrong"`) and hands the
+  front desk an event so it can put it right. `duet_eval_add` saves a case the owner gave in words.
+
+Check: `check-duet-assistant.mjs`.
+
 ## HTTP
 
 - `GET /api/duet`: `{ threadId, running, messages, tasks, board }`. Messages are bubbles:
@@ -66,3 +107,8 @@ From the spec: approval cards bound to exact actions, budget reservation, reader
 profiles, pending memory, proactive briefs, Telegram and Discord binding to the thread,
 images in Duet messages, and task sub-tasks. Existing Mars safety rules still apply to every
 task, because tasks are ordinary conversations.
+
+On the page: quiet results that come one after another fold into one small grey card ("3 quiet
+updates"); a confirm shows its action in a small box with Go ahead and Don't, then "You said go
+ahead"; Duet's replies and results have a small Not right action (hover, or a long press on a
+phone) with an optional one-line reason; the task strip shows "Cache 91%" when the host reports it.
