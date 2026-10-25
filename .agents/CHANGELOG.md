@@ -660,3 +660,9 @@ After Lee Robinson's talk on always-on agents (workspace/duet-research/07-always
 ## 2026-10-25 Sidebar archive check waits for every archive
 
 - tests/sidebar-archive-finished-ui-check.mjs waited for the "Archive N finished" button to go, but it hides once fewer than two rows are left, before the last archive is sent. It now waits for the archives themselves (it failed once in the full browser run).
+
+## 2026-10-25 Duet apart from the chats; typing dots
+
+- The Duet thread is no longer listed in Recents or the chat list (nor its tasks with it): it is a different kind from the chats, which stay the working view with tool steps. A link or bookmark to the Duet conversation opens Duet's own page (?view=duet). New GET /api/duet/thread; createConversationManager takes hidden(id).
+- Typing dots show from the moment the owner sends to the front desk, before the host reports the turn, and go when Duet answers. GET /api/duet reports typing only for the owner's turns, so an event turn (whose replies are private) shows no dots.
+- check-duet-apart.mjs and tests/duet-apart-ui-check.mjs cover both; both fail on the old code.

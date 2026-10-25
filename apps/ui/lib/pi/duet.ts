@@ -33,7 +33,7 @@ export type DuetTask = {
   progress: { text: string; done?: number; total?: number } | null;
   origin: string;
 };
-export type DuetView = { threadId: string; running: boolean; messages: DuetMessage[]; tasks: DuetTask[]; context: DuetContext | null };
+export type DuetView = { threadId: string; running: boolean; typing: boolean; messages: DuetMessage[]; tasks: DuetTask[]; context: DuetContext | null };
 
 const STATES: readonly string[] = ["queued", "running", "stopping", "waiting", "done", "stopped", "failed"];
 const SENDERS: readonly string[] = ["owner", "duet", "system"];
@@ -49,6 +49,9 @@ export function parseDuet(value: unknown): DuetView {
   return {
     threadId: /^[1-9]\d*$/.test(text(row.threadId)) ? text(row.threadId) : "",
     running: row.running === true,
+    // Typing dots: only while Duet answers the owner (an event turn's replies are private).
+    // An older host without the field types whenever the thread runs.
+    typing: row.typing === true || (row.typing === undefined && row.running === true),
     messages: list(row.messages)
       .map(record)
       .flatMap((m) =>

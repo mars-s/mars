@@ -542,7 +542,10 @@ export function createDuet({ harness: getHarness, models, defaultAgent, context 
       return { ...row, ...marked, confirm: { ...row.confirm, state: found?.state || 'pending' } };
     });
     const { lastTokens: _last, ...stats } = await cacheStats(thread);
-    return { threadId: thread, running: !!live?.run, messages, tasks: await tasks(thread), board: await boardOf(thread), context: stats };
+    // Typing dots only for a turn the owner started: an event turn's replies are private.
+    const lastInput = [...entries].reverse().find((entry) => ['mars.user', DUET_OWNER, DUET_ANSWER, DUET_WAKE, DUET_MAIL].includes(entry.kind));
+    const typing = !!live?.run && lastInput?.kind !== DUET_WAKE;
+    return { threadId: thread, running: !!live?.run, typing, messages, tasks: await tasks(thread), board: await boardOf(thread), context: stats };
   }
 
   async function sendMail({ thread, from, to, text, purpose = 'note' }) {
@@ -658,6 +661,8 @@ export function createDuet({ harness: getHarness, models, defaultAgent, context 
   /** GET /api/duet, POST /api/duet/open, /api/duet/message and /api/duet/stop. */
   async function route(method, pathname, body) {
     if (method === 'GET' && pathname === '/api/duet') return view();
+    // Which conversation is Duet, without building the view: the chat page sends it to Duet's own page.
+    if (method === 'GET' && pathname === '/api/duet/thread') return { threadId: await threadId() };
     if (method === 'POST' && pathname === '/api/duet/open') return { threadId: await ensureThread() };
     if (method === 'POST' && pathname === '/api/duet/message') return message(body || {});
     if (method === 'POST' && pathname === '/api/duet/stop') return stop({ thread: await ensureThread(), task: body?.taskId });

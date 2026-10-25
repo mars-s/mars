@@ -9,9 +9,12 @@ Code: `packages/pi-host/duet.mjs` (host), `apps/ui/components/duet/` and `apps/u
 
 ## How it works
 
-- **One thread.** The first time Duet opens, the host makes one ordinary conversation titled
+- **One thread, not a chat.** The first time Duet opens, the host makes one conversation titled
   "Duet" and marks it with `mars.duet-thread`. A session document, `mars.duet-home`, remembers
-  which one it is. It also shows in Recents, so it can be opened as a normal chat.
+  which one it is. It is a different kind from the chats: it is left out of Recents and the chat
+  list (with its tasks), and a link to it opens Duet's own iMessage-style page. The chats are the
+  working view with tool steps; a task's Open button shows its work there. `GET /api/duet/thread`
+  names the thread without building the view.
 - **Front desk.** The thread's agent gets the "Duet front desk" prompt section: reply like a
   text message, never do long work, and start a task for anything bigger than a few tool calls.
   It also sees a live list of the tasks.

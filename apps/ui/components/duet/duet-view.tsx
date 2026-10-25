@@ -39,6 +39,10 @@ export function DuetView() {
   const [draft, setDraft] = useState("");
   const [target, setTarget] = useState<{ taskId: string; label: string } | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
+  // Typing dots from the moment the owner sends to the front desk, before the host reports the
+  // turn: until Duet answers, its turn ends, or 20 seconds pass.
+  const [awaiting, setAwaiting] = useState(false);
+  const waitFor = useRef<{ since: number; replies: number; sawTyping: boolean } | null>(null);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [stopping, setStopping] = useState<Set<string>>(new Set());
   const [atBottom, setAtBottom] = useState(true);
@@ -57,6 +61,15 @@ export function DuetView() {
     try {
       const next = parseDuet(await piRequest("/api/duet"));
       setData(next);
+      const wait = waitFor.current;
+      if (wait) {
+        const replies = next.messages.filter((m) => m.from === "duet").length;
+        if (next.typing) wait.sawTyping = true;
+        if (replies > wait.replies || (wait.sawTyping && !next.typing) || Date.now() - wait.since > 20000) {
+          waitFor.current = null;
+          setAwaiting(false);
+        }
+      }
       setError("");
       setUnavailable(false);
       // Delivered messages replace their optimistic copies.
@@ -108,7 +121,7 @@ export function DuetView() {
   useLayoutEffect(() => {
     const element = scroller.current;
     if (element && atBottom) element.scrollTop = element.scrollHeight;
-  }, [count, data?.running, atBottom]);
+  }, [count, data?.typing, awaiting, atBottom]);
   const onScroll = () => {
     const element = scroller.current;
     if (element) setAtBottom(element.scrollHeight - element.scrollTop - element.clientHeight < 48);
@@ -129,6 +142,10 @@ export function DuetView() {
     const requestId = crypto.randomUUID();
     const row = { id: requestId, text, taskId: target?.taskId ?? "", label: target?.label ?? "" };
     setPending((rows) => [...rows, row]);
+    if (!target) {
+      waitFor.current = { since: Date.now(), replies: (data?.messages ?? []).filter((m) => m.from === "duet").length, sawTyping: false };
+      setAwaiting(true);
+    }
     setDraft("");
     setAtBottom(true);
     try {
@@ -279,7 +296,7 @@ export function DuetView() {
               </li>
             );
           })}
-          {data?.running && (
+          {(data?.typing || awaiting) && (
             <li className="duet-row" data-from="duet">
               <div className="duet-bubble duet-typing" data-tail="" aria-label="Duet is typing">
                 <span />

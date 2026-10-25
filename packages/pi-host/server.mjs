@@ -453,7 +453,7 @@ const defaultModel = echoModel ? { provider: "echo", modelId: "echo" } : { provi
 const root = await harness.root(context, {
   agent: { model: defaultModel, cwd: WORK, modelTools: discovery.modelTools },
 });
-const conversations = createConversationManager({ harness, root, context, defaultAgent: {
+const conversations = createConversationManager({ harness, root, context, hidden: async (id) => id === (await duet.threadId()), defaultAgent: {
   model: defaultModel, cwd: WORK, modelTools: discovery.modelTools,
 } });
 Object.assign(late, { harness, conversations });

@@ -11,7 +11,11 @@ const fail = (message, status = 400) => Object.assign(new Error(message), { stat
 const oneLine = (value, max) => String(value).replace(/\s+/g, ' ').trim().slice(0, max);
 const nativeId = value => typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
 /** Native conversation handles remain the only conversation store. */
-export function createConversationManager({ harness, root, context, defaultAgent }) {
+/**
+ * hidden(id) leaves conversations of another kind out of the chat list: the Duet thread is an
+ * iMessage-style assistant with its own page (docs/DUET.md), not a chat, and its tasks go with it.
+ */
+export function createConversationManager({ harness, root, context, defaultAgent, hidden = async () => false }) {
   async function resolve(id = root.id) {
     const conversation = await harness.conversation(nativeId(id || root.id), context);
     if (!conversation) throw Object.assign(new Error('Conversation not found'), { status: 404 });
@@ -70,7 +74,7 @@ export function createConversationManager({ harness, root, context, defaultAgent
     do {
       const batch = await harness.commit(tx => tx.scanConversations({ order: 'descending' }, limit - items.length, next), context);
       for (const record of batch.items)
-        if (!record.owner && !(await sideChatParent(harness, record.id, context))) items.push(record);
+        if (!record.owner && !(await sideChatParent(harness, record.id, context)) && !(await hidden(String(record.id)))) items.push(record);
       next = batch.next;
     } while (next && items.length < limit);
     const page = { items, next };
@@ -90,7 +94,7 @@ export function createConversationManager({ harness, root, context, defaultAgent
         const batch = await harness.commit(tx => tx.scanConversations({ order: 'descending' }, 100, next), context);
         for (const record of batch.items)
           if (!record.owner && (await harness.snapshot(OrganiseDoc, record.id, context))?.pinned === true
-            && !(await sideChatParent(harness, record.id, context))) ids.add(record.id);
+            && !(await sideChatParent(harness, record.id, context)) && !(await hidden(String(record.id)))) ids.add(record.id);
         next = batch.next;
       }
       return ids;

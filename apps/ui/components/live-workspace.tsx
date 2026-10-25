@@ -197,6 +197,34 @@ export function LiveWorkspace() {
   useEffect(() => {
     if (new URL(location.href).searchParams.get("view") === "duet") setDuetOpenState(true);
   }, []);
+  // Duet is not a chat: a link or bookmark to its conversation opens Duet's own page instead of
+  // the chat view (docs/DUET.md).
+  const duetThread = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedId) return;
+    let live = true;
+    const check = async () => {
+      if (duetThread.current === null) {
+        const value = await piRequest("/api/duet/thread").catch(() => null);
+        const id = value && typeof value === "object" && "threadId" in value ? String((value as { threadId: unknown }).threadId || "") : "";
+        duetThread.current = id;
+      }
+      if (!live || !duetThread.current || selectedId !== duetThread.current) return;
+      selected.current = "";
+      selectionEpoch.current++;
+      const url = new URL(location.href);
+      url.searchParams.delete("conversation");
+      history.replaceState({}, "", url);
+      setSelectedId("");
+      setSnapshot(null);
+      setDuetOpen(true);
+      void refresh();
+    };
+    void check();
+    return () => {
+      live = false;
+    };
+  }, [selectedId, setDuetOpen]);
   const requestKeys = useRef(new Map<string, { text: string; id: string }>());
   const refresh = useCallback(async () => {
     const conversationId = selected.current;
