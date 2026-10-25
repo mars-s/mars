@@ -255,6 +255,182 @@
     opacity: 0.8;
   }
 }
+/* Not right: on hover beside Duet's own bubbles. A phone uses a long press on the bubble, so the
+   button stays only for screen readers and keyboards there. */
+.duet-wrong {
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.duet-row:hover .duet-wrong,
+.duet-wrong:focus-visible {
+  opacity: 0.85;
+}
+@media (hover: none) {
+  .duet-wrong:not(:focus-visible) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .duet-row[data-from="duet"] .duet-bubble {
+    -webkit-touch-callout: none;
+  }
+}
+.duet-wrong-form {
+  display: flex;
+  width: min(78%, 420px);
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 2px 4px;
+}
+.duet-wrong-form input {
+  min-width: 0;
+  flex: 1;
+  padding: 5px 10px;
+  border: 1px solid var(--input);
+  border-radius: 999px;
+  background: var(--composer);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.duet-wrong-form input:focus-visible {
+  border-color: var(--ring);
+}
+.duet-wrong-form button {
+  display: inline-grid;
+  height: 26px;
+  place-items: center;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--secondary);
+  color: var(--foreground);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.duet-wrong-form .duet-wrong-cancel {
+  width: 26px;
+  padding: 0;
+  background: none;
+  color: var(--text-muted);
+}
+.duet-wrong-note {
+  margin: 2px 12px 0;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+/* The rare grey-area check: a small box inside the bubble, then just the answer. */
+.duet-confirm {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.18);
+  font-size: 13.5px;
+}
+.duet-confirm-action {
+  margin: 0 0 6px;
+}
+.duet-confirm[data-state="yes"],
+.duet-confirm[data-state="no"] {
+  padding: 0;
+  background: none;
+}
+.duet-confirm-said {
+  margin: 0;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+.duet-confirm-buttons {
+  display: flex;
+  gap: 6px;
+}
+.duet-confirm-buttons button {
+  padding: 4px 12px;
+  border: 1px solid rgb(255 255 255 / 0.45);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.duet-confirm-buttons button:first-child {
+  border-color: transparent;
+  background: var(--duet-bubble-text);
+  color: var(--duet-bubble);
+  font-weight: 600;
+}
+.duet-confirm-buttons button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.duet-confirm-buttons button:focus-visible {
+  outline: 2px solid var(--duet-bubble-text);
+  outline-offset: 2px;
+}
+/* Quiet results: one low-key fold, no colour, no pulse. */
+.duet-quiet {
+  margin: 10px 0 2px;
+}
+.duet-quiet-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.duet-quiet-toggle small {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+.duet-quiet-toggle:hover {
+  color: var(--foreground);
+}
+.duet-quiet-toggle:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.duet-quiet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.duet-strip-row {
+  display: flex;
+  align-items: center;
+}
+.duet-strip-row .duet-strip {
+  flex: 1;
+  min-width: 0;
+}
+.duet-cache {
+  flex: none;
+  padding: 0 12px 0 4px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.duet-meta {
+  display: flex;
+  justify-content: flex-end;
+}
+.duet-meta .duet-cache {
+  padding: 0 6px;
+}
 .duet-jump {
   position: absolute;
   bottom: 120px;

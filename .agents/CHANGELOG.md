@@ -636,3 +636,12 @@ The owner approved changes to these protected files. scripts/test-update-night.m
 - An update holding the lock counts as running before it writes its journal, so a second Update click in its first seconds no longer starts a second update.
 - extension-store.mjs: installing an earlier version again (a rollback) keeps its read-only frozen files, which are the same bytes, instead of failing with EACCES.
 - run-checks.mjs gives each check its own TMPDIR and removes it after, so checks no longer leave folders in /tmp (memory on this machine).
+
+## 2026-10-25 Duet interface: quiet results, confirm box, Not right
+
+- Built against the host contract the parallel host lane adds; every new field is read defensively, so an older host still shows the thread as before.
+- Quiet results ("quiet": true) fold, one run of consecutive ones at a time, into a small grey card such as "3 quiet updates · Hotels, Flights" that expands to the bubbles. They are not announced to screen readers.
+- A "confirm" bubble shows its action in a small box with Go ahead and Don't while pending. A click posts POST /api/duet/confirm { confirmId, answer: "yes" | "no" } and reloads; afterwards it shows "You said go ahead" or "You said don't". A new confirm is announced as "Label asks before going ahead".
+- Duet's own replies and results get Not right: on hover on a desktop, a long press on the bubble on a phone (the button stays for screen readers and keyboards). It opens "What was wrong? (optional)" and posts POST /api/duet/feedback { messageId, note }; the bubble then shows "Marked not right", as it does for "feedback": "wrong" from the host.
+- The task strip shows the thread's prompt cache, e.g. "Cache 91%", with a tooltip saying it is how much of the prompt the model provider reused. Hidden when the host has no figure. Without tasks it sits alone above the composer.
+- lib/pi/duet.ts no longer imports live-state, so node can load it: tests/duet.test.mjs (in npm test) covers the parsing, folding and cache wording. tests/duet-quiet-confirm-ui-check.mjs (in test:ui) covers the quiet card, both confirm answers, Not right on hover and by long press on a phone, and the cache figure. tests/duet-ui-check.mjs still passes.

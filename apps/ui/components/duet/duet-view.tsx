@@ -1,11 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, CornerUpLeft, ExternalLink, Square, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ChevronUp, CornerUpLeft, ExternalLink, Square, ThumbsDown, X } from "lucide-react";
 import { piRequest } from "@/lib/pi/live-state";
-import { isActive, parseDuet, stateWord, type DuetMessage, type DuetTask, type DuetView as DuetData } from "@/lib/pi/duet";
+import {
+  cacheLabel,
+  cacheTitle,
+  canMarkWrong,
+  groupQuiet,
+  isActive,
+  parseDuet,
+  quietSummary,
+  stateWord,
+  type DuetMessage,
+  type DuetTask,
+  type DuetView as DuetData,
+} from "@/lib/pi/duet";
 import { useWorkspace } from "@/components/workspace-context";
 import "./duet.css";
 
@@ -16,6 +28,8 @@ const missing = (failure: unknown) => failure instanceof Error && /\(404\)|not f
 const sameGroup = (a: DuetMessage | undefined, b: DuetMessage | undefined) =>
   !!a && !!b && a.from === b.from && a.from !== "system" && a.taskId === b.taskId;
 type Pending = { id: string; text: string; taskId: string; label: string };
+/** A touch held this long on a Duet bubble opens Not right, as hovering does on a desktop. */
+const LONG_PRESS_MS = 550;
 
 /** The Duet page: one iMessage-style thread with the owner's assistant and its background tasks. */
 export function DuetView() {
@@ -33,6 +47,11 @@ export function DuetView() {
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const seenResults = useRef<Set<string> | null>(null);
+  const [quietOpen, setQuietOpen] = useState<Set<string>>(new Set());
+  const [answers, setAnswers] = useState<Map<string, "yes" | "no">>(new Map());
+  const [answering, setAnswering] = useState("");
+  const [wrongOpen, setWrongOpen] = useState("");
+  const [markedWrong, setMarkedWrong] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -42,10 +61,12 @@ export function DuetView() {
       setUnavailable(false);
       // Delivered messages replace their optimistic copies.
       setPending((rows) => rows.filter((row) => !next.messages.some((m) => m.from === "owner" && m.text === row.text && m.taskId === row.taskId)));
-      const results = next.messages.filter((m) => m.from === "duet" && m.taskId && (m.kind === "result" || m.kind === "question" || m.kind === "failed"));
+      const results = next.messages.filter((m) => m.from === "duet" && m.taskId && !m.quiet && ["result", "question", "failed", "confirm"].includes(m.kind));
       if (seenResults.current) {
         const fresh = results.filter((m) => !seenResults.current?.has(m.id));
-        if (fresh.length) setAnnouncement(fresh.map((m) => (m.kind === "question" ? m.label + " has a question" : m.kind === "failed" ? m.label + " failed" : m.label + " finished")).join(". "));
+        const said = (m: DuetMessage) =>
+          m.kind === "question" ? m.label + " has a question" : m.kind === "confirm" ? m.label + " asks before going ahead" : m.kind === "failed" ? m.label + " failed" : m.label + " finished";
+        if (fresh.length) setAnnouncement(fresh.map(said).join(". "));
       }
       seenResults.current = new Set(results.map((m) => m.id));
     } catch (failure) {
@@ -142,10 +163,79 @@ export function DuetView() {
     }
   };
 
+  const answer = async (confirmId: string, choice: "yes" | "no") => {
+    setAnswering(confirmId);
+    try {
+      await piRequest("/api/duet/confirm", { confirmId, answer: choice });
+      setAnswers((rows) => new Map(rows).set(confirmId, choice));
+      await load();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not send your answer.");
+    } finally {
+      setAnswering("");
+    }
+  };
+  const markWrong = async (messageId: string, note: string) => {
+    try {
+      await piRequest("/api/duet/feedback", { messageId, note: note.trim() });
+      setMarkedWrong((rows) => new Set(rows).add(messageId));
+      setWrongOpen("");
+      void load();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Could not send that.");
+    }
+  };
+  const toggleQuiet = (id: string) =>
+    setQuietOpen((rows) => {
+      const next = new Set(rows);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
   const shown: DuetMessage[] = [
     ...messages,
-    ...pending.map((row) => ({ id: "pending-" + row.id, from: "owner" as const, kind: "pending", text: row.text, taskId: row.taskId, label: row.label, quote: "" })),
+    ...pending.map((row) => ({
+      id: "pending-" + row.id,
+      from: "owner" as const,
+      kind: "pending",
+      text: row.text,
+      taskId: row.taskId,
+      label: row.label,
+      quote: "",
+      quiet: false,
+      feedback: "" as const,
+      confirm: null,
+    })),
   ];
+  const items = groupQuiet(shown);
+  const bubble = (message: DuetMessage, previous: DuetMessage | undefined, next: DuetMessage | undefined) =>
+    message.from === "system" ? (
+      <li key={message.id} className="duet-system" data-kind={message.kind}>
+        {message.kind === "mail" ? message.text : message.text + (message.taskId ? " · " + message.taskId : "")}
+      </li>
+    ) : (
+      <Bubble
+        key={message.id}
+        message={message}
+        first={!sameGroup(previous, message)}
+        last={!sameGroup(message, next)}
+        task={taskById.get(message.taskId)}
+        onReply={replyTo}
+        answer={message.confirm ? (message.confirm.state === "pending" ? answers.get(message.confirm.id) : message.confirm.state) : undefined}
+        answering={!!message.confirm && answering === message.confirm.id}
+        onAnswer={(choice) => message.confirm && void answer(message.confirm.id, choice)}
+        wrong={message.feedback === "wrong" || markedWrong.has(message.id)}
+        wrongOpen={wrongOpen === message.id}
+        onWrongOpen={(open) => setWrongOpen(open ? message.id : "")}
+        onWrong={(note) => markWrong(message.id, note)}
+      />
+    );
+  const cache = cacheLabel(data?.context ?? null);
+  const cacheNote = cache && (
+    <span className="duet-cache" title={cacheTitle(data?.context ?? null)}>
+      {cache}
+    </span>
+  );
   const queued = active.filter((task) => task.state === "queued").length;
   const needsYou = tasks.filter((task) => task.state === "waiting").length;
   const summary =
@@ -166,22 +256,29 @@ export function DuetView() {
               )}
             </li>
           )}
-          {shown.map((message, index) =>
-            message.from === "system" ? (
-              <li key={message.id} className="duet-system" data-kind={message.kind}>
-                {message.kind === "mail" ? message.text : message.text + (message.taskId ? " · " + message.taskId : "")}
+          {items.map((item, index) => {
+            const neighbour = (at: number) => {
+              const other = items[at];
+              return other?.kind === "message" ? other.message : undefined;
+            };
+            if (item.kind === "message") return bubble(item.message, neighbour(index - 1), neighbour(index + 1));
+            const open = quietOpen.has(item.id);
+            const labels = [...new Set(item.messages.map((m) => m.label).filter(Boolean))].join(", ");
+            return (
+              <li key={item.id} className="duet-quiet" data-open={open ? "" : undefined}>
+                <button type="button" className="duet-quiet-toggle" aria-expanded={open} onClick={() => toggleQuiet(item.id)}>
+                  {open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
+                  <span>{quietSummary(item.messages)}</span>
+                  {labels && <small>{labels}</small>}
+                </button>
+                {open && (
+                  <ol className="duet-quiet-list">
+                    {item.messages.map((message, at) => bubble(message, item.messages[at - 1], item.messages[at + 1]))}
+                  </ol>
+                )}
               </li>
-            ) : (
-              <Bubble
-                key={message.id}
-                message={message}
-                first={!sameGroup(shown[index - 1], message)}
-                last={!sameGroup(message, shown[index + 1])}
-                task={taskById.get(message.taskId)}
-                onReply={replyTo}
-              />
-            ),
-          )}
+            );
+          })}
           {data?.running && (
             <li className="duet-row" data-from="duet">
               <div className="duet-bubble duet-typing" data-tail="" aria-label="Duet is typing">
@@ -210,13 +307,17 @@ export function DuetView() {
         </div>
       )}
       <footer className="duet-footer">
+        {tasks.length === 0 && cacheNote && <div className="duet-meta">{cacheNote}</div>}
         {tasks.length > 0 && (
           <div className="duet-tasks" data-open={tasksOpen ? "" : undefined}>
-            <button type="button" className="duet-strip" aria-expanded={tasksOpen} onClick={() => setTasksOpen(!tasksOpen)}>
-              {active.length > 0 && <span className="duet-pulse" aria-hidden="true" />}
-              <span>{summary}</span>
-              {tasksOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-            </button>
+            <div className="duet-strip-row">
+              <button type="button" className="duet-strip" aria-expanded={tasksOpen} onClick={() => setTasksOpen(!tasksOpen)}>
+                {active.length > 0 && <span className="duet-pulse" aria-hidden="true" />}
+                <span>{summary}</span>
+                {tasksOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              </button>
+              {cacheNote}
+            </div>
             {tasksOpen && (
               <ul className="duet-task-list">
                 {recent.map((task) => (
@@ -294,21 +395,55 @@ function Bubble({
   last,
   task,
   onReply,
+  answer,
+  answering,
+  onAnswer,
+  wrong,
+  wrongOpen,
+  onWrongOpen,
+  onWrong,
 }: {
   message: DuetMessage;
   first: boolean;
   last: boolean;
   task: DuetTask | undefined;
   onReply: (task: { taskId: string; label: string }) => void;
+  /** On a confirm: the owner's answer once given. */
+  answer: "yes" | "no" | undefined;
+  answering: boolean;
+  onAnswer: (choice: "yes" | "no") => void;
+  /** Marked Not right. */
+  wrong: boolean;
+  wrongOpen: boolean;
+  onWrongOpen: (open: boolean) => void;
+  onWrong: (note: string) => Promise<void>;
 }) {
   const fromTask = message.from === "duet" && message.taskId;
   const toTask = message.from === "owner" && message.taskId;
+  const markable = canMarkWrong(message) && !wrong;
+  const press = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const endPress = () => clearTimeout(press.current);
+  useEffect(() => () => clearTimeout(press.current), []);
+  const touch = markable
+    ? {
+        onPointerDown: (event: PointerEvent) => {
+          if (event.pointerType !== "touch") return;
+          endPress();
+          press.current = setTimeout(() => onWrongOpen(true), LONG_PRESS_MS);
+        },
+        onPointerUp: endPress,
+        onPointerCancel: endPress,
+        onPointerMove: (event: PointerEvent) => {
+          if (event.pointerType === "touch" && Math.hypot(event.movementX, event.movementY) > 6) endPress();
+        },
+      }
+    : {};
   return (
     <li className="duet-row" data-from={message.from} data-first={first ? "" : undefined} data-pending={message.kind === "pending" ? "" : undefined}>
       {fromTask && first && (
         <span className="duet-label">
           {message.label} · {message.taskId}
-          {message.kind === "question" ? " asks" : message.kind === "update" ? " update" : message.kind === "failed" ? " failed" : ""}
+          {message.kind === "question" || message.kind === "confirm" ? " asks" : message.kind === "update" ? " update" : message.kind === "failed" ? " failed" : ""}
         </span>
       )}
       {toTask && first && (
@@ -317,7 +452,7 @@ function Bubble({
         </span>
       )}
       <div className="duet-line">
-        <div className="duet-bubble" data-tail={last ? "" : undefined} data-kind={message.kind}>
+        <div className="duet-bubble" data-tail={last ? "" : undefined} data-kind={message.kind} {...touch}>
           {fromTask && message.quote && message.kind === "result" && <p className="duet-quote">↳ “{message.quote}”</p>}
           {message.from === "duet" ? (
             <div className="duet-markdown">
@@ -331,6 +466,23 @@ function Bubble({
           ) : (
             <p className="duet-plain">{message.text}</p>
           )}
+          {message.confirm && (
+            <div className="duet-confirm" data-state={answer ?? "pending"}>
+              {message.confirm.action && <p className="duet-confirm-action">{message.confirm.action}</p>}
+              {answer ? (
+                <p className="duet-confirm-said">{answer === "yes" ? "You said go ahead" : "You said don't"}</p>
+              ) : (
+                <div className="duet-confirm-buttons">
+                  <button type="button" disabled={answering} onClick={() => onAnswer("yes")}>
+                    Go ahead
+                  </button>
+                  <button type="button" disabled={answering} onClick={() => onAnswer("no")}>
+                    Don&apos;t
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {fromTask && (
           <button
@@ -343,7 +495,50 @@ function Bubble({
             <CornerUpLeft size={14} />
           </button>
         )}
+        {markable && !wrongOpen && (
+          <button type="button" className="duet-icon duet-wrong" aria-label="Not right" title="Not right: tell Duet this missed" onClick={() => onWrongOpen(true)}>
+            <ThumbsDown size={13} />
+          </button>
+        )}
       </div>
+      {markable && wrongOpen && <WrongNote onSend={onWrong} onCancel={() => onWrongOpen(false)} />}
+      {wrong && <span className="duet-wrong-note">Marked not right</span>}
     </li>
+  );
+}
+
+/** The one-line "What was wrong?" box under a Duet bubble. */
+function WrongNote({ onSend, onCancel }: { onSend: (note: string) => Promise<void>; onCancel: () => void }) {
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => field.current?.focus(), []);
+  return (
+    <form
+      className="duet-wrong-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setSending(true);
+        void onSend(note).finally(() => setSending(false));
+      }}
+    >
+      <input
+        ref={field}
+        value={note}
+        maxLength={500}
+        placeholder="What was wrong? (optional)"
+        aria-label="What was wrong? (optional)"
+        onChange={(event) => setNote(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onCancel();
+        }}
+      />
+      <button type="submit" disabled={sending}>
+        Send
+      </button>
+      <button type="button" className="duet-wrong-cancel" aria-label="Cancel" onClick={onCancel}>
+        <X size={13} />
+      </button>
+    </form>
   );
 }
