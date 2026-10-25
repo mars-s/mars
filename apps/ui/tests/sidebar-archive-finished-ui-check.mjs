@@ -46,20 +46,22 @@ await page.route("**/api/**", async (route) => {
   } });
 });
 const sidebar = page.locator(".live-sidebar");
+// The button hides once fewer than two finished rows are left, before the last archive is sent, so wait for the posts.
+const until = async (check) => { for (let n = 0; n < 100 && !check(); n++) await page.waitForTimeout(50); };
 const checks = [];
 try {
   await page.goto(uiBaseURL() + "?conversation=1", { waitUntil: "domcontentloaded", timeout: 180000 });
   await waitForHydration(page);
   const subs = sidebar.getByRole("list", { name: "Sub-threads" });
   await subs.getByRole("button", { name: "Archive 2 finished" }).click();
-  await page.waitForFunction(() => !document.querySelector('[aria-label="Sub-threads"] .live-archive-finished'));
+  await until(() => ["41","42"].every((id) => archived.has(id)));
   assert.deepEqual([...archived].sort(), ["41", "42"], "only the finished sub-threads");
   assert.equal(await subs.getByRole("button", { name: /^Bug hunt: running/ }).count(), 1, "the running one stays");
   checks.push("archive finished sub-threads");
 
   const side = sidebar.getByRole("list", { name: "Side chats" });
   await side.getByRole("button", { name: "Archive 2 finished" }).click();
-  await page.waitForFunction(() => !document.querySelector('[aria-label="Side chats"] .live-archive-finished'));
+  await until(() => ["31","32"].every((id) => archived.has(id)));
   assert.ok(archived.has("31") && archived.has("32") && !archived.has("33"), "finished side chats only");
   checks.push("archive finished side chats");
 

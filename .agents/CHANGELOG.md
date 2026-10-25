@@ -656,3 +656,7 @@ After Lee Robinson's talk on always-on agents (workspace/duet-research/07-always
 - The thread is compacted about ten minutes after the owner goes quiet once it is large.
 - Layered memory: duet_journal (dated files), duet_scratch (an hour), memory_update for core facts.
 - Mistakes become evals: "Not right" (POST /api/duet/feedback) and duet_eval_add save cases in workspace/duet/evals.
+
+## 2026-10-25 Sidebar archive check waits for every archive
+
+- tests/sidebar-archive-finished-ui-check.mjs waited for the "Archive N finished" button to go, but it hides once fewer than two rows are left, before the last archive is sent. It now waits for the archives themselves (it failed once in the full browser run).
