@@ -620,3 +620,9 @@ From a review of tonight's lanes changes; check-lane-locks-night.mjs covers each
 ## 2026-10-24 Lanes: record a merge after its cleanup
 
 - The merge queue records a lane's outcome after its cleanup, in the same step that picks the next lane, so once a lane reads merged the runner no longer writes the lanes files. Before, the next step could create a lock in data/ while a caller (or check-lane-locks-night.mjs's cleanup) removed the folder: that check failed with ENOTEMPTY in 5 of 32 runs under load, which stopped a host_deploy in staging; 0 of 32 now. A crash between cleanup and the record leaves the lane merging, and recovery finds main has it.
+
+## 2026-10-25 Sidebar: archive finished sub-chats at once, show older side chats
+
+- Under a chat, sub-threads and side chats get "Archive N finished" when two or more have finished (Done, Failed, Stopped or Ended; side chats not running). Running ones stay. Each row's menu still archives one.
+- "N older side chats (ask Mars to list them)" is now "Show N older side chats", loading them from the new GET /api/conversations/side-chats?parentId&offset&limit (listSideChats). Older archived ones fold into the archived toggle.
+- tests/sidebar-archive-finished-ui-check.mjs covers both.

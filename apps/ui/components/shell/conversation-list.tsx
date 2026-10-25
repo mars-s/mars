@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useWorkspace } from "@/components/workspace-context";
-import type { ConversationSummary, SideChatSummary } from "@/lib/pi/live-state";
+import { piRequest, record, type ConversationSummary, type SideChatSummary } from "@/lib/pi/live-state";
 import { ChannelMark } from "./channel-mark";
 import { ChildNavigation } from "./child-navigation";
 
@@ -438,26 +438,52 @@ function SideChats({
   total: number;
   onName: (naming: Naming) => void;
 }) {
-  const { snapshot } = useWorkspace();
-  const rows = [...sideChats];
+  const { snapshot, safely } = useWorkspace();
+  // Side chats older than the host's first page, loaded on request (GET /api/conversations/side-chats).
+  const [older, setOlder] = useState<SideChatSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const rows = [...sideChats, ...older.filter((row) => !sideChats.some((side) => side.id === row.id))];
   if (snapshot?.sideChatOf === parentId && !rows.some((row) => row.id === snapshot.conversationId))
     rows.unshift({ id: snapshot.conversationId, title: snapshot.conversationTitle || "Side chat", running: snapshot.running });
   if (!rows.length) return null;
+  const remaining = total - sideChats.length - older.length;
+  const showOlder = () => {
+    setLoading(true);
+    safely(
+      piRequest(`/api/conversations/side-chats?parentId=${encodeURIComponent(parentId)}&offset=${sideChats.length + older.length}&limit=100`)
+        .then((value) => {
+          const items = Array.isArray(record(value).items) ? (record(value).items as unknown[]) : [];
+          const parsed = items.map(record).flatMap((row) =>
+            typeof row.id === "string"
+              ? [{ id: row.id, title: typeof row.title === "string" ? row.title : "Side chat", running: row.running === true, archived: row.archived === true }]
+              : [],
+          );
+          setOlder((current) => [...current, ...parsed]);
+        })
+        .finally(() => setLoading(false)),
+    );
+  };
   return (
     <NestedList
       label="Side chats"
       rows={rows.map((row) => ({ ...row, side: true }))}
       onName={onName}
       footer={
-        total > rows.length ? (
-          <li className="live-side-chat-more">
-            {total - rows.length} older side {total - rows.length === 1 ? "chat" : "chats"} (ask Mars to list them)
+        total > 0 && remaining > 0 ? (
+          <li>
+            <button type="button" className="live-nested-archived live-side-chat-more" disabled={loading} onClick={showOlder}>
+              <ChevronRight size={12} aria-hidden="true" className="live-group-chevron" />
+              {loading ? "Loading…" : `Show ${remaining} older side ${remaining === 1 ? "chat" : "chats"}`}
+            </button>
           </li>
         ) : null
       }
     />
   );
 }
+
+/** Sub-thread states (child-navigation.tsx statusText) that mean the work has ended. */
+const FINISHED = new Set(["Done", "Failed", "Stopped", "Ended"]);
 
 export type NestedRowData = { id: string; title: string; running?: boolean; archived?: boolean; status?: string; side?: boolean };
 
@@ -477,15 +503,32 @@ export function NestedList({
   footer?: ReactNode;
 }) {
   const { selectedId, extensionsOpen } = useWorkspace();
+  const { organiseConversation, safely } = useWorkspace();
   const [showArchived, setShowArchived] = useState(false);
   const live = rows.filter((row) => !row.archived || (!extensionsOpen && row.id === selectedId));
   const archived = rows.filter((row) => !live.includes(row));
+  // Finished rows that are still listed: archived together with one click, oldest last.
+  const finished = live.filter((row) => !row.archived && !row.running && (row.side || FINISHED.has(row.status ?? "")));
   if (!rows.length) return null;
+  const archiveFinished = () =>
+    safely(
+      (async () => {
+        for (const row of finished) await organiseConversation(row.id, { archived: true });
+      })(),
+    );
   return (
     <ul className="live-side-chats" aria-label={label}>
       {live.map((row) => (
         <NestedRow key={row.id} row={row} onName={onName} />
       ))}
+      {finished.length >= 2 && (
+        <li>
+          <button type="button" className="live-nested-archived live-archive-finished" onClick={archiveFinished}>
+            <Archive size={12} aria-hidden="true" />
+            Archive {finished.length} finished
+          </button>
+        </li>
+      )}
       {archived.length > 0 && (
         <li>
           <button

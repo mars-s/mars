@@ -18,7 +18,7 @@ import { createSelfEdit } from "./self-edit.mjs";
 import { createUpdates } from "./updates.mjs";
 import { createConversationManager } from "./conversations.mjs";
 import { abortKeepingQueue, removeQueued, steerQueued, whenBusy } from "./queue.mjs";
-import { createSideChatExtension } from "./side-chats.mjs";
+import { createSideChatExtension, listSideChats } from "./side-chats.mjs";
 import { createDuet, createDuetExtension } from "./duet.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
@@ -725,6 +725,14 @@ const server = http.createServer(async (req, res) => {
         : undefined;
       const conversation = await conversations.create({ ...data, ...selection, thinking });
       send(res, 201, { conversation: { id: String(conversation.id), title: data.title || (data.parentId ? "Side chat" : "New conversation"), ...(data.parentId ? { parentId: String(data.parentId) } : {}) } }); return;
+    }
+    // Older side chats than the sidebar's first page, for its "Show older" button.
+    if (url.pathname === "/api/conversations/side-chats" && req.method === "GET") {
+      const parent = await conversations.resolve(url.searchParams.get("parentId") || undefined);
+      const offset = Math.max(0, Math.min(10000, Number(url.searchParams.get("offset")) || 0));
+      const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit")) || 50));
+      send(res, 200, await listSideChats({ harness, parentId: String(parent.id), context, offset, limit }));
+      return;
     }
     if (url.pathname === "/api/conversations/organise" && req.method === "POST") {
       send(res, 200, { conversation: await conversations.organise(await jsonBody(req)) }); return;
