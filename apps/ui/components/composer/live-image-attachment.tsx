@@ -3,6 +3,7 @@ import { AttachmentPrimitive, useAuiState } from "@assistant-ui/react";
 import { removeImageChip } from "@/components/composer/image-chips";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { ImageViewerTrigger } from "@/components/image-viewer/image-viewer";
 
 const STATUS = { running: "Uploading…", incomplete: "Upload failed", "requires-action": "Ready", complete: "Ready" } as const;
 
@@ -20,9 +21,9 @@ export function LiveImageAttachment() {
     <AttachmentPrimitive.Root className="live-image-draft" data-status={attachment.status.type}>
       <span className="live-image-draft-thumb">
         {preview && (
-          <a href={preview} target="_blank" rel="noreferrer" aria-label={`Open ${attachment.name}`}>
+          <ImageViewerTrigger src={preview} alt={attachment.name}>
             <img src={preview} alt={attachment.name} />
-          </a>
+          </ImageViewerTrigger>
         )}
         <AttachmentPrimitive.Remove
           aria-label={`Remove ${attachment.name}`}

@@ -1,0 +1,86 @@
+.mars-image-trigger {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  border-radius: inherit;
+}
+
+.mars-image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: color-mix(in oklab, black 78%, transparent);
+  backdrop-filter: blur(14px);
+  animation: mars-image-viewer-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.mars-image-viewer[data-closing] {
+  animation: mars-image-viewer-out 180ms ease-in forwards;
+}
+.mars-image-viewer-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  outline: none;
+  touch-action: none;
+  cursor: zoom-out;
+}
+.mars-image-viewer-stage img {
+  max-width: calc(100vw - 96px);
+  max-height: calc(100vh - 128px);
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+  user-select: none;
+  cursor: zoom-in;
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+  animation: mars-image-viewer-pop 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.mars-image-viewer-stage[data-zoomed] img { cursor: grab; }
+.mars-image-viewer-stage[data-dragging] img { cursor: grabbing; transition: none; }
+
+.mars-image-viewer-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgb(30 30 30 / 72%);
+  border: 1px solid rgb(255 255 255 / 8%);
+  color: rgb(255 255 255 / 85%);
+  font-size: 12px;
+}
+.mars-image-viewer-bar button {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.mars-image-viewer-bar button:hover:not(:disabled) { background: rgb(255 255 255 / 10%); }
+.mars-image-viewer-bar button:disabled { opacity: 0.35; cursor: default; }
+.mars-image-viewer-scale { min-width: 48px; }
+.mars-image-viewer-label { padding: 0 10px 0 8px; opacity: 0.7; }
+
+@keyframes mars-image-viewer-in { from { opacity: 0; } }
+@keyframes mars-image-viewer-out { to { opacity: 0; } }
+@keyframes mars-image-viewer-pop { from { scale: 0.96; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mars-image-viewer, .mars-image-viewer-stage img { animation: none; transition: none; }
+}

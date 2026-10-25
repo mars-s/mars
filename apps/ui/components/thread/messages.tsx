@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { record, type LiveMessage } from "@/lib/pi/live-state";
 import { userParts } from "@/lib/pi/image-chips";
 import { remoteImageHost, safeImageSource } from "@/lib/pi/safe-image";
+import { ImageViewerTrigger } from "@/components/image-viewer/image-viewer";
 import { ActivityTimeline } from "@/components/activity/activity-timeline";
 import "./thread.css";
 
@@ -85,7 +86,12 @@ function MarkdownLink({ node: _node, ...props }: MarkdownProps<"a">) {
 function MarkdownImage({ node: _node, src, alt, ...props }: ComponentProps<"img"> & { node?: unknown }) {
   // Only Mars's own or inline images load; a remote one becomes a link (lib/pi/safe-image.ts).
   const safe = safeImageSource(src);
-  if (safe) return <img {...props} src={safe} alt={alt ?? ""} />;
+  if (safe)
+    return (
+      <ImageViewerTrigger src={safe} alt={alt ?? ""}>
+        <img {...props} src={safe} alt={alt ?? ""} />
+      </ImageViewerTrigger>
+    );
   const host = remoteImageHost(src);
   return host ? (
     <a href={String(src)} target="_blank" rel="noreferrer" className="mars-remote-image">
@@ -116,9 +122,9 @@ function InlineImage({ image, filename }: { image: string; filename?: string }) 
   const label = typeof record(labels)[image] === "string" ? String(record(labels)[image]) : "";
   return (
     <figure className="live-inline-image">
-      <a href={image} target="_blank" rel="noreferrer">
+      <ImageViewerTrigger src={image} alt={filename ?? "Image"} label={label}>
         <img src={image} alt={label ? `${label}: ${filename ?? "image"}` : (filename ?? "Image")} />
-      </a>
+      </ImageViewerTrigger>
       {label && <figcaption>{label}</figcaption>}
     </figure>
   );

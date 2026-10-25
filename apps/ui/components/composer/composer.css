@@ -288,7 +288,7 @@
   width: 56px;
   height: 56px;
 }
-.live-image-draft-thumb a {
+.live-image-draft-thumb .mars-image-trigger {
   display: block;
   width: 100%;
   height: 100%;

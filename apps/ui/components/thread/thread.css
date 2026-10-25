@@ -82,7 +82,7 @@
   margin: 6px 6px 6px 0;
   vertical-align: top;
 }
-.live-inline-image a {
+.live-inline-image .mars-image-trigger {
   display: block;
   width: fit-content;
   border-radius: 12px;
@@ -90,7 +90,7 @@
   border: 1px solid var(--border);
   transition: border-color 160ms var(--ease-out);
 }
-.live-inline-image a:hover {
+.live-inline-image .mars-image-trigger:hover {
   border-color: var(--text-faint);
 }
 .live-inline-image img {
