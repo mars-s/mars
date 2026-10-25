@@ -1,6 +1,8 @@
 // Runs every check-*.mjs in parallel. --json prints a one-line summary last; exit 1 on any failure.
 import { spawn } from 'node:child_process';
-import { readdir } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const json = process.argv.includes('--json');
@@ -14,13 +16,17 @@ async function worker() {
   while (next < checks.length) {
     const file = checks[next++];
     const started = Date.now();
+    // Each check gets its own TMPDIR, removed after it: checks that leave temporary folders
+    // behind (test-host.mjs's "mars workbench" roots, for one) no longer fill /tmp.
+    const tmp = await mkdtemp(join(tmpdir(), 'mars-check-'));
     const result = await new Promise(resolve => {
-      const child = spawn(process.execPath, [file], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(process.execPath, [file], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, TMPDIR: tmp } });
       let log = '';
       child.stdout.on('data', d => { log += d; }); child.stderr.on('data', d => { log += d; });
       const timer = setTimeout(() => child.kill('SIGKILL'), Number(process.env.MARS_CHECK_TIMEOUT_MS || 180000));
       child.on('close', code => { clearTimeout(timer); resolve({ file, code, ms: Date.now() - started, log: log.slice(-1500) }); });
     });
+    await rm(tmp, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
     results.push(result);
     if (!json) console.log((result.code === 0 ? 'ok   ' : 'FAIL ') + file + ' ' + result.ms + 'ms' + (result.code === 0 ? '' : '\n' + result.log));
   }

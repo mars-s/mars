@@ -18,6 +18,10 @@ npm-debug.log*
 *.db
 *.db-*
 node_modules.prev*/
+# Folders the updater builds beside the live copy, and keeps while it can still undo.
+*.incoming-*/
+*.prev-*/
+*.failed-*/
 packages/pi-host/.workspace-lock.json
 .impeccable/config.local.json
 .impeccable/hook.cache.json

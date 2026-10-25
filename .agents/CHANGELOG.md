@@ -626,3 +626,13 @@ From a review of tonight's lanes changes; check-lane-locks-night.mjs covers each
 - Under a chat, sub-threads and side chats get "Archive N finished" when two or more have finished (Done, Failed, Stopped or Ended; side chats not running). Running ones stay. Each row's menu still archives one.
 - "N older side chats (ask Mars to list them)" is now "Show N older side chats", loading them from the new GET /api/conversations/side-chats?parentId&offset&limit (listSideChats). Older archived ones fold into the archived toggle.
 - tests/sidebar-archive-finished-ui-check.mjs covers both.
+
+## 2026-10-25 Updater and protected gates (owner approved)
+
+The owner approved changes to these protected files. scripts/test-update-night.mjs and check-extension-reinstall.mjs fail on the old code and pass on the new.
+- scripts/update.mjs recover(): return await settle(...). A bare return let finally unlock while settle() still moved files, so a second recovery could undo the same update again and delete the runtime. The "dead lock: exactly one wins" test failed 4 of 24 parallel runs before, 0 of 24 now.
+- An update killed while preparing is recorded as failed and its incoming folders removed, instead of showing "updating" for 30 minutes and leaving large folders git did not ignore (.gitignore now ignores *.incoming-*/, *.prev-*/ and *.failed-*/).
+- A checkout step that failed because a commit landed while the services stopped is no longer undone as "rollback failed, Mars may be down": it moved nothing.
+- An update holding the lock counts as running before it writes its journal, so a second Update click in its first seconds no longer starts a second update.
+- extension-store.mjs: installing an earlier version again (a rollback) keeps its read-only frozen files, which are the same bytes, instead of failing with EACCES.
+- run-checks.mjs gives each check its own TMPDIR and removes it after, so checks no longer leave folders in /tmp (memory on this machine).

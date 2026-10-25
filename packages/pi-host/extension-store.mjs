@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile, rename, readdir, lstat } from "node:fs/promises";
+import { readFile, mkdir, writeFile, rename, readdir, lstat, chmod } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -125,8 +125,15 @@ export class ExtensionStore {
       throw Error("Reserved extension name");
     const frozen = join(this.base, "extensions", hash);
     await mkdir(frozen, { recursive: true, mode: 0o700 });
-    for (const [name, content] of Object.entries(files))
+    // The folder is named by the content's hash, so files already there (an earlier install of
+    // this exact version, read-only) are the same bytes: keep them rather than write over them.
+    for (const [name, content] of Object.entries(files)) {
+      const kept = await readFile(join(frozen, name), "utf8").catch(() => null);
+      if (kept === content) continue;
+      if (kept !== null) await chmod(join(frozen, name), 0o600);
       await writeFile(join(frozen, name), content, { mode: 0o400 });
+      await chmod(join(frozen, name), 0o400);
+    }
     const row = {
       name: manifest.name,
       version: manifest.version,

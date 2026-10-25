@@ -148,8 +148,12 @@ the switch-over (power loss, `kill -9`), the journal still says `switching`, or
 
 Settling a `committed` update finishes it forwards (`updated`). Settling a `switching`
 update undoes it (`interrupted`). A live update holding the lock is left alone.
-`npm run update -- recover` does the same by hand. An interrupted prepare needs no undo;
-nothing live changed.
+`npm run update -- recover` does the same by hand. An interrupted prepare needs no undo,
+since nothing live changed: recovery records it as `failed` ("Interrupted while preparing")
+and removes the `*.incoming-<id>` folders it built beside the live copy. A checkout step
+that failed (a commit landed while the services stopped) moved nothing, so undo leaves the
+checkout alone. Settings shows an update as running from the moment it holds the lock,
+before its journal is written.
 
 `npm run update -- apply` run from inside the host service (for example through
 `host_exec`) is refused on Linux, because stopping the host would kill it. Use

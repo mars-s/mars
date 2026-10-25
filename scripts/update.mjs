@@ -488,7 +488,10 @@ export function createUpdater(config, { ops: overrides = {}, env = process.env, 
         await rename(part.previous, part.live);
       });
     }
-    if (started(journal, 'checkout')) await attempt('checkout', async () => {
+    // A checkout step that failed (for example a commit landed while the services stopped)
+    // never moved the branch: there is nothing to undo, and the owner's commit is not a problem.
+    const checkoutFailed = journal.steps.some((entry) => entry.name === 'checkout' && entry.status === 'failed');
+    if (started(journal, 'checkout') && !checkoutFailed) await attempt('checkout', async () => {
       // Only move the branch back from the commit this update put there; never touch other work.
       const current = (await git(config.repo, ['symbolic-ref', '--short', '-q', 'HEAD'])).stdout.trim();
       const head = (await git(config.repo, ['rev-parse', 'HEAD'])).stdout.trim();
@@ -525,7 +528,7 @@ export function createUpdater(config, { ops: overrides = {}, env = process.env, 
    */
   async function recover({ wait = true, services = false } = {}) {
     const journal = await readJson(paths.journal);
-    if (!journal || !PENDING.has(journal.phase)) return null;
+    if (!journal || !(PENDING.has(journal.phase) || journal.phase === 'preparing')) return null;
     const deadline = Date.now() + (wait ? 120000 : 0);
     while (!(await lock('recover-' + journal.id))) {
       const current = await holder();
@@ -535,10 +538,19 @@ export function createUpdater(config, { ops: overrides = {}, env = process.env, 
     }
     try {
       const fresh = await readJson(paths.journal);
-      if (!fresh || !PENDING.has(fresh.phase)) return null;
+      if (!fresh || !(PENDING.has(fresh.phase) || fresh.phase === 'preparing')) return null;
+      // An update killed while preparing (a reboot, its unit stopped) never touched the live
+      // copy: drop what it built beside it and record it, instead of showing "updating" forever.
+      if (fresh.phase === 'preparing') {
+        await discardIncoming(fresh.id);
+        await rm(join(updates, fresh.id, 'tree'), { recursive: true, force: true });
+        return await finish(fresh, 'failed', 'Interrupted while preparing; nothing was installed.');
+      }
       // From run.mjs the services are starting this recovery, so they are not stopped or
       // started here. The updater unit's own fallback passes services: true.
-      return settle(fresh, { services });
+      // await: a bare return would let finally unlock while settle() still moves files, and a
+      // second recovery could then undo the same update again (scripts/test-update.mjs race).
+      return await settle(fresh, { services });
     } finally { await unlock(); }
   }
 
@@ -631,7 +643,11 @@ export function createUpdater(config, { ops: overrides = {}, env = process.env, 
     const head = (await git(config.repo, ['rev-parse', 'HEAD'])).stdout.trim();
     return {
       status, installed: installed ?? null, head: short(head), settings: { auto: settings?.auto === true },
-      running: !!lockHolder && journal?.phase !== 'done' ? { id: journal?.id, phase: journal?.phase, step: journal?.step, steps: journal?.steps ?? [] } : null,
+      // A live lock means an update is running even before it writes its journal (its first
+      // seconds check and fetch), so a second click cannot start another one meanwhile.
+      running: lockHolder && (journal?.phase !== 'done' || journal?.id !== lockHolder.id)
+        ? (journal?.phase !== 'done' ? { id: journal?.id, phase: journal?.phase, step: journal?.step, steps: journal?.steps ?? [] } : { id: lockHolder.id, phase: 'starting', step: 'check', steps: [] })
+        : null,
       last: journal?.phase === 'done' ? summary(journal) : null,
     };
   }
