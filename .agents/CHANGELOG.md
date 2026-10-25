@@ -672,3 +672,9 @@ After Lee Robinson's talk on always-on agents (workspace/duet-research/07-always
 - The plan card's in-progress spinner now turns only while the agent is working. A step left in progress when the reply ended (for example the agent forgot to tick its last step) shows as a still, half-filled mark and is read as "started, not finished". tests/plan-idle-ui-check.mjs covers both states.
 
 - Images in chat open in an in-page viewer (zoom by wheel, pinch, click or +/-, drag to pan, Esc closes) instead of a new tab.
+
+## 2026-10-25 Faster chat switching: state caches
+
+The main chat's /api/state was 4.9 MB (1,110 entries), polled every second, uncompressed, and rebuilt and re-parsed in full each time; opening a chat blanked the page to "Connecting to Pi…" until it arrived.
+- Host (state-cache.mjs): the transcript's browser-safe JSON is cached per conversation and rebuilt only when entries change; answers carry an ETag (304 with no body when unchanged) and are gzipped over 32 KB. check-state-cache.mjs.
+- Page (lib/pi/state-cache.ts): the last state of the 12 most recent chats stays in memory and shows at once when you open one; polls send the ETag, so an unchanged chat is not parsed again; the 6 most recent are saved in IndexedDB so a reload shows the chat before the host answers. "Connecting to Pi…" appears only after 1.5 seconds. tests/state-cache.test.mjs, tests/state-cache-ui-check.mjs.

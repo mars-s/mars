@@ -13,3 +13,20 @@ Installed native extension modules mount in a labelled region, using their immut
 Acceptance: server snapshot survives reload; Markdown and code render through assistant-ui; composing Enter does not submit; ordinary Enter submits once; explicit stop reaches the host; disconnected state permits retry without inventing completion; mobile has no horizontal overflow; settings are keyboard accessible; reduced-motion preference suppresses decorative animation; an installed Mock Discord region survives host restart and supports its real local button.
 
 New chat creates an ownerless native conversation. State, chat, model and abort resolve the selected ID; omitted ID keeps the historical root. List reads bounded native metadata, never every transcript. GET /api/conversations supports opaque cursor pagination. The sidebar currently shows the latest bounded page plus the original root and every pinned chat, however old; finding older pinned chats reads one small filing document per older chat, never a transcript. Grouped and archived chats past the first page are not added, because scheduled runs file every chat they start in a group. Native worker rows identify their owning parent; stopping validates that ownership. Worker summaries and usage are collapsed by default.
+
+## State caching
+
+Switching chats should feel instant, so `/api/state` and the page both cache.
+
+- **Host** (`packages/pi-host/state-cache.mjs`): a chat's transcript is the heavy part of
+  `/api/state` (a long chat is megabytes of entries). Its browser-safe JSON is kept per
+  conversation (the 24 most recent) and rebuilt only when an entry is added or the last one
+  changes; the small docs are copied fresh every time. The answer carries an ETag: a poll with
+  `If-None-Match` that finds nothing new gets `304` and no body. Answers over 32 KB are gzipped
+  for clients that accept it. Check: `check-state-cache.mjs`.
+- **Page** (`apps/ui/lib/pi/state-cache.ts`): the last parsed state of the 12 most recent chats
+  stays in memory, so opening one shows it at once while the fresh copy loads; polls send its
+  ETag, so an unchanged chat costs no parsing. The raw state of the 6 most recent chats is also
+  saved in IndexedDB (at most every 10 seconds per chat), so a reload shows the chat as it was
+  before the host answers. "Connecting to Pi…" shows only when loading takes over 1.5 seconds.
+  Checks: `tests/state-cache.test.mjs`, `tests/state-cache-ui-check.mjs`.

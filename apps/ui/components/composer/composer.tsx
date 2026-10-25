@@ -2,6 +2,7 @@
 
 import { ComposerPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { ArrowUp, CornerDownRight, Navigation, Plus, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { QueuedMessage } from "@/lib/pi/live-state";
 import { ContextMeter } from "@/components/ai/context-meter";
 import { ModelPicker, ProviderMark } from "@/components/ai/model-picker";
@@ -144,6 +145,20 @@ function SendOrStop({ running, blocked }: { running: boolean; blocked: boolean }
   );
 }
 
+/** True once `flag` has stayed true for `ms`: a quick load never flashes a loading line. */
+function useLate(flag: boolean, ms = 1500) {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    if (!flag) {
+      setLate(false);
+      return;
+    }
+    const timer = setTimeout(() => setLate(true), ms);
+    return () => clearTimeout(timer);
+  }, [flag, ms]);
+  return flag && late;
+}
+
 export function Composer() {
   const { snapshot, pending, connectionError, canChat, hasMessages, action, safely, openSettings } =
     useWorkspace();
@@ -152,6 +167,8 @@ export function Composer() {
   const running = !!snapshot?.running;
   const queue = snapshot?.queue ?? [];
   const slash = useSlashMenu();
+  // "Connecting to Pi…" only when it takes a while; a chat usually opens from the cache at once.
+  const slow = useLate(!snapshot);
   return (
     <>
       <div className="live-prompt-shell">
@@ -162,7 +179,9 @@ export function Composer() {
             {current ? <ProviderMark provider={current.provider} /> : null}
             <p>
               {!snapshot
-                ? "Connecting to Pi…"
+                ? slow
+                  ? "Connecting to Pi…"
+                  : ""
                 : !canChat
                   ? "No model connected"
                   : running
@@ -240,7 +259,7 @@ export function Composer() {
         </ComposerPrimitive.AttachmentDropzone>
       </div>
       <p className="live-composer-footnote">
-        {snapshot ? "Saved in this workspace" : "Connecting to Pi…"}
+        {snapshot ? "Saved in this workspace" : slow ? "Connecting to Pi…" : ""}
       </p>
     </>
   );

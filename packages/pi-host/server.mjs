@@ -17,6 +17,7 @@ import { createVoice, voiceRoute } from "./voice.mjs";
 import { createSelfEdit } from "./self-edit.mjs";
 import { createUpdates } from "./updates.mjs";
 import { createConversationManager } from "./conversations.mjs";
+import { createStateCache, sendCachedJson, stateBody } from "./state-cache.mjs";
 import { abortKeepingQueue, removeQueued, steerQueued, whenBusy } from "./queue.mjs";
 import { createSideChatExtension, listSideChats } from "./side-chats.mjs";
 import { createDuet, createDuetExtension } from "./duet.mjs";
@@ -453,6 +454,7 @@ const defaultModel = echoModel ? { provider: "echo", modelId: "echo" } : { provi
 const root = await harness.root(context, {
   agent: { model: defaultModel, cwd: WORK, modelTools: discovery.modelTools },
 });
+const stateCache = createStateCache({ browserView: (value) => images.browserView(value) });
 const conversations = createConversationManager({ harness, root, context, hidden: async (id) => id === (await duet.threadId()), defaultAgent: {
   model: defaultModel, cwd: WORK, modelTools: discovery.modelTools,
 } });
@@ -756,12 +758,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/state") {
       const conversation = await conversations.resolve(url.searchParams.get("conversationId") || undefined);
-      const state = await conversations.state(conversation.id);
+      // The transcript's JSON is cached per conversation (state-cache.mjs); state is its docs.
+      const cachedView = await stateCache.view(conversation, context);
+      const state = cachedView.value;
       const thread = await conversations.selectedThread(conversation.id);
       const subthreads = await conversations.listSubthreads({ conversationId: thread.parentConversationId || conversation.id });
       const selectedModel = state.docs?.["pi.agent"]?.model;
       const contextView = await conversation.context(context);
-      send(res, 200, {
+      const payload = {
         context: contextMeter(
           contextView,
           selectedModel && models.getModel(selectedModel.provider, selectedModel.modelId),
@@ -784,7 +788,6 @@ const server = http.createServer(async (req, res) => {
         usage: state.docs?.["pi.usage"],
         evaluation: await evaluationStatus(),
         update: await updates.badge(),
-        view: images.browserView(state),
         extensions: extensions.catalogue.map(row => ({ ...row, enabled: plugins.list().find(plugin => plugin.name === row.name)?.enabled !== false, uiEnabled: plugins.isUiEnabled(row.name) })),
         auth: { connected: !!(await credentials.read("openai")), ...oauth.state("openai") },
         anthropicAuth: {
@@ -807,7 +810,8 @@ const server = http.createServer(async (req, res) => {
                   .map((m) => ({ id: "opencode-go/" + m.id, name: "OpenCode Go · " + m.name, provider: "opencode-go", efforts: getSupportedThinkingLevels(m) }))
               : [],
           ),
-      });
+      };
+      await sendCachedJson(req, res, stateBody(payload, cachedView.json));
       return;
     }
     if (await gatewayRoute({ req, url, res, send, jsonBody, ...gatewayHost })) return;

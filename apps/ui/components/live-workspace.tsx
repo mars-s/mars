@@ -25,6 +25,7 @@ import {
 } from "@/lib/pi/live-state";
 import { createImageAdapter } from "@/lib/pi/image-attachments";
 import { resolveImageChips } from "@/lib/pi/image-chips";
+import { cachedState, fetchState, loadSavedState, rememberState, saveState } from "@/lib/pi/state-cache";
 import "./shared.css";
 import { WorkspaceContext, type ConversationChange, type Workspace } from "./workspace-context";
 import { Sidebar } from "./shell/sidebar";
@@ -232,11 +233,19 @@ export function LiveWorkspace() {
     const request = ++latestRefresh.current;
     const organisingAtStart = organising.current > 0;
     try {
-      const next = parseSnapshot(
-        await piRequest(
-          `/api/state${conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : ""}`,
-        ),
-      );
+      // With the chat's cached copy on screen, an unchanged answer is a 304: nothing to parse.
+      const known = cachedState<LiveSnapshot>(conversationId);
+      const fetched = await fetchState(conversationId, known ? known.etag : "");
+      if (fetched.unchanged) {
+        if (epoch !== selectionEpoch.current || request !== latestRefresh.current) return;
+        setConnectionError("");
+        return;
+      }
+      const next = parseSnapshot(fetched.value);
+      rememberState(conversationId, next, fetched.etag);
+      if (conversationId !== next.conversationId) rememberState(next.conversationId, next, fetched.etag);
+      void saveState(next.conversationId, fetched.value, fetched.etag);
+      if (!conversationId) void saveState("", fetched.value, fetched.etag);
       let rows = next.conversations;
       if (!rows.length) {
         try {
@@ -309,9 +318,18 @@ export function LiveWorkspace() {
       url.searchParams.set("conversation", id);
       history.pushState({}, "", url);
       setSelectedId(id);
-      setSnapshot(null);
+      // A chat seen before shows at once from the cache while its fresh copy loads.
+      setSnapshot(cachedState<LiveSnapshot>(id)?.value ?? null);
       setActionError("");
       setConnectionError("");
+      if (!cachedState(id))
+        void loadSavedState(id).then((saved) => {
+          if (!saved || selected.current !== id || cachedState(id)) return;
+          const stale = parseSnapshot(saved.raw);
+          if (stale.conversationId !== id) return;
+          rememberState(id, stale, saved.etag);
+          setSnapshot((current) => current ?? stale);
+        });
       void refresh();
     }
     setExtensionsOpen(false);
@@ -324,6 +342,15 @@ export function LiveWorkspace() {
       selected.current = fromUrl;
       setSelectedId(fromUrl);
     }
+    // After a reload, show the chat as it was last seen while the fresh copy loads.
+    const opening = fromUrl && /^[1-9]\d*$/.test(fromUrl) ? fromUrl : "";
+    void loadSavedState(opening).then((saved) => {
+      if (!saved || selected.current !== (opening || selected.current) || cachedState(opening)) return;
+      const stale = parseSnapshot(saved.raw);
+      if (opening && stale.conversationId !== opening) return;
+      rememberState(opening, stale, saved.etag);
+      setSnapshot((current) => current ?? stale);
+    });
     const pop = () => {
       const id = new URL(location.href).searchParams.get("conversation");
       if (id && /^[1-9]\d*$/.test(id)) {
