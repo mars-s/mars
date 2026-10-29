@@ -685,3 +685,7 @@ The main chat's /api/state was 4.9 MB (1,110 entries), polled every second, unco
 - Compaction did work but showed nothing for the minute or so it takes, so it looked broken (two manual compactions six seconds apart in the log). /api/state now reports compaction {running, retryError, failure} from pi.live; the meter shows "Compacting" from the click, "Compacted" after, and "Try again" with the error on failure. Compact now also works while a reply runs.
 - Sidebar: one Archived list at the bottom. Finished side chats and sub-threads archive themselves and go on top with archived chats, newest activity first, from the new GET /api/conversations/archive. Removed the per-chat "N archived", "Archive N finished" and "Show N older side chats" lines.
 - Checks: check-archive.mjs, tests/archive.test.mjs, tests/sidebar-one-archive-ui-check.mjs, tests/compaction-ui-check.mjs. Replaced nested-archive-ui-check and sidebar-archive-finished-ui-check, which tested the removed lines.
+
+## 2026-10-29 Archive list: no false moves on first load
+
+The live sidebar counted 85 archived where the host had 73: on first load every archived chat looked as if it had just moved there (the page's list starts empty), so chats beyond the first 50 were shown on top as well as counted again. A row now moves to the top only when the last poll listed it as live. sidebar-one-archive-ui-check covers an archived chat already known on load.

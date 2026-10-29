@@ -507,7 +507,8 @@ function ArchiveSection({
     const before = previous.current;
     previous.current = known;
     if (!before) return;
-    const moved = [...known].filter(([id, row]) => row && !before.get(id)).map(([id]) => id);
+    // Only rows the last poll listed as live: on first load every archived row is new to the page.
+    const moved = [...known].filter(([id, row]) => row && before.get(id) === null).map(([id]) => id);
     if (moved.length) setRecent((current) => [...moved, ...current.filter((id) => !moved.includes(id))]);
   }, [known]);
   useEffect(() => {

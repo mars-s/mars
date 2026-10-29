@@ -22,14 +22,16 @@ const workers = [
 const chats = [
   { id: "1", title: "Main Mars Chat", sideChats: sides },
   { id: "2", title: "Release notes", sideChats: [] },
+  { id: "3", title: "Long archived chat", sideChats: [], archived: true },
 ];
 const hostArchive = () => ({
   items: [
     { id: "23", title: "Bug hunt: lanes", kind: "task", parentId: "1", parentTitle: "Main Mars Chat" },
     { id: "9", title: "Finished side chat", kind: "side", parentId: "1", parentTitle: "Main Mars Chat" },
     ...Array.from({ length: 56 }, (_, i) => ({ id: String(100 + i), title: "Old side chat " + (i + 1), kind: "side", parentId: "1", parentTitle: "Main Mars Chat" })),
+    { id: "3", title: "Long archived chat", kind: "chat", parentId: "", parentTitle: "" },
   ],
-  total: 58,
+  total: 59,
 });
 const archiveCalls = [];
 const state = (id) => ({
@@ -73,7 +75,7 @@ try {
   await under.getByText("Working sub-thread", { exact: true }).waitFor();
   const toggle = sidebar.getByRole("button", { name: /^Archived/ });
   await toggle.waitFor();
-  await page.waitForFunction(() => /Archived\s*58/.test(document.querySelector(".live-archived .live-group-toggle")?.textContent ?? ""));
+  await page.waitForFunction(() => /Archived\s*59/.test(document.querySelector(".live-archived .live-group-toggle")?.textContent ?? ""));
   assert.equal(await sidebar.locator(".live-side-chats").getByText("Finished side chat").count(), 0, "a finished side chat is not under its parent");
   assert.equal(await sidebar.locator(".live-side-chats").getByText("Bug hunt: lanes").count(), 0, "nor a finished sub-thread");
   assert.doesNotMatch(await sidebar.innerText(), /\d+ archived|Archive \d+ finished|older side chat/i, "no other archive lines");
@@ -84,8 +86,9 @@ try {
   const rows = await archiveRows();
   assert.deepEqual(rows.slice(0, 3), ["Bug hunt: lanes", "Finished side chat", "Old side chat 1"], "host order, newest first");
   assert.equal(await sidebar.locator(".live-archived .live-archive-parent").first().innerText(), "Main Mars Chat", "names the chat it came from");
-  await sidebar.getByRole("button", { name: "Show 8 more" }).click();
+  await sidebar.getByRole("button", { name: "Show 9 more" }).click();
   await sidebar.getByText("Old side chat 56", { exact: true }).waitFor();
+  assert.equal((await archiveRows()).at(-1), "Long archived chat", "an archived chat already known on load keeps its place, last");
   assert.equal(await sidebar.getByRole("button", { name: /Show \d+ more/ }).count(), 0);
   checks.push("newest first, from the host, paged");
 
