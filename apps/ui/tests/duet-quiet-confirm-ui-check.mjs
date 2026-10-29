@@ -55,7 +55,7 @@ async function route(page) {
     }
     if (url.pathname === "/api/state")
       return request.fulfill({ json: {
-        runtime: "Pi Durable 1.3.0", conversationId: 1, selectedConversationId: 1,
+        duet: true, runtime: "Pi Durable 1.3.0", conversationId: 1, selectedConversationId: 1,
         auth: { connected: true, state: "connected", events: [] }, providerReady: true,
         models: [{ id: "gpt-6-luna", name: "Luna" }], extensions: [], conversations: [{ id: 1, title: "Main" }],
         view: { entries: [], docs: { "pi.agent": { model: { provider: "openai", modelId: "gpt-6-luna" } } } },

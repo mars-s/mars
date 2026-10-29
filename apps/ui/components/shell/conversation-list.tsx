@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
@@ -43,8 +44,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useWorkspace } from "@/components/workspace-context";
-import { piRequest, record, type ConversationSummary, type SideChatSummary } from "@/lib/pi/live-state";
+import { piRequest, type ConversationSummary, type SideChatSummary } from "@/lib/pi/live-state";
 import { ChannelMark } from "./channel-mark";
+import { knownArchive, mergeArchive, parseArchive, type ArchiveItem } from "@/lib/pi/archive";
 import { ChildNavigation } from "./child-navigation";
 
 /** Must match GROUP_MAX in packages/pi-host/conversations.mjs. */
@@ -90,7 +92,7 @@ export function ConversationList() {
   const { conversations, selectedId, extensionsOpen } = useWorkspace();
   const [folded, toggle] = useFolded();
   const [naming, setNaming] = useState<Naming>(null);
-  const { pinned, groups, recents, archived } = useMemo(() => {
+  const { pinned, groups, recents } = useMemo(() => {
     const live = conversations.filter((row) => !row.archived && !row.pinned);
     const byGroup = new Map<string, ConversationSummary[]>();
     for (const row of live)
@@ -102,7 +104,6 @@ export function ConversationList() {
         a.localeCompare(b, undefined, { sensitivity: "base" }),
       ),
       recents: live.filter((row) => !row.group),
-      archived: conversations.filter((row) => row.archived),
     };
   }, [conversations]);
   const groupNames = groups.map(([name]) => name);
@@ -138,24 +139,12 @@ export function ConversationList() {
       ))}
       {recents.length > 0 && <p className="live-section-label">Recents</p>}
       {rows(recents)}
-      {archived.length > 0 && (
-        <section
-          className="live-group live-archived"
-          aria-label="Archived chats"
-        >
-          <SectionToggle
-            label="Archived"
-            count={archived.length}
-            open={!folded.has(ARCHIVED)}
-            icon={<Archive size={14} aria-hidden="true" />}
-            current={folded.has(ARCHIVED) && holdsSelection(archived)}
-            onToggle={() => toggle(ARCHIVED)}
-          />
-          {!folded.has(ARCHIVED) && (
-            <div className="live-group-rows">{rows(archived)}</div>
-          )}
-        </section>
-      )}
+      <ArchiveSection
+        open={!folded.has(ARCHIVED)}
+        onToggle={() => toggle(ARCHIVED)}
+        groupNames={groupNames}
+        onName={setNaming}
+      />
       <NameDialog
         naming={naming}
         groupNames={groupNames}
@@ -338,7 +327,6 @@ function ConversationRow({
       <SideChats
         parentId={conversation.id}
         sideChats={conversation.sideChats}
-        total={conversation.sideChatTotal}
         onName={onName}
       />
     </div>
@@ -423,130 +411,202 @@ function NameDialog({
 }
 
 /**
- * Side chats nested under the conversation they were opened from (docs/WORKBENCH.md).
- * The open side chat stays listed even before the next conversations refresh. Archived ones
- * fold into an "N archived" line under the others.
+ * Side chats nested under the conversation they were opened from (docs/WORKBENCH.md), while they
+ * run or are open. Finished ones move to the one Archived list at the bottom of the sidebar.
  */
 function SideChats({
   parentId,
   sideChats,
-  total,
   onName,
 }: {
   parentId: string;
   sideChats: SideChatSummary[];
-  total: number;
   onName: (naming: Naming) => void;
 }) {
-  const { snapshot, safely } = useWorkspace();
-  // Side chats older than the host's first page, loaded on request (GET /api/conversations/side-chats).
-  const [older, setOlder] = useState<SideChatSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-  const rows = [...sideChats, ...older.filter((row) => !sideChats.some((side) => side.id === row.id))];
+  const { snapshot } = useWorkspace();
+  const rows = [...sideChats];
   if (snapshot?.sideChatOf === parentId && !rows.some((row) => row.id === snapshot.conversationId))
     rows.unshift({ id: snapshot.conversationId, title: snapshot.conversationTitle || "Side chat", running: snapshot.running });
-  if (!rows.length) return null;
-  const remaining = total - sideChats.length - older.length;
-  const showOlder = () => {
-    setLoading(true);
-    safely(
-      piRequest(`/api/conversations/side-chats?parentId=${encodeURIComponent(parentId)}&offset=${sideChats.length + older.length}&limit=100`)
-        .then((value) => {
-          const items = Array.isArray(record(value).items) ? (record(value).items as unknown[]) : [];
-          const parsed = items.map(record).flatMap((row) =>
-            typeof row.id === "string"
-              ? [{ id: row.id, title: typeof row.title === "string" ? row.title : "Side chat", running: row.running === true, archived: row.archived === true }]
-              : [],
-          );
-          setOlder((current) => [...current, ...parsed]);
-        })
-        .finally(() => setLoading(false)),
-    );
-  };
   return (
     <NestedList
       label="Side chats"
-      rows={rows.map((row) => ({ ...row, side: true }))}
+      rows={rows.map((row) => ({ ...row, side: true, active: row.running }))}
       onName={onName}
-      footer={
-        total > 0 && remaining > 0 ? (
-          <li>
-            <button type="button" className="live-nested-archived live-side-chat-more" disabled={loading} onClick={showOlder}>
-              <ChevronRight size={12} aria-hidden="true" className="live-group-chevron" />
-              {loading ? "Loading…" : `Show ${remaining} older side ${remaining === 1 ? "chat" : "chats"}`}
-            </button>
-          </li>
-        ) : null
-      }
     />
   );
 }
 
-/** Sub-thread states (child-navigation.tsx statusText) that mean the work has ended. */
-const FINISHED = new Set(["Done", "Failed", "Stopped", "Ended"]);
-
-export type NestedRowData = { id: string; title: string; running?: boolean; archived?: boolean; status?: string; side?: boolean };
+export type NestedRowData = {
+  id: string;
+  title: string;
+  running?: boolean;
+  archived?: boolean;
+  status?: string;
+  side?: boolean;
+  /** Still working: listed under its parent. Finished rows are in the Archived list. */
+  active?: boolean;
+};
 
 /**
- * Rows nested under a chat (side chats and sub-threads). Each has a menu to rename (side
- * chats) and archive; archived rows hide behind an "N archived" toggle and stay openable.
+ * Rows nested under a chat (side chats and sub-threads) that are still working, plus the open one.
+ * Finished rows archive themselves: they are listed in the sidebar's one Archived list.
  */
 export function NestedList({
   label,
   rows,
   onName,
-  footer,
 }: {
   label: string;
   rows: NestedRowData[];
   onName?: (naming: Naming) => void;
-  footer?: ReactNode;
 }) {
   const { selectedId, extensionsOpen } = useWorkspace();
-  const { organiseConversation, safely } = useWorkspace();
-  const [showArchived, setShowArchived] = useState(false);
-  const live = rows.filter((row) => !row.archived || (!extensionsOpen && row.id === selectedId));
-  const archived = rows.filter((row) => !live.includes(row));
-  // Finished rows that are still listed: archived together with one click, oldest last.
-  const finished = live.filter((row) => !row.archived && !row.running && (row.side || FINISHED.has(row.status ?? "")));
-  if (!rows.length) return null;
-  const archiveFinished = () =>
-    safely(
-      (async () => {
-        for (const row of finished) await organiseConversation(row.id, { archived: true });
-      })(),
-    );
+  const live = rows.filter((row) => row.active || (!extensionsOpen && row.id === selectedId));
+  if (!live.length) return null;
   return (
     <ul className="live-side-chats" aria-label={label}>
       {live.map((row) => (
         <NestedRow key={row.id} row={row} onName={onName} />
       ))}
-      {finished.length >= 2 && (
-        <li>
-          <button type="button" className="live-nested-archived live-archive-finished" onClick={archiveFinished}>
-            <Archive size={12} aria-hidden="true" />
-            Archive {finished.length} finished
-          </button>
-        </li>
-      )}
-      {archived.length > 0 && (
-        <li>
-          <button
-            type="button"
-            className="live-nested-archived"
-            aria-expanded={showArchived}
-            onClick={() => setShowArchived((open) => !open)}
-          >
-            <ChevronRight size={12} aria-hidden="true" className="live-group-chevron" />
-            {archived.length} archived
-          </button>
-        </li>
-      )}
-      {showArchived && archived.map((row) => <NestedRow key={row.id} row={row} onName={onName} />)}
-      {footer}
     </ul>
   );
 }
+
+const ARCHIVE_PAGE = 50;
+
+/**
+ * The one Archived list (docs/LIVE-INTEGRATION.md "Archive"): archived chats and finished side
+ * chats and sub-threads, newest activity first, from GET /api/conversations/archive. What the
+ * last poll knows decides for the rows it lists, so a row that is archived or finishes shows on
+ * top at once.
+ */
+function ArchiveSection({
+  open,
+  onToggle,
+  groupNames,
+  onName,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  groupNames: string[];
+  onName: (naming: Naming) => void;
+}) {
+  const { conversations, snapshot, selectedId, extensionsOpen, selectConversation } = useWorkspace();
+  const openId = extensionsOpen ? "" : selectedId;
+  const subthreads = snapshot?.subthreads;
+  const known = useMemo(
+    () => knownArchive({ conversations, subthreads: subthreads ?? [], openId }),
+    [conversations, subthreads, openId],
+  );
+  const signature = [...known].map(([id, row]) => (row ? id : "")).join(",");
+  const [host, setHost] = useState<{ items: ArchiveItem[]; total: number } | null>(null);
+  const [limit, setLimit] = useState(ARCHIVE_PAGE);
+  const [recent, setRecent] = useState<string[]>([]);
+  const previous = useRef<Map<string, ArchiveItem | null> | null>(null);
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = known;
+    if (!before) return;
+    const moved = [...known].filter(([id, row]) => row && !before.get(id)).map(([id]) => id);
+    if (moved.length) setRecent((current) => [...moved, ...current.filter((id) => !moved.includes(id))]);
+  }, [known]);
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(async () => {
+      try {
+        const items: ArchiveItem[] = [];
+        let total = 0;
+        for (let offset = 0; offset < limit; offset += 100) {
+          const page = parseArchive(
+            await piRequest(`/api/conversations/archive?offset=${offset}&limit=${Math.min(100, limit - offset)}`),
+          );
+          items.push(...page.items);
+          total = Math.max(page.total, items.length);
+          if (items.length >= total) break;
+        }
+        if (!live) return;
+        setHost({ items, total });
+        // A row stays on top until the host lists it: its list may have been read before the
+        // archive was saved.
+        setRecent((current) => current.filter((id) => !items.some((row) => row.id === id)));
+      } catch {
+        /* An older host has no archive list; the rows the page knows still show. */
+      }
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [signature, limit]);
+  const rows = mergeArchive({ host: host?.items ?? null, known, openId, recent });
+  const more = host ? Math.max(0, host.total - host.items.length) : 0;
+  const count = rows.length + more;
+  if (!count) return null;
+  return (
+    <section className="live-group live-archived" aria-label="Archived chats">
+      <SectionToggle
+        label="Archived"
+        count={count}
+        open={open}
+        icon={<Archive size={14} aria-hidden="true" />}
+        current={!open && rows.some((row) => row.id === openId)}
+        onToggle={onToggle}
+      />
+      {open && (
+        <div className="live-group-rows">
+          {rows.map((row) =>
+            row.kind === "chat" ? (
+              <ConversationRow
+                key={row.id}
+                conversation={conversations.find((item) => item.id === row.id) ?? archivedSummary(row)}
+                groupNames={groupNames}
+                onName={onName}
+              />
+            ) : (
+              <div key={row.id} className="live-conversation-row live-archive-row">
+                <button
+                  type="button"
+                  className="live-nav live-conversation"
+                  aria-current={row.id === openId ? "page" : undefined}
+                  title={row.parentTitle ? `${row.title}, from ${row.parentTitle}` : row.title}
+                  onClick={() => selectConversation(row.id)}
+                >
+                  <MessageSquareDashed size={13} aria-hidden="true" className="live-side-chat-icon" />
+                  <span className="live-nav-label">{row.title}</span>
+                  {row.parentTitle && <small className="live-archive-parent">{row.parentTitle}</small>}
+                </button>
+              </div>
+            ),
+          )}
+          {more > 0 && (
+            <button
+              type="button"
+              className="live-nested-archived live-archive-more"
+              onClick={() => setLimit((current) => current + ARCHIVE_PAGE)}
+            >
+              Show {Math.min(more, ARCHIVE_PAGE)} more
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** A chat the host lists as archived that is older than the sidebar's page of chats. */
+const archivedSummary = (row: ArchiveItem): ConversationSummary => ({
+  id: row.id,
+  title: row.title,
+  modelId: "",
+  provider: "",
+  running: false,
+  sideChats: [],
+  sideChatTotal: 0,
+  group: "",
+  archived: true,
+  pinned: false,
+  channel: "",
+});
 
 function NestedRow({ row, onName }: { row: NestedRowData; onName?: (naming: Naming) => void }) {
   const { selectedId, extensionsOpen, selectConversation, organiseConversation, safely } = useWorkspace();

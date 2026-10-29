@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { ConversationSummary, LiveSnapshot } from "@/lib/pi/live-state";
+import type { ConversationSummary } from "@/lib/pi/live-state";
+import type { WorkspaceSnapshot } from "@/lib/pi/host-extras";
 
 /**
  * The live workspace controller owns Pi state and every server action. Presentation
@@ -11,7 +12,7 @@ import type { ConversationSummary, LiveSnapshot } from "@/lib/pi/live-state";
 export type ConversationChange = { title?: string; group?: string; archived?: boolean; pinned?: boolean };
 
 export type Workspace = {
-  snapshot: LiveSnapshot | null;
+  snapshot: WorkspaceSnapshot | null;
   conversations: ConversationSummary[];
   selectedId: string;
   pending: boolean;

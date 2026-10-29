@@ -1,6 +1,7 @@
 "use client";
 
 import { useWorkspace } from "@/components/workspace-context";
+import { subthreadActive } from "@/lib/pi/archive";
 import { NestedList } from "./conversation-list";
 
 // Pi reports raw run states; the sidebar shows them as quiet words.
@@ -21,7 +22,7 @@ function statusText(status: string) {
   return STATUS_TEXT[status] ?? status.charAt(0).toUpperCase() + status.slice(1).replaceAll("_", " ");
 }
 
-/** Sub-threads (helper conversations) of the open chat, archivable like side chats. */
+/** Sub-threads (helper conversations) of the open chat while they work; finished ones are archived. */
 export function ChildNavigation() {
   const { snapshot, rootId } = useWorkspace();
   const children = snapshot?.subthreads.filter((child) => child.conversationId === rootId) ?? [];
@@ -49,6 +50,7 @@ export function ChildNavigation() {
         title: child.title,
         archived: child.archived,
         status: child.status ? statusText(child.status) : "",
+        active: !child.archived && subthreadActive(child.status),
       }))}
     />
   );

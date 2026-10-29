@@ -246,8 +246,13 @@ export function Composer() {
               {snapshot && (
                 <ContextMeter
                   context={snapshot.context}
-                  canCompact={hasMessages && !running && !blocked}
-                  onCompact={() => safely(action("/api/compact"))}
+                  canCompact={hasMessages && !blocked}
+                  compaction={snapshot.compaction}
+                  onCompact={() => {
+                    const request = action("/api/compact");
+                    safely(request);
+                    return request;
+                  }}
                 />
               )}
               <SendOrStop running={running} blocked={blocked} />

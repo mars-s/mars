@@ -25,6 +25,8 @@ export const DuetTaskDoc = defineDoc({ kind: 'mars.duet-task', version: 1, scope
 /** On the thread: facts and claims the tasks share. */
 export const DuetBoardDoc = defineDoc({ kind: 'mars.duet-board', version: 1, scope: 'conversation', history: 'latest', fork: 'initial', initial: () => ({ version: 0, facts: {}, claims: {} }) });
 
+/** Duet is parked (docs/DUET.md): the host turns its tools and page on only with MARS_DUET=1. */
+export const duetEnabled = (env = process.env) => env.MARS_DUET === '1';
 export const DUET_POST = 'mars.duet-post';
 export const DUET_OWNER = 'mars.duet-owner';
 export const DUET_MAIL = 'mars.duet-mail';

@@ -58,3 +58,19 @@ export function contextMeter(view, model, compaction = DEFAULT_COMPACTION_POLICY
     segments: segments.filter((segment) => segment.tokens > 0),
   };
 }
+
+/**
+ * The compaction the meter's "Compact now" button reports, from the conversation's pi.live doc:
+ * running while a compaction task is live (with its retry error when it is waiting to try again),
+ * and the error of the last one that failed since a summary was last written.
+ */
+export function compactionStatus(live) {
+  const running = Array.isArray(live?.compactions) ? live.compactions : [];
+  const current = running[0];
+  return {
+    running: running.length > 0,
+    ...(current ? { attempt: Number(current.attempt) || 1, manual: current.reason === "manual" } : {}),
+    ...(current?.retry?.error ? { retryError: String(current.retry.error).slice(0, 300) } : {}),
+    ...(live?.compactionFailure?.error ? { failure: String(live.compactionFailure.error).slice(0, 300) } : {}),
+  };
+}

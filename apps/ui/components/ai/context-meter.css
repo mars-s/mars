@@ -205,3 +205,24 @@
     transition: none;
   }
 }
+
+/* A compaction in progress: the ring turns slowly, with its arc held short. */
+.mars-context-trigger[data-compacting] .mars-context-ring {
+  animation: mars-context-turn 1.2s linear infinite;
+}
+.mars-context-trigger[data-compacting] .mars-context-ring-fill {
+  stroke-dashoffset: 30 !important;
+}
+@keyframes mars-context-turn {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(270deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mars-context-trigger[data-compacting] .mars-context-ring {
+    animation: none;
+  }
+}

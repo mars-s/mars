@@ -20,7 +20,9 @@ import { createConversationManager } from "./conversations.mjs";
 import { createStateCache, sendCachedJson, stateBody } from "./state-cache.mjs";
 import { abortKeepingQueue, removeQueued, steerQueued, whenBusy } from "./queue.mjs";
 import { createSideChatExtension, listSideChats } from "./side-chats.mjs";
-import { createDuet, createDuetExtension } from "./duet.mjs";
+import { createDuet, createDuetExtension, duetEnabled } from "./duet.mjs";
+import { createArchive } from "./archive.mjs";
+import { compactionStatus } from "./context-meter.mjs";
 import { createPluginControlExtension, createWorkspaceFilesExtension } from "./host-tools.mjs";
 import { createPlanExtension, readPlan } from "./plans.mjs";
 import { createSkills, createSkillsExtension, skillRoots } from "./skills.mjs";
@@ -207,7 +209,9 @@ registry.install(schedules.extension);
 const duet = createDuet({ harness: () => late.harness, models, context, work: WORK, openProject: (id, path) => projects.open(id, path),
   ready: async (id) => providerReady(await late.conversations.state(id)),
   defaultAgent: () => ({ ...(late.defaultModel ? { model: late.defaultModel } : {}), cwd: WORK, modelTools: discovery.modelTools }) });
-registry.install(createDuetExtension({ duet }));
+// Parked (docs/DUET.md): its tools and page are off unless MARS_DUET=1. The thread stays hidden.
+const duetOn = duetEnabled();
+if (duetOn) registry.install(createDuetExtension({ duet }));
 // Lanes: parallel chats changing Mars, each in its own worktree, merged in order (docs/LANES.md).
 const lanes = lanesEnabled() ? createLanes({ repo: REPO, root: ROOT }) : null;
 if (lanes) {
@@ -460,6 +464,7 @@ const conversations = createConversationManager({ harness, root, context, hidden
 } });
 Object.assign(late, { harness, conversations });
 Object.assign(late, { rootId: root.id, defaultModel });
+const archive = createArchive({ harness, context, hidden: async (id) => id === (await duet.threadId()), rootId: () => root.id });
 await schedules.boot();
 // Only migrate the historical single-chat tool filter once. Model and transcript stay native.
 const migrationPath = ROOT + "/data/progressive-discovery-v1.json";
@@ -650,6 +655,7 @@ const server = http.createServer(async (req, res) => {
       if (value) { send(res, 200, value); return; }
     }
     if (url.pathname === "/api/duet" || url.pathname.startsWith("/api/duet/")) {
+      if (!duetOn) { send(res, 404, { error: "Duet is parked. Set MARS_DUET=1 to turn it back on (docs/DUET.md)." }); return; }
       send(res, 200, await duet.route(req.method, url.pathname, req.method === "POST" ? await jsonBody(req) : undefined)); return;
     }
     if (lanes && (url.pathname === "/api/lanes" || url.pathname.startsWith("/api/lanes/"))) {
@@ -728,7 +734,14 @@ const server = http.createServer(async (req, res) => {
       const conversation = await conversations.create({ ...data, ...selection, thinking });
       send(res, 201, { conversation: { id: String(conversation.id), title: data.title || (data.parentId ? "Side chat" : "New conversation"), ...(data.parentId ? { parentId: String(data.parentId) } : {}) } }); return;
     }
-    // Older side chats than the sidebar's first page, for its "Show older" button.
+    // The one Archived list: archived chats and finished side sessions, newest first (archive.mjs).
+    if (url.pathname === "/api/conversations/archive" && req.method === "GET") {
+      const offset = Math.max(0, Math.min(100000, Math.trunc(Number(url.searchParams.get("offset")) || 0)));
+      const limit = Math.max(1, Math.min(100, Math.trunc(Number(url.searchParams.get("limit")) || 50)));
+      send(res, 200, await archive.list({ offset, limit }));
+      return;
+    }
+    // Older side chats than the sidebar's first page.
     if (url.pathname === "/api/conversations/side-chats" && req.method === "GET") {
       const parent = await conversations.resolve(url.searchParams.get("parentId") || undefined);
       const offset = Math.max(0, Math.min(10000, Number(url.searchParams.get("offset")) || 0));
@@ -770,6 +783,9 @@ const server = http.createServer(async (req, res) => {
           contextView,
           selectedModel && models.getModel(selectedModel.provider, selectedModel.modelId),
         ),
+        // A compaction in progress, or the last one that failed, so "Compact now" can show it.
+        compaction: compactionStatus(cachedView.docs?.["pi.live"]),
+        duet: duetOn,
         runtime: "Pi Durable 1.3.0",
         customHost: true,
         hostVersion: "mars-monorepo-1",

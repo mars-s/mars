@@ -86,6 +86,7 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
           <MessageSquare size={16} />
           <span className="live-nav-label">Chats</span>
         </button>
+        {snapshot?.duet && (
         <button
           type="button"
           className={`live-nav live-nav-duet ${duetOpen ? "live-nav-selected" : ""}`}
@@ -96,6 +97,7 @@ export function SidebarContent({ collapsed = false, drawer = false }: { collapse
           <MessagesSquare size={16} />
           <span className="live-nav-label">Duet</span>
         </button>
+        )}
         <button
           type="button"
           className={`live-nav ${extensionsOpen ? "live-nav-selected" : ""}`}

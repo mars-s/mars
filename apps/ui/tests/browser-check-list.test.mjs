@@ -9,7 +9,12 @@ const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url
 // The same reading as scripts/browser-checks.mjs.
 const listed = new Set(pkg.scripts["test:ui"].match(/tests\/[\w-]+\.mjs/g));
 // Checks run on their own rather than in the browser suite, each with where it is documented.
-const RUN_SEPARATELY = new Map([["tests/duet-ui-check.mjs", "docs/DUET.md"]]);
+// Duet is parked (docs/DUET.md "Parked"): its checks run by hand when it is turned back on.
+const RUN_SEPARATELY = new Map([
+  ["tests/duet-ui-check.mjs", "docs/DUET.md"],
+  ["tests/duet-apart-ui-check.mjs", "docs/DUET.md"],
+  ["tests/duet-quiet-confirm-ui-check.mjs", "docs/DUET.md"],
+]);
 
 test("every browser check is in the test:ui list", async () => {
   const files = (await readdir(new URL(".", import.meta.url))).filter((name) => name.endsWith("-ui-check.mjs"));

@@ -619,3 +619,22 @@
   transform: rotate(90deg);
 }
 
+
+/* The one Archived list: a finished side chat or sub-thread names the chat it came from. */
+.live-archive-row .live-side-chat-icon {
+  margin-right: -2px;
+}
+.live-archive-parent {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-archive-more {
+  padding-left: 30px;
+}

@@ -678,3 +678,10 @@ After Lee Robinson's talk on always-on agents (workspace/duet-research/07-always
 The main chat's /api/state was 4.9 MB (1,110 entries), polled every second, uncompressed, and rebuilt and re-parsed in full each time; opening a chat blanked the page to "Connecting to Pi…" until it arrived.
 - Host (state-cache.mjs): the transcript's browser-safe JSON is cached per conversation and rebuilt only when entries change; answers carry an ETag (304 with no body when unchanged) and are gzipped over 32 KB. check-state-cache.mjs.
 - Page (lib/pi/state-cache.ts): the last state of the 12 most recent chats stays in memory and shows at once when you open one; polls send the ETag, so an unchanged chat is not parsed again; the 6 most recent are saved in IndexedDB so a reload shows the chat before the host answers. "Connecting to Pi…" appears only after 1.5 seconds. tests/state-cache.test.mjs, tests/state-cache-ui-check.mjs.
+
+## 2026-10-29 Park Duet, compaction feedback, one archive list
+
+- Duet parked: the host installs its tools and serves /api/duet only with MARS_DUET=1; /api/state says duet:false and the sidebar hides it. Code, host checks and data kept (docs/DUET.md "Parked"); its browser checks run by hand.
+- Compaction did work but showed nothing for the minute or so it takes, so it looked broken (two manual compactions six seconds apart in the log). /api/state now reports compaction {running, retryError, failure} from pi.live; the meter shows "Compacting" from the click, "Compacted" after, and "Try again" with the error on failure. Compact now also works while a reply runs.
+- Sidebar: one Archived list at the bottom. Finished side chats and sub-threads archive themselves and go on top with archived chats, newest activity first, from the new GET /api/conversations/archive. Removed the per-chat "N archived", "Archive N finished" and "Show N older side chats" lines.
+- Checks: check-archive.mjs, tests/archive.test.mjs, tests/sidebar-one-archive-ui-check.mjs, tests/compaction-ui-check.mjs. Replaced nested-archive-ui-check and sidebar-archive-finished-ui-check, which tested the removed lines.

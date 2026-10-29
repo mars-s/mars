@@ -1,5 +1,21 @@
 # Duet
 
+## Parked
+
+Duet is parked (2026-10-29): it did not work well enough to keep. The code, its checks and the
+thread's data stay, but the host leaves it off unless `MARS_DUET=1` is set in its service
+environment. While parked:
+
+- the Duet tools (`duet_send`, `duet_notify` and the rest) are not installed;
+- `/api/duet` and `/api/duet/*` answer 404 "Duet is parked";
+- `/api/state` says `duet: false`, so the sidebar has no Duet entry and an old `?view=duet`
+  link opens the chats;
+- the Duet thread stays out of the chat list.
+
+The host checks (`check-duet*.mjs`) still run, since they test `duet.mjs` directly. The browser
+checks (`tests/duet-*-ui-check.mjs`) run by hand, outside the browser suite. To bring Duet back,
+set `MARS_DUET=1` and put those checks back in `test:ui`.
+
 Duet is the owner's personal assistant thread: one iMessage-style conversation under **Duet** in
 the sidebar, over many background tasks that run at the same time. The research and the full
 design are in `workspace/duet-research/DUET-SPEC.md`; this page describes what is built.

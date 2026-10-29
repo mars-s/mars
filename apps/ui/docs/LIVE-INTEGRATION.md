@@ -30,3 +30,31 @@ Switching chats should feel instant, so `/api/state` and the page both cache.
   saved in IndexedDB (at most every 10 seconds per chat), so a reload shows the chat as it was
   before the host answers. "Connecting to Pi…" shows only when loading takes over 1.5 seconds.
   Checks: `tests/state-cache.test.mjs`, `tests/state-cache-ui-check.mjs`.
+
+## Archive
+
+The sidebar has one archive: the **Archived** list at the bottom.
+
+- Under a chat, only side chats that are running and sub-threads that are still working are
+  listed, plus the one that is open. Nothing else: no per-chat "archived" or "older" lines.
+- A side chat or sub-thread that finishes archives itself: it leaves its chat and goes to the top
+  of Archived. Archived chats go there too.
+- Archived is newest activity first, so whatever finished last is on top. Side chats and
+  sub-threads name the chat they came from. Opening one shows it under its chat again.
+- `GET /api/conversations/archive?offset&limit` (`packages/pi-host/archive.mjs`) is the whole
+  list, newest first, with its `total`. The page shows 50 and a "Show N more" line. What the
+  page's last poll knows decides for the rows it lists, so a row that is archived or finishes
+  moves to the top at once, before the host's list is read again.
+
+Checks: `check-archive.mjs`, `tests/archive.test.mjs`, `tests/sidebar-one-archive-ui-check.mjs`.
+
+## Compaction
+
+"Compact now" in the context meter starts a compaction (`POST /api/compact`). It summarises older
+turns, which takes a minute or so, and the summary lands at once when the chat is idle, otherwise
+at its next step. `/api/state` reports it as `compaction: { running, retryError?, failure? }`
+from Pi's `pi.live` doc. The meter shows "Compacting" from the click until the host reports it
+finished, then "Compacted" for a few seconds; a failure shows its error and "Try again". The
+button works while a reply is running too.
+
+Checks: `check-archive.mjs` (status), `tests/compaction-ui-check.mjs`.

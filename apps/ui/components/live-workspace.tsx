@@ -25,6 +25,7 @@ import {
 } from "@/lib/pi/live-state";
 import { createImageAdapter } from "@/lib/pi/image-attachments";
 import { resolveImageChips } from "@/lib/pi/image-chips";
+import { readExtras, type WorkspaceSnapshot } from "@/lib/pi/host-extras";
 import { cachedState, fetchState, loadSavedState, rememberState, saveState } from "@/lib/pi/state-cache";
 import "./shared.css";
 import { WorkspaceContext, type ConversationChange, type Workspace } from "./workspace-context";
@@ -74,7 +75,7 @@ function ConversationRuntime({
   draft,
   children,
 }: {
-  snapshot: LiveSnapshot | null;
+  snapshot: WorkspaceSnapshot | null;
   onNew: (message: AppendMessage, mode?: "queue" | "steer") => Promise<void>;
   onCancel: () => Promise<void>;
   onQueue: (submissionId: string, change: "steer" | "remove") => Promise<void>;
@@ -161,7 +162,7 @@ function StageMain({ children }: { children: ReactNode }) {
 }
 
 export function LiveWorkspace() {
-  const [snapshot, setSnapshot] = useState<LiveSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
   const [connectionError, setConnectionError] = useState("");
   const [actionError, setActionError] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
@@ -198,6 +199,12 @@ export function LiveWorkspace() {
   useEffect(() => {
     if (new URL(location.href).searchParams.get("view") === "duet") setDuetOpenState(true);
   }, []);
+  // Duet is parked unless the host turns it on (docs/DUET.md "Parked"): an old ?view=duet link
+  // opens the chats instead.
+  const duetOn = snapshot?.duet === true;
+  useEffect(() => {
+    if (snapshot && !duetOn && duetOpen) setDuetOpen(false);
+  }, [snapshot, duetOn, duetOpen, setDuetOpen]);
   // Duet is not a chat: a link or bookmark to its conversation opens Duet's own page instead of
   // the chat view (docs/DUET.md).
   const duetThread = useRef<string | null>(null);
@@ -234,14 +241,14 @@ export function LiveWorkspace() {
     const organisingAtStart = organising.current > 0;
     try {
       // With the chat's cached copy on screen, an unchanged answer is a 304: nothing to parse.
-      const known = cachedState<LiveSnapshot>(conversationId);
+      const known = cachedState<WorkspaceSnapshot>(conversationId);
       const fetched = await fetchState(conversationId, known ? known.etag : "");
       if (fetched.unchanged) {
         if (epoch !== selectionEpoch.current || request !== latestRefresh.current) return;
         setConnectionError("");
         return;
       }
-      const next = parseSnapshot(fetched.value);
+      const next = { ...parseSnapshot(fetched.value), ...readExtras(fetched.value) };
       rememberState(conversationId, next, fetched.etag);
       if (conversationId !== next.conversationId) rememberState(next.conversationId, next, fetched.etag);
       void saveState(next.conversationId, fetched.value, fetched.etag);
@@ -319,13 +326,13 @@ export function LiveWorkspace() {
       history.pushState({}, "", url);
       setSelectedId(id);
       // A chat seen before shows at once from the cache while its fresh copy loads.
-      setSnapshot(cachedState<LiveSnapshot>(id)?.value ?? null);
+      setSnapshot(cachedState<WorkspaceSnapshot>(id)?.value ?? null);
       setActionError("");
       setConnectionError("");
       if (!cachedState(id))
         void loadSavedState(id).then((saved) => {
           if (!saved || selected.current !== id || cachedState(id)) return;
-          const stale = parseSnapshot(saved.raw);
+          const stale = { ...parseSnapshot(saved.raw), ...readExtras(saved.raw) };
           if (stale.conversationId !== id) return;
           rememberState(id, stale, saved.etag);
           setSnapshot((current) => current ?? stale);
@@ -346,7 +353,7 @@ export function LiveWorkspace() {
     const opening = fromUrl && /^[1-9]\d*$/.test(fromUrl) ? fromUrl : "";
     void loadSavedState(opening).then((saved) => {
       if (!saved || selected.current !== (opening || selected.current) || cachedState(opening)) return;
-      const stale = parseSnapshot(saved.raw);
+      const stale = { ...parseSnapshot(saved.raw), ...readExtras(saved.raw) };
       if (opening && stale.conversationId !== opening) return;
       rememberState(opening, stale, saved.etag);
       setSnapshot((current) => current ?? stale);
@@ -618,10 +625,10 @@ export function LiveWorkspace() {
               >
                 <StageMain>
                   <WorkspaceHeader />
-                  {duetOpen ? <DuetView /> : extensionsOpen ? <ExtensionsPage /> : <ConversationView />}
+                  {duetOpen && duetOn ? <DuetView /> : extensionsOpen ? <ExtensionsPage /> : <ConversationView />}
                 </StageMain>
               </ConversationRuntime>
-              {!extensionsOpen && !duetOpen && <WorkbenchPane />}
+              {!extensionsOpen && !(duetOpen && duetOn) && <WorkbenchPane />}
             </div>
           </WorkbenchProvider>
         </div>

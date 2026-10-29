@@ -3,6 +3,7 @@
 import { Popover } from "radix-ui";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { ContextUsage } from "@/lib/pi/live-state";
+import type { Compaction } from "@/lib/pi/host-extras";
 import "./context-meter.css";
 
 type MeasuredContext = Exclude<ContextUsage, { basis: "unavailable" }>;
@@ -49,14 +50,64 @@ function Ring({ share }: { share: number }) {
   );
 }
 
-type MeterProps = { canCompact: boolean; onCompact: () => void };
+type MeterProps = {
+  canCompact: boolean;
+  onCompact: () => Promise<unknown> | void;
+  /** The host's compaction status (host-extras.ts); absent from older hosts. */
+  compaction?: Compaction;
+};
+
+/** How long a click waits to see the host report the compaction before giving up on it. */
+const ASK_MS = 15000;
+const DONE_MS = 8000;
+
+/**
+ * A compaction takes a minute or so, and the host reports it only once it is admitted, so the
+ * click shows "Compacting" at once; it lasts while the host reports one running, then says it is
+ * done (or failed) for a few seconds.
+ */
+function useCompactionState(compaction: Compaction | undefined, onCompact: MeterProps["onCompact"]) {
+  const running = compaction?.running === true;
+  const [asked, setAsked] = useState(false);
+  const [done, setDone] = useState(false);
+  const seen = useRef(false);
+  useEffect(() => {
+    if (running) {
+      seen.current = true;
+      setDone(false);
+      return;
+    }
+    if (!seen.current) return;
+    seen.current = false;
+    setAsked(false);
+    if (!compaction?.failure) setDone(true);
+  }, [running, compaction?.failure]);
+  useEffect(() => {
+    if (!done) return;
+    const timer = setTimeout(() => setDone(false), DONE_MS);
+    return () => clearTimeout(timer);
+  }, [done]);
+  useEffect(() => {
+    if (!asked || running) return;
+    const timer = setTimeout(() => setAsked(false), ASK_MS);
+    return () => clearTimeout(timer);
+  }, [asked, running]);
+  const start = () => {
+    setAsked(true);
+    setDone(false);
+    void Promise.resolve(onCompact()).catch(() => setAsked(false));
+  };
+  return { busy: running || asked, done, start };
+}
 
 export function ContextMeter({ context, ...props }: MeterProps & { context: ContextUsage }) {
   return context.basis === "unavailable" ? null : <Meter context={context} {...props} />;
 }
 
-function Meter({ context, canCompact, onCompact }: MeterProps & { context: MeasuredContext }) {
+function Meter({ context, canCompact, onCompact, compaction }: MeterProps & { context: MeasuredContext }) {
   const [open, setOpen] = useState(false);
+  const { busy, done, start } = useCompactionState(compaction, onCompact);
+  const failure = !busy && !done ? (compaction?.failure ?? "") : "";
   // Hovered segment: the bar and legend row light up together (Kokonut meter behaviour).
   const [active, setActive] = useState<string | null>(null);
   // Hover intent: open after a short rest, close after the pointer leaves both trigger and panel.
@@ -104,10 +155,11 @@ function Meter({ context, canCompact, onCompact }: MeterProps & { context: Measu
             }
           }}
           data-level={level(share, compactAt)}
-          aria-label={`Context ${percent(share)} full${estimated ? ", estimated" : ""}. Show breakdown`}
+          data-compacting={busy ? "" : undefined}
+          aria-label={busy ? "Compacting the context. Show details" : `Context ${percent(share)} full${estimated ? ", estimated" : ""}. Show breakdown`}
         >
           <Ring share={share} />
-          <span className="mars-context-trigger-value">{percent(share)}</span>
+          <span className="mars-context-trigger-value">{busy ? "Compacting" : percent(share)}</span>
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -171,17 +223,20 @@ function Meter({ context, canCompact, onCompact }: MeterProps & { context: Measu
               ? "Estimated. The model has not reported usage for this conversation yet."
               : "Total reported by the model. The split by type is estimated."}
           </p>
-          <div className="mars-context-compact">
-            <p>Summarise older turns to free space</p>
-            <button
-              type="button"
-              disabled={!canCompact}
-              onClick={() => {
-                onCompact();
-                setOpen(false);
-              }}
-            >
-              Compact now
+          <div className="mars-context-compact" aria-live="polite">
+            <p>
+              {busy
+                ? compaction?.retryError
+                  ? `Retrying after an error: ${compaction.retryError}`
+                  : "Summarising older turns. This takes a minute or so; you can keep working."
+                : done
+                  ? "Compacted. Older turns are now a summary."
+                  : failure
+                    ? `The last compaction failed: ${failure}`
+                    : "Summarise older turns to free space"}
+            </p>
+            <button type="button" disabled={!canCompact || busy} onClick={start}>
+              {busy ? "Compacting…" : failure ? "Try again" : "Compact now"}
             </button>
           </div>
         </Popover.Content>

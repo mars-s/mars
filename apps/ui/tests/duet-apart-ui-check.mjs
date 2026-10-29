@@ -33,7 +33,7 @@ await page.route("**/api/**", async (route) => {
   const selected = url.searchParams.get("conversationId") || "1";
   if (url.pathname === "/api/state")
     return route.fulfill({ json: {
-      runtime: "Pi Durable 1.3.0", conversationId: selected, selectedConversationId: selected,
+      duet: true, runtime: "Pi Durable 1.3.0", conversationId: selected, selectedConversationId: selected,
       auth: { connected: true, state: "connected", events: [] }, providerReady: true,
       models: [{ id: "gpt-6-luna", name: "Luna" }], extensions: [], conversations: [{ id: 1, title: "Main" }],
       conversationTitle: selected === "50" ? "Duet" : "Main",
