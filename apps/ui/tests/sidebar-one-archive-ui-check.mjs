@@ -1,7 +1,7 @@
 // One Archived list (docs/LIVE-INTEGRATION.md "Archive"), against routed fixtures: under a chat
 // only running side chats and working sub-threads; finished ones, archived chats and the host's
-// older rows sit in one Archived list at the bottom, newest first, naming the chat they came
-// from. A side chat that finishes, or a chat archived from its menu, lands on top at once. No
+// older rows sit in one Archived list at the bottom, newest first; hovering one names the chat
+// it came from. A side chat that finishes, or a chat archived from its menu, lands on top at once. No
 // per-chat "archived", "finished" or "older" lines.
 import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
@@ -85,7 +85,7 @@ try {
   await sidebar.getByText("Old side chat 1", { exact: true }).waitFor();
   const rows = await archiveRows();
   assert.deepEqual(rows.slice(0, 3), ["Bug hunt: lanes", "Finished side chat", "Old side chat 1"], "host order, newest first");
-  assert.equal(await sidebar.locator(".live-archived .live-archive-parent").first().innerText(), "Main Mars Chat", "names the chat it came from");
+  assert.equal(await sidebar.locator(".live-archived .live-archive-row button").first().getAttribute("title"), "Bug hunt: lanes, from Main Mars Chat", "hovering names the chat it came from");
   await sidebar.getByRole("button", { name: "Show 9 more" }).click();
   await sidebar.getByText("Old side chat 56", { exact: true }).waitFor();
   assert.equal((await archiveRows()).at(-1), "Long archived chat", "an archived chat already known on load keeps its place, last");

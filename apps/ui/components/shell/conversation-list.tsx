@@ -574,7 +574,6 @@ function ArchiveSection({
                 >
                   <MessageSquareDashed size={13} aria-hidden="true" className="live-side-chat-icon" />
                   <span className="live-nav-label">{row.title}</span>
-                  {row.parentTitle && <small className="live-archive-parent">{row.parentTitle}</small>}
                 </button>
               </div>
             ),

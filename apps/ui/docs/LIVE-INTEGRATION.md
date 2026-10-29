@@ -39,8 +39,8 @@ The sidebar has one archive: the **Archived** list at the bottom.
   listed, plus the one that is open. Nothing else: no per-chat "archived" or "older" lines.
 - A side chat or sub-thread that finishes archives itself: it leaves its chat and goes to the top
   of Archived. Archived chats go there too.
-- Archived is newest activity first, so whatever finished last is on top. Side chats and
-  sub-threads name the chat they came from. Opening one shows it under its chat again.
+- Archived is newest activity first, so whatever finished last is on top. Hovering a side chat
+  or sub-thread names the chat it came from. Opening one shows it under its chat again.
 - `GET /api/conversations/archive?offset&limit` (`packages/pi-host/archive.mjs`) is the whole
   list, newest first, with its `total`. The page shows 50 and a "Show N more" line. What the
   page's last poll knows decides for the rows it lists, so a row that is archived or finishes

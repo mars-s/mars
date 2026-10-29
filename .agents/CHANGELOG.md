@@ -689,3 +689,7 @@ The main chat's /api/state was 4.9 MB (1,110 entries), polled every second, unco
 ## 2026-10-29 Archive list: no false moves on first load
 
 The live sidebar counted 85 archived where the host had 73: on first load every archived chat looked as if it had just moved there (the page's list starts empty), so chats beyond the first 50 were shown on top as well as counted again. A row now moves to the top only when the last poll listed it as live. sidebar-one-archive-ui-check covers an archived chat already known on load.
+
+## 2026-10-29 Archive rows: titles first
+
+In the live sidebar the parent chat's name took half of each archived side chat row and cut its own title to a few letters. Rows now show only the title; hovering names the chat it came from.
